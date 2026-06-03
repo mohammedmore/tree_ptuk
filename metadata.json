@@ -1,0 +1,8 @@
+{
+  "name": "مخطط الخطة الدراسية ",
+  "description": "أداة تفاعلية متقدمة لإدارة وتخطيط الخطط الدراسية الجامعية، ومتابعة الساعات المنجزة والمتبقية وحساب عبء الفصول تلقائياً.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

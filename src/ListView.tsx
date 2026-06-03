@@ -1,0 +1,329 @@
+import React, { useMemo, useState } from "react";
+import { motion, AnimatePresence } from "motion/react";
+import {
+    LayoutList,
+    Pin,
+    Trash2,
+    CalendarDays,
+    BookOpen,
+    Lock,
+    CircleCheckBig,
+    Info
+} from "lucide-react";
+import { cn } from "./utils";
+import {
+    courseCommonNames,
+    getYearFromId,
+    SEMESTERS,
+    getRecommendedSemesterOfCourse,
+    ELECTIVE_SLOTS_DEFS,
+    SEMESTER_ELECTIVE_SLOTS
+} from "./constants";
+import { Course } from "./data";
+
+export default function ListView({
+    activeCourses,
+    listGroupBy,
+    setListGroupBy,
+    completedCourses,
+    availableCourses,
+    plannedCourses,
+    pinnedCourseId,
+    setPinnedCourseId,
+    pinnedPath,
+    searchQuery,
+    toggleCourseCompletion,
+    setPlanningCourseId,
+    setIsPlannerOpen,
+    selectedElectives,
+    setSelectedElectives,
+    completedCreditsPerCategory,
+    isDarkMode = false,
+    courses = [],
+    focusNode,
+    setSelectedNodeId
+    , hoveredCourseId // New prop
+    , setHoveredCourseId // New prop
+    , hoveredPath // New prop
+}: any) {
+    const [hideCompletedInList, setHideCompletedInList] = useState(false);
+
+    const categories = useMemo(() => (
+        listGroupBy === "category"
+            ? [
+                { key: 'متطلب استدراكي إجباري', label: 'المتطلبات الاستدراكية', badge: 'bg-slate-100 text-slate-700 border-slate-200', req: 3, isSemester: false },
+                { key: 'متطلب جامعة إجباري', label: 'متطلبات الجامعة الإجبارية', badge: 'bg-blue-100 text-blue-700 border-blue-200', req: 18, isSemester: false },
+                { key: 'متطلب جامعة اختياري', label: 'المتطلبات الاختيارية', badge: 'bg-indigo-100 text-indigo-700 border-indigo-200', req: 6, isSemester: false },
+                { key: 'متطلب كلية إجباري', label: 'متطلبات الكلية الإجبارية', badge: 'bg-teal-100 text-teal-700 border-teal-200', req: 18, isSemester: false },
+                { key: 'متطلب تخصص إجباري', label: 'متطلبات التخصص الإجبارية', badge: 'bg-purple-100 text-purple-700 border-purple-200', req: 107, isSemester: false },
+                { key: 'متطلب تخصص اختياري', label: 'متطلبات التخصص الاختيارية', badge: 'bg-pink-100 text-pink-700 border-pink-200', req: 15, isSemester: false },
+            ]
+            : SEMESTERS.filter(s => !s.includes('الصيفي')).map(s => ({ key: s, label: s, badge: 'bg-indigo-50 text-indigo-700 border-indigo-200', isSemester: true }))
+    ), [listGroupBy]);
+
+    const renderCard = (course: Course, slotLabel?: string, slotId?: string) => {
+        const isComp = completedCourses.has(course.id);
+        const isPlanned = !!plannedCourses[course.id];
+        const isAvail = availableCourses.some((avail: any) => avail.id === course.id);
+        const prerequisitesCompleted = course.prerequisites.every((prereq) => completedCourses.has(prereq));
+
+        const plannedSem = plannedCourses[course.id];
+        const hasPlannedConflict = plannedSem && course.prerequisites.some(pId => {
+            if (completedCourses.has(pId)) return false;
+            const pSem = plannedCourses[pId];
+            if (!pSem) return true;
+            return SEMESTERS.indexOf(pSem) >= SEMESTERS.indexOf(plannedSem);
+        });
+
+        const isPinned = pinnedCourseId === course.id;
+        const isAncestor = pinnedPath?.ancestors.has(course.id) || false;
+        const isDescendant = pinnedPath?.descendants.has(course.id) || false;
+        const isPinnedPathNode = pinnedPath?.allPathNodeIds.has(course.id) || false;
+
+        const isHovered = hoveredCourseId === course.id;
+        const isHoveredAncestor = hoveredPath?.ancestors.has(course.id) || false;
+        const isHoveredDescendant = hoveredPath?.descendants.has(course.id) || false;
+        const isHoveredPathNode = hoveredPath?.allPathNodeIds.has(course.id) || false;
+
+        let statusBadgeColor = "bg-gray-100 text-gray-500 border-gray-200 dark:bg-slate-900 dark:text-slate-500 dark:border-slate-800";
+        let statusText = "مغلقة";
+        let statusIcon = <Lock size={11} />;
+        let cardBorder = "border-gray-150 dark:border-slate-750 hover:border-gray-350 dark:hover:border-slate-600";
+        let cardOpacity = 1;
+
+        if (isComp) {
+            statusBadgeColor = "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-400 dark:border-emerald-900/40";
+            statusText = "منجز";
+            statusIcon = <CircleCheckBig size={11} className="text-emerald-500" />;
+            cardBorder = "border-emerald-250 bg-emerald-50/5 dark:bg-slate-900 dark:border-emerald-950/60 dark:ring-1 dark:ring-emerald-900/30";
+        } else if (isPlanned) {
+            statusBadgeColor = hasPlannedConflict
+                ? "bg-red-50 text-red-700 border-red-200 dark:bg-red-950/40 dark:text-red-400 dark:border-red-900/40"
+                : "bg-orange-50 text-orange-700 border-orange-200 dark:bg-orange-950/40 dark:text-orange-400 dark:border-orange-900/40";
+            statusText = hasPlannedConflict ? "خطأ في الترتيب" : plannedCourses[course.id];
+            statusIcon = <CalendarDays size={11} className="text-orange-500" />;
+            cardBorder = "border-orange-250 bg-orange-50/5 dark:bg-slate-900 dark:border-orange-900/60 dark:ring-1 dark:ring-orange-900/30";
+        } else if (isAvail) {
+            statusBadgeColor = "bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-900/30 dark:text-blue-400 dark:border-blue-800/60";
+            statusText = "متاحة";
+            statusIcon = <BookOpen size={11} className="text-blue-500" />;
+            cardBorder = "border-blue-250 bg-blue-50/5 dark:bg-slate-900 dark:border-blue-950/60 dark:ring-1 dark:ring-blue-900/30 hover:border-blue-400";
+        } else if (!prerequisitesCompleted) {
+            statusText = "المتطلبات غير مكتملة";
+        }
+
+        // Override with pinned path styling (highest priority)
+        if (pinnedCourseId) { // If any course is pinned
+            if (isPinned) {
+                cardBorder = "border-amber-450 bg-amber-50/15 ring-2 ring-amber-400 dark:ring-amber-500/50 shadow-md scale-[1.01] z-[2]";
+            } else if (isAncestor) {
+                cardBorder = "border-emerald-450 bg-emerald-50/5 ring-1 ring-emerald-300 dark:ring-emerald-500/50 shadow-sm";
+            } else if (isDescendant) {
+                cardBorder = "border-purple-450 bg-purple-50/5 ring-1 ring-purple-300 dark:ring-purple-500/50 shadow-sm";
+            } else if (isPinnedPathNode) {
+                cardBorder = "border-amber-200 bg-amber-50/5 dark:bg-amber-950/5 ring-1 ring-amber-100 dark:ring-amber-900/30";
+            } else { // Dim courses not in the pinned path
+                cardOpacity = 0.4;
+            }
+        } else if (hoveredCourseId) { // If no course is pinned, but one is hovered
+            if (isHovered) {
+                cardBorder = "border-blue-400 bg-blue-50/15 ring-2 ring-blue-300 dark:ring-blue-500/50 shadow-md scale-[1.01] z-[2]";
+            } else if (isHoveredAncestor) {
+                cardBorder = "border-emerald-300 bg-emerald-50/5 ring-1 ring-emerald-200 dark:ring-emerald-500/30 shadow-sm";
+            } else if (isHoveredDescendant) {
+                cardBorder = "border-purple-300 bg-purple-50/5 ring-1 ring-purple-200 dark:ring-purple-500/30 shadow-sm";
+            } else if (isHoveredPathNode) {
+                cardBorder = "border-blue-200 bg-blue-50/5 dark:bg-blue-950/5 ring-1 ring-blue-100 dark:ring-blue-900/30";
+            } else { // Dim courses not in the hovered path
+                cardOpacity = 0.4;
+            }
+        }
+
+        return (
+            <motion.div
+                layout
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.95 }}
+                key={slotId || course.id}
+                className={cn("bg-white dark:bg-slate-800 p-3 rounded-xl border transition-all duration-300 flex flex-col gap-2 relative group hover:shadow-lg", cardBorder)}
+                style={{ opacity: cardOpacity }} // Apply opacity
+                onMouseEnter={() => setHoveredCourseId(course.id)} // Set hovered course
+                onMouseLeave={() => setHoveredCourseId(null)} // Clear hovered course
+            >
+                <div className="flex justify-between items-center text-[10px] font-bold">
+                    {slotLabel ? (
+                        <span className="text-purple-700 dark:text-purple-300 bg-purple-100 dark:bg-purple-950/65 px-1.5 py-0.5 rounded border border-purple-250 dark:border-purple-900/65 font-black uppercase">{slotLabel}</span>
+                    ) : (
+                        <span className="text-blue-600 dark:text-blue-400 font-mono">{course.id}</span>
+                    )}
+                    <span className="text-gray-500 dark:text-slate-400 bg-gray-50 dark:bg-slate-900 px-1.5 py-0.5 rounded border border-gray-100 dark:border-slate-800 shrink-0">{course.credits} س</span>
+                </div>
+
+                {slotId && (
+                    <div className="flex flex-col gap-1 bg-gray-50 dark:bg-slate-900 border border-gray-150 dark:border-slate-750 p-2 rounded-lg">
+                        <select
+                            value={course.id}
+                            onChange={(e) => setSelectedElectives((prev: any) => ({ ...prev, [slotId]: e.target.value }))}
+                            className="bg-transparent text-[11px] font-black text-gray-850 dark:text-slate-100 cursor-pointer outline-none"
+                        >
+                            {courses.filter((c: Course) => c.category === ELECTIVE_SLOTS_DEFS[slotId].category).map((opt: Course) => (
+                                <option key={opt.id} value={opt.id} className="text-gray-900">{opt.name}</option>
+                            ))}
+                        </select>
+                    </div>
+                )}
+
+                <h4 className="text-[12.5px] font-extrabold text-gray-800 dark:text-slate-100 leading-snug flex flex-wrap items-center gap-1">
+                    <span>{course.name}</span>
+                    {courseCommonNames[course.id] && (
+                        <span className="text-[9px] font-black text-blue-600 bg-blue-50 dark:bg-blue-900/30 dark:text-blue-400 px-1.5 py-0.5 rounded border border-blue-150 shrink-0">
+                            {courseCommonNames[course.id]}
+                        </span>
+                    )}
+                </h4>
+
+                {hasPlannedConflict && (
+                    <div className="text-[9px] font-bold text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/20 p-1.5 rounded-lg border border-red-100 dark:border-red-900/30 animate-pulse">
+                        ⚠️ تنبيه: يجب جدولة المتطلبات السابقة في فصول تسبق هذا الفصل.
+                    </div>
+                )}
+
+                <div className="flex justify-between items-center pt-2 border-t border-gray-100 dark:border-slate-750 mt-1">
+                    <span className={cn("text-[9px] font-black px-2 py-0.5 rounded border flex items-center gap-1 min-w-0", statusBadgeColor)}>
+                        {statusIcon}
+                        <span className="truncate">
+                            {statusText}
+                        </span>
+                    </span>
+
+                    <div className="flex gap-1 shrink-0">
+                        <button
+                            onClick={(e) => { e.stopPropagation(); setSelectedNodeId(course.id); }}
+                            className="p-1 rounded border transition-colors bg-gray-50 dark:bg-slate-900 text-gray-400 dark:text-slate-400 dark:border-slate-750 hover:bg-gray-100 dark:hover:bg-slate-750 hover:text-blue-500 dark:hover:text-blue-400"
+                            title="عرض التفاصيل"
+                        >
+                            <Info size={10} />
+                        </button>
+
+                        <button
+                            onClick={(e) => { e.stopPropagation(); setPinnedCourseId(isPinned ? null : course.id); }}
+                            className={cn(
+                                "p-1 rounded border transition-colors",
+                                isPinned
+                                    ? "bg-amber-500 text-white"
+                                    : (isHoveredPathNode && !pinnedCourseId) // If hovered path is active and not pinned
+                                        ? "bg-amber-50 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400 border-amber-200 dark:border-amber-800 hover:bg-amber-100 dark:hover:bg-amber-900/50"
+                                        : "bg-gray-50 dark:bg-slate-900 text-gray-400 dark:border-slate-750 hover:bg-gray-100 dark:hover:bg-slate-750"
+                            )}
+                            title="تثبيت المسار"
+                        >
+                            <Pin size={10} className={cn("transform rotate-[25deg]", isPinned && "rotate-0")} />
+                        </button>
+                        <button onClick={(e) => { e.stopPropagation(); toggleCourseCompletion(course.id); }} className={cn("p-1 rounded border transition-colors", isComp ? "bg-red-50 text-red-650 dark:bg-red-950/40 dark:text-red-400 border-red-100" : (isAvail ? "bg-emerald-50 text-emerald-600 border-emerald-100 dark:bg-emerald-950/40 dark:text-emerald-400" : "opacity-30 cursor-not-allowed"))} disabled={!isComp && !isAvail}>
+                            {isComp ? <Trash2 size={10} /> : <CircleCheckBig size={10} />}
+                        </button>
+                        <button onClick={(e) => { e.stopPropagation(); setPlanningCourseId(course.id); setIsPlannerOpen(true); }} className={cn("p-1 rounded border transition-colors", isPlanned ? "bg-orange-50 text-orange-600 dark:bg-orange-900/30 border-orange-200" : "bg-gray-50 dark:bg-slate-900 text-gray-500 dark:border-slate-750 hover:bg-gray-100 dark:hover:bg-slate-750")}>
+                            <CalendarDays size={10} />
+                        </button>
+                    </div>
+                </div>
+            </motion.div>
+        );
+    };
+
+    return (
+        <div className="flex-1 overflow-x-auto bg-slate-50/40 dark:bg-slate-950/60 p-5 flex flex-col h-full animate-fade-in" dir="rtl">
+            <div className="mb-4 flex flex-col lg:flex-row items-center justify-between gap-4 bg-white dark:bg-slate-800 p-3 rounded-2xl border border-gray-150 dark:border-slate-700/60 shadow-sm shrink-0">
+                <div className="flex items-center gap-2">
+                    <LayoutList size={18} className="text-blue-500" />
+                    <span className="text-xs font-black text-gray-800 dark:text-slate-200">فرز وتصفح المواد:</span>
+                    <div className="mr-4 hidden md:flex items-center gap-1.5 px-3 py-1 bg-amber-50 dark:bg-amber-900/20 border border-amber-100 dark:border-amber-800/50 rounded-lg">
+                        <Pin size={12} className="text-amber-600 rotate-[25deg]" />
+                        <span className="text-[10px] font-bold text-amber-700 dark:text-amber-400">ملاحظة: عند تثبيت مادة، يظهر كامل مسارها ويرتفع للأعلى.</span>
+                    </div>
+                </div>
+                <div className="flex bg-gray-100 dark:bg-slate-900 p-1 rounded-xl border border-gray-250 dark:border-slate-700">
+                    <button onClick={() => setListGroupBy("category")} className={cn("px-4 py-1.5 text-xs font-black rounded-lg transition-all", listGroupBy === "category" ? "bg-white dark:bg-slate-700 text-blue-600 dark:text-blue-400 shadow-sm" : "text-gray-500 hover:text-gray-800 dark:hover:text-slate-200")}>حسب التصنيف</button>
+                    <button onClick={() => setListGroupBy("semester")} className={cn("px-4 py-1.5 text-xs font-black rounded-lg transition-all", listGroupBy === "semester" ? "bg-white dark:bg-slate-700 text-blue-600 dark:text-blue-400 shadow-sm" : "text-gray-500 hover:text-gray-800 dark:hover:text-slate-200")}>حسب الفصل</button>
+                </div>
+                <div className="h-6 w-px bg-gray-200 dark:bg-slate-700 hidden lg:block" />
+                <label className="flex items-center gap-2 cursor-pointer group shrink-0">
+                    <input type="checkbox" checked={hideCompletedInList} onChange={(e) => setHideCompletedInList(e.target.checked)} className="w-4 h-4 rounded text-blue-600 border-gray-300 focus:ring-blue-500 cursor-pointer" />
+                    <span className="text-xs font-bold text-gray-600 dark:text-slate-400 group-hover:text-blue-600 transition-colors">إخفاء المواد المنجزة</span>
+                </label>
+            </div>
+
+            <div className="flex-1 flex gap-5 overflow-x-auto pb-4 items-start scrollbar-thin">
+                {categories.map((cat) => {
+                    let itemsList: any[] = [];
+                    let totalCr = 0;
+                    let doneCr = 0;
+
+                    if (cat.isSemester) {
+                        const semCourses = activeCourses.filter((c: any) => getRecommendedSemesterOfCourse(c) === cat.key);
+                        totalCr = semCourses.reduce((s: any, c: any) => s + c.credits, 0);
+                        doneCr = semCourses.filter((c: any) => completedCourses.has(c.id)).reduce((s: any, c: any) => s + c.credits, 0);
+                        const mandatory = semCourses.filter((c: any) => !c.category.includes('اختياري'));
+                        const slots = SEMESTER_ELECTIVE_SLOTS[cat.key] || [];
+                        itemsList = [...mandatory.map(c => ({ type: 'course', course: c })), ...slots.map(s => ({ type: 'slot', slotId: s }))];
+                    } else {
+                        totalCr = cat.req || 0;
+                        doneCr = completedCreditsPerCategory[cat.key] || 0;
+                        if (cat.key.includes('جامعة اختياري')) itemsList = ['univ_1', 'univ_2', 'univ_3'].map(s => ({ type: 'slot', slotId: s }));
+                        else if (cat.key.includes('تخصص اختياري')) itemsList = ['spec_1', 'spec_2', 'spec_3', 'spec_4', 'spec_5'].map(s => ({ type: 'slot', slotId: s }));
+                        else itemsList = activeCourses.filter((c: any) => c.category === cat.key).map(c => ({ type: 'course', course: c }));
+                    }
+
+                    if (hideCompletedInList) {
+                        itemsList = itemsList.filter(item => {
+                            const cId = item.type === 'course' ? item.course.id : selectedElectives[item.slotId];
+                            return !completedCourses.has(cId);
+                        });
+                    }
+
+                    if (searchQuery) {
+                        const q = searchQuery.toLowerCase();
+                        itemsList = itemsList.filter(item => {
+                            const c = item.type === 'course' ? item.course : courses.find((cr: Course) => cr.id === selectedElectives[item.slotId]);
+                            return c?.name.toLowerCase().includes(q) || c?.id.includes(q) || (courseCommonNames[c?.id || ''] || '').toLowerCase().includes(q);
+                        });
+                    }
+
+                    // خوارزمية رفع المسار للأعلى: العناصر التي تنتمي للمسار المثبت أو الممرر عليه تأخذ الأولوية في الترتيب
+                    const activePathIds = pinnedPath?.allPathNodeIds;
+                    if (activePathIds) {
+                        itemsList = [...itemsList].sort((a, b) => {
+                            const aId = a.type === 'course' ? a.course.id : selectedElectives[a.slotId];
+                            const bId = b.type === 'course' ? b.course.id : selectedElectives[b.slotId];
+                            const aInPath = activePathIds.has(aId);
+                            const bInPath = activePathIds.has(bId);
+
+                            if (aInPath && !bInPath) return -1; // ارفع العنصر a للأعلى
+                            if (!aInPath && bInPath) return 1;  // ارفع العنصر b للأعلى
+                            return 0; // حافظ على الترتيب الأصلي
+                        });
+                    }
+
+                    const isColumnDone = doneCr >= totalCr && totalCr > 0;
+                    return (
+                        <div key={cat.key} className="w-72 shrink-0 bg-white dark:bg-slate-800 border border-gray-150 dark:border-slate-700/60 rounded-2xl flex flex-col h-full max-h-[75vh] shadow-sm overflow-hidden">
+                            <div className="p-4 bg-gray-50/50 dark:bg-slate-900/40 border-b border-gray-150 dark:border-slate-750">
+                                <div className="flex justify-between items-center mb-2">
+                                    <h3 className="text-xs font-black text-gray-800 dark:text-slate-100 truncate pr-2">{cat.label}</h3>
+                                    <span className={cn("text-[10px] font-black px-2 py-0.5 rounded-full border", isColumnDone ? "bg-emerald-100 text-emerald-700 border-emerald-200" : "bg-blue-50 text-blue-700 border-blue-100")}>{doneCr} / {totalCr} س</span>
+                                </div>
+                                <div className="h-1.5 bg-gray-200 dark:bg-slate-700 rounded-full overflow-hidden"><div className={cn("h-full transition-all duration-1000", isColumnDone ? "bg-emerald-500" : "bg-blue-500")} style={{ width: `${Math.min(100, (doneCr / (totalCr || 1)) * 100)}%` }} /></div>
+                            </div>
+                            <motion.div layout className="flex-1 overflow-y-auto p-3 flex flex-col gap-3 scrollbar-thin">
+                                <AnimatePresence mode="popLayout">
+                                    {itemsList.map(item => item.type === 'course' ? renderCard(item.course) : renderCard(courses.find((c: Course) => c.id === selectedElectives[item.slotId]) || (courses.length > 0 ? courses[0] : {} as Course), ELECTIVE_SLOTS_DEFS[item.slotId].label, item.slotId))}
+                                </AnimatePresence>
+                            </motion.div>
+                        </div>
+                    );
+                })}
+            </div>
+        </div>
+    );
+}
