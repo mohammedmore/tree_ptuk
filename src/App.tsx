@@ -214,6 +214,7 @@ function FlowComponent() {
   const [nodes, setNodes, onNodesChange] = useNodesState(layoutedNodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(layoutedEdges);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
+  const [isDetailsOpen, setIsDetailsOpen] = useState(false);
   const [viewMode, setViewMode] = useState<"map" | "list">("map");
   const [listGroupBy, setListGroupBy] = useState<"category" | "semester">("semester");
   const [pinnedCourseId, setPinnedCourseId] = useState<string | null>(null);
@@ -611,6 +612,17 @@ function FlowComponent() {
 
   const onPaneClick = useCallback(() => {
     setSelectedNodeId(null);
+    setIsDetailsOpen(false);
+  }, []);
+
+  const onNodeClick = useCallback((_: React.MouseEvent, node: Node) => {
+    setSelectedNodeId(node.id);
+    setIsDetailsOpen(false); // الضغط على البطاقة في الخريطة يظهر المسار فقط ويغلق نافذة التفاصيل
+  }, []);
+
+  const openDetails = useCallback((id: string) => {
+    setSelectedNodeId(id);
+    setIsDetailsOpen(true); // يفتح نافذة التفاصيل السفلية عند الضغط على زر المعلومات فقط
   }, []);
 
   const focusNode = useCallback(
@@ -732,7 +744,7 @@ function FlowComponent() {
             opacity,
             isCriticalPath,
             toggleCompleted: () => toggleCourseCompletion(n.id),
-            showDetails: () => setSelectedNodeId(n.id),
+            showDetails: () => openDetails(n.id),
           },
         };
       }),
@@ -866,14 +878,26 @@ function FlowComponent() {
                 <BookOpen className="text-blue-600 dark:text-blue-400 hidden sm:block" size={24} />
                 خريطة المتطلبات الأكاديمية
                 <button
-                  onClick={() => setIsPlanningModeOpen(true)}
+                  onClick={() => {
+                    setIsPlanningModeOpen(true);
+                    setSelectedNodeId(null); // تصفير المادة المحددة لمنع ظهور مسارات قديمة
+                    setIsDetailsOpen(false); // إغلاق نافذة التفاصيل
+                    setHoveredCourseId(null); // تصفير حالة التمرير
+                    setPlanningCourseId(null); // تصفير مادة التخطيط عند الدخول للوضع العام
+                  }}
                   className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg transition-colors cursor-pointer shadow-sm ml-auto sm:ml-0 font-black"
                 >
                   <Map size={16} />
                   وضع التخطيط
                 </button>
                 <button
-                  onClick={() => setIsPlannerOpen(true)}
+                  onClick={() => {
+                    setIsPlannerOpen(true);
+                    setSelectedNodeId(null); // تصفير المادة المحددة
+                    setIsDetailsOpen(false);
+                    setHoveredCourseId(null);
+                    setPlanningCourseId(null);
+                  }}
                   className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-orange-100 hover:bg-orange-200 text-orange-700 dark:bg-orange-950/70 dark:text-orange-300 dark:hover:bg-orange-900/50 rounded-lg transition-colors cursor-pointer shadow-sm font-bold"
                 >
                   <CalendarDays size={16} />
@@ -1063,6 +1087,7 @@ function FlowComponent() {
                 edges={edges}
                 onNodesChange={onNodesChange}
                 onEdgesChange={onEdgesChange}
+                onNodeClick={onNodeClick}
                 onPaneClick={onPaneClick}
                 nodeTypes={nodeTypes}
                 fitView
@@ -1135,15 +1160,7 @@ function FlowComponent() {
               setHoveredCourseId={setHoveredCourseId}
               hoveredPath={hoveredPath}
               focusNode={focusNode}
-              setSelectedNodeId={setSelectedNodeId}
-            />
-          )}
-
-          {/* طبقة شفافة لالتقاط النقرات خارج نافذة التفاصيل لإغلاقها */}
-          {selectedNodeId && (
-            <div
-              className="absolute inset-0 z-40 bg-transparent"
-              onClick={() => setSelectedNodeId(null)}
+              onOpenDetails={openDetails}
             />
           )}
 
@@ -1151,7 +1168,7 @@ function FlowComponent() {
           <div
             className={cn(
               "absolute bottom-6 left-[4%] sm:left-6 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md rounded-2xl shadow-2xl border border-gray-200 dark:border-slate-800 transition-all duration-300 z-50 w-[92%] sm:w-[450px] overflow-hidden max-h-[85vh] sm:max-h-[75vh] flex flex-col",
-              selectedNodeId
+              (selectedNodeId && isDetailsOpen)
                 ? "translate-y-0 opacity-100 scale-100"
                 : "translate-y-full opacity-0 scale-95 pointer-events-none",
             )}

@@ -33,15 +33,15 @@ export default function ListView({
     pinnedPath,
     searchQuery,
     toggleCourseCompletion,
-    setPlanningCourseId,
-    setIsPlannerOpen,
+    onOpenDetails,
     selectedElectives,
     setSelectedElectives,
     completedCreditsPerCategory,
     isDarkMode = false,
     courses = [],
     focusNode,
-    setSelectedNodeId
+    setPlanningCourseId,
+    setIsPlannerOpen
     , hoveredCourseId // New prop
     , setHoveredCourseId // New prop
     , hoveredPath // New prop
@@ -199,8 +199,8 @@ export default function ListView({
 
                     <div className="flex gap-1 shrink-0">
                         <button
-                            onClick={(e) => { e.stopPropagation(); setSelectedNodeId(course.id); }}
-                            className="p-1 rounded border transition-colors bg-gray-50 dark:bg-slate-900 text-gray-400 dark:text-slate-400 dark:border-slate-750 hover:bg-gray-100 dark:hover:bg-slate-750 hover:text-blue-500 dark:hover:text-blue-400"
+                            onClick={(e) => { e.stopPropagation(); onOpenDetails(course.id); }}
+                            className="p-1 rounded border transition-colors bg-gray-50 dark:bg-slate-900 text-gray-400 dark:text-slate-400 dark:border-slate-750 hover:bg-gray-100 dark:hover:bg-slate-750 hover:text-blue-600 dark:hover:text-blue-400"
                             title="عرض التفاصيل"
                         >
                             <Info size={10} />
