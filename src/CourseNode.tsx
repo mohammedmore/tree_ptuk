@@ -1,10 +1,10 @@
 import React from "react";
 import { Handle, Position } from "@xyflow/react";
-import { CircleCheckBig, Lock, Info } from "lucide-react";
+import { CircleCheckBig, Lock, Info, CalendarDays } from "lucide-react";
 import { cn } from "./utils";
 
 const CourseNode = ({ data, isConnectable }: any) => {
-    const { isSelected, isAncestor, isDescendant, isDirectPrereq, isDirectDep, isCompleted, isAvailable, isCriticalPath, isPlanned, toggleCompleted, showDetails, opacity = 1 } = data;
+    const { isSelected, isAncestor, isDescendant, isDirectPrereq, isDirectDep, isCompleted, isAvailable, isCriticalPath, isPlanned, toggleCompleted, showDetails, onPlan, opacity = 1 } = data;
     const isLocked = !isCompleted && !isAvailable;
 
     let containerClass = "w-52 h-24 bg-white border border-gray-200 rounded-xl p-3 flex flex-col justify-between shadow-sm relative group";
@@ -49,6 +49,20 @@ const CourseNode = ({ data, isConnectable }: any) => {
                 title="عرض التفاصيل والمعلومات"
             >
                 <Info size={12} />
+            </button>
+
+            <button
+                onClick={(e) => {
+                    e.stopPropagation();
+                    if (onPlan) onPlan();
+                }}
+                className={cn(
+                    "absolute top-3 left-9 w-5 h-5 rounded flex items-center justify-center transition-colors z-20 border",
+                    isPlanned ? "bg-orange-500 text-white border-none" : "bg-gray-50 dark:bg-slate-700 text-gray-400 hover:text-orange-500 dark:border-slate-600"
+                )}
+                title="جدولة المساق في الخطة"
+            >
+                <CalendarDays size={12} />
             </button>
 
             <button

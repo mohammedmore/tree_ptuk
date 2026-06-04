@@ -131,6 +131,14 @@ export function generateSmartPlan(params: SmartPlanParams): SmartPlanResult {
           maxPrereqEarliest = pEarliest;
         }
       }
+      // Handle co-requisites: earliest can be same semester
+      for (const cpId of c.coPrerequisites || []) {
+        if (completedCourses.has(cpId)) continue;
+        const cpEarliest = earliestIdx[cpId] !== undefined ? earliestIdx[cpId] : planStartIdx;
+        if (cpEarliest > maxPrereqEarliest) {
+          maxPrereqEarliest = cpEarliest - 1; // Allows being in the same semester
+        }
+      }
       const newEarliest = Math.max(earliestIdx[c.id], maxPrereqEarliest + 1);
       if (newEarliest > earliestIdx[c.id]) {
         earliestIdx[c.id] = newEarliest;
@@ -156,6 +164,14 @@ export function generateSmartPlan(params: SmartPlanParams): SmartPlanResult {
           }
         }
       }
+      // Backward pass for co-requisites
+      for (const dep of remaining) {
+        if (dep.coPrerequisites?.includes(c.id)) {
+          const depLatest = latestIdx[dep.id];
+          if (depLatest < minDependentLatest) minDependentLatest = depLatest + 1; // can be same
+        }
+      }
+
       const newLatest = Math.min(latestIdx[c.id], minDependentLatest - 1);
       if (newLatest < latestIdx[c.id]) {
         latestIdx[c.id] = newLatest;
@@ -212,132 +228,136 @@ export function generateSmartPlan(params: SmartPlanParams): SmartPlanResult {
     const pinnedHere = remaining.filter((c) => pinnedCourses[c.id] === semName);
     for (const c of pinnedHere) {
       // Double check prerequisites
-      const prereqsMet = c.prerequisites.every((pId) => simCompleted.has(pId));
+      const prereqsMet = c.prerequisites.every((pId) => simCompleted.has(pId)) &&
+        (c.coPrerequisites?.every(cpId => simCompleted.has(cpId) || pinnedHere.some(p => p.id === cpId)) ?? true);
       if (!prereqsMet) {
-        const missing = c.prerequisites.filter((pId) => !simCompleted.has(pId)).map((pId) => {
-          const course = courses.find((item) => item.id === pId);
-          return course ? course.name : pId;
-        }).join("، ");
+        const missing = [...c.prerequisites, ...(c.coPrerequisites || [])]
+          .filter((pId) => !simCompleted.has(pId) && !pinnedHere.some(p => p.id === pId))
+          .map((pId) => {
+            const course = courses.find((item) => item.id === pId);
+            return course ? course.name : pId;
+          }).join("، ");
         return {
           success: false,
-          error: `تعذر التخطيط: المساق '${c.name}' مثبت في فصل '${semName}' ولكن متطلباته السابقة (${missing}) لم تُنجز ولم تُجدول في الفصول السابقة له.`,
+          error: `تعذر التخطيط: المساق '${c.name}' مثبت في فصل '${semName}' ولكن متطلباته السابقة أو التزامنية (${missing}) لم تُنجز ولم تُجدول في نفس الفصل أو قبله.`,
         };
       }
+    }
 
+    assigned[c.id] = semName;
+    currentCredits += c.credits;
+    simCompleted.add(c.id);
+    creditsSimulation[c.category] = (creditsSimulation[c.category] || 0) + c.credits;
+  }
+
+  // Check if pinned courses alone overload the semester
+  if (currentCredits > maxCr) {
+    overloadedSemesters.push(semName);
+    warnings.push(`تم تجاوز السعة المحددة لفصل '${semName}' بسبب وجود مواد مثبتة فيه (${currentCredits} ساعة).`);
+  }
+
+  // 5.2. Fill remaining capacity with eligible unpinned courses
+  // Sorting Logic:
+  // 1. Criticality (Weight) - Highest first
+  // 2. Strategy specific sorting
+  let eligible = remaining.filter((c) => {
+    if (pinnedCourses[c.id]) return false; // Already handled
+    if (assigned[c.id]) return false; // Already assigned
+
+    // Prerequisites must be completed in previous semesters
+    const prereqsMet = c.prerequisites.every((pId) => simCompleted.has(pId));
+    if (!prereqsMet) return false;
+
+    // Window check
+    if (earliestIdx[c.id] > idx || latestIdx[c.id] < idx) return false;
+
+    // Category requirement limit check
+    const currentCatCr = creditsSimulation[c.category] || 0;
+    const requiredCatCr = categoryRequirements[c.category] || 999;
+    if (currentCatCr + c.credits > requiredCatCr) return false;
+
+    return true;
+  });
+
+  // Sorting Logic based on Strategy
+  eligible.sort((a, b) => {
+    // Always prioritize critical path weight for all strategies to ensure graduation
+    const weightA = weights[a.id];
+    const weightB = weights[b.id];
+
+    if (strategy === "fast") {
+      // Priority 1: Critical Path, Priority 2: High Credits
+      if (Math.abs(weightB - weightA) > 10) return weightB - weightA;
+      return b.credits - a.credits;
+    } else if (strategy === "light") {
+      // Priority 1: Low Difficulty, Priority 2: Critical Path
+      if (Math.abs(difficultyScores[a.id] - difficultyScores[b.id]) > 2) return difficultyScores[a.id] - difficultyScores[b.id];
+      return weightB - weightA;
+    }
+
+    // Balanced / Default
+    return weightB - weightA || difficultyScores[a.id] - difficultyScores[b.id];
+  });
+
+  for (const c of eligible) {
+    const isUrgent = latestIdx[c.id] === idx;
+
+    // Difficulty balancing for 'balanced' and 'light' strategy
+    if (strategy === 'balanced' || strategy === 'light') {
+      const currentSemCourses = Object.keys(assigned).filter(id => assigned[id] === semName);
+      const currentSemDifficulty = currentSemCourses.reduce((sum, id) => sum + (difficultyScores[id] || 5), 0);
+
+      // Limit total difficulty score per semester to keep it 'balanced'
+      const difficultyCap = strategy === 'light' ? 22 : 32;
+      if (currentSemDifficulty + difficultyScores[c.id] > difficultyCap && !isUrgent) {
+        continue; // Skip this course for this semester unless it's urgent
+      }
+    }
+
+    if (currentCredits + c.credits <= maxCr) {
       assigned[c.id] = semName;
       currentCredits += c.credits;
       simCompleted.add(c.id);
       creditsSimulation[c.category] = (creditsSimulation[c.category] || 0) + c.credits;
-    }
-
-    // Check if pinned courses alone overload the semester
-    if (currentCredits > maxCr) {
-      overloadedSemesters.push(semName);
-      warnings.push(`تم تجاوز السعة المحددة لفصل '${semName}' بسبب وجود مواد مثبتة فيه (${currentCredits} ساعة).`);
-    }
-
-    // 5.2. Fill remaining capacity with eligible unpinned courses
-    // Sorting Logic:
-    // 1. Criticality (Weight) - Highest first
-    // 2. Strategy specific sorting
-    let eligible = remaining.filter((c) => {
-      if (pinnedCourses[c.id]) return false; // Already handled
-      if (assigned[c.id]) return false; // Already assigned
-
-      // Prerequisites must be completed in previous semesters
-      const prereqsMet = c.prerequisites.every((pId) => simCompleted.has(pId));
-      if (!prereqsMet) return false;
-
-      // Window check
-      if (earliestIdx[c.id] > idx || latestIdx[c.id] < idx) return false;
-
-      // Category requirement limit check
-      const currentCatCr = creditsSimulation[c.category] || 0;
-      const requiredCatCr = categoryRequirements[c.category] || 999;
-      if (currentCatCr + c.credits > requiredCatCr) return false;
-
-      return true;
-    });
-
-    // Sorting Logic based on Strategy
-    eligible.sort((a, b) => {
-      // Always prioritize critical path weight for all strategies to ensure graduation
-      const weightA = weights[a.id];
-      const weightB = weights[b.id];
-
-      if (strategy === "fast") {
-        // Priority 1: Critical Path, Priority 2: High Credits
-        if (Math.abs(weightB - weightA) > 10) return weightB - weightA;
-        return b.credits - a.credits;
-      } else if (strategy === "light") {
-        // Priority 1: Low Difficulty, Priority 2: Critical Path
-        if (Math.abs(difficultyScores[a.id] - difficultyScores[b.id]) > 2) return difficultyScores[a.id] - difficultyScores[b.id];
-        return weightB - weightA;
-      }
-
-      // Balanced / Default
-      return weightB - weightA || difficultyScores[a.id] - difficultyScores[b.id];
-    });
-
-    for (const c of eligible) {
-      const isUrgent = latestIdx[c.id] === idx;
-
-      // Difficulty balancing for 'balanced' and 'light' strategy
-      if (strategy === 'balanced' || strategy === 'light') {
-        const currentSemCourses = Object.keys(assigned).filter(id => assigned[id] === semName);
-        const currentSemDifficulty = currentSemCourses.reduce((sum, id) => sum + (difficultyScores[id] || 5), 0);
-
-        // Limit total difficulty score per semester to keep it 'balanced'
-        const difficultyCap = strategy === 'light' ? 22 : 32;
-        if (currentSemDifficulty + difficultyScores[c.id] > difficultyCap && !isUrgent) {
-          continue; // Skip this course for this semester unless it's urgent
-        }
-      }
-
-      if (currentCredits + c.credits <= maxCr) {
+    } else if (isUrgent) {
+      // This is urgent and MUST be scheduled now, otherwise deadline violated.
+      // Overload the semester up to 21 hours for regular, or 10 hours for summer.
+      const overloadLimit = semName.includes("صيفي") ? 10 : 21;
+      if (currentCredits + c.credits <= overloadLimit) {
         assigned[c.id] = semName;
         currentCredits += c.credits;
         simCompleted.add(c.id);
         creditsSimulation[c.category] = (creditsSimulation[c.category] || 0) + c.credits;
-      } else if (isUrgent) {
-        // This is urgent and MUST be scheduled now, otherwise deadline violated.
-        // Overload the semester up to 21 hours for regular, or 10 hours for summer.
-        const overloadLimit = semName.includes("صيفي") ? 10 : 21;
-        if (currentCredits + c.credits <= overloadLimit) {
-          assigned[c.id] = semName;
-          currentCredits += c.credits;
-          simCompleted.add(c.id);
-          creditsSimulation[c.category] = (creditsSimulation[c.category] || 0) + c.credits;
 
-          if (!overloadedSemesters.includes(semName)) {
-            overloadedSemesters.push(semName);
-            warnings.push(`تم زيادة حمولة فصل '${semName}' لتصل إلى ${currentCredits} ساعة لجدولة مواد حرجة للتخرج.`);
-          }
-        } else {
-          return {
-            success: false,
-            error: `عجز في حمولة فصل '${semName}': المساق الإجباري '${c.name}' يجب تسجيله في هذا فصل لضمان التخرج في الوقت المحدد، ولكن حمولة الفصل تجاوزت الحد الأقصى المطلق (${currentCredits} ساعة). يرجى زيادة حمولة هذا الفصل أو تمديد الخريطة الزمنية للفصول.`,
-          };
+        if (!overloadedSemesters.includes(semName)) {
+          overloadedSemesters.push(semName);
+          warnings.push(`تم زيادة حمولة فصل '${semName}' لتصل إلى ${currentCredits} ساعة لجدولة مواد حرجة للتخرج.`);
         }
+      } else {
+        return {
+          success: false,
+          error: `عجز في حمولة فصل '${semName}': المساق الإجباري '${c.name}' يجب تسجيله في هذا فصل لضمان التخرج في الوقت المحدد، ولكن حمولة الفصل تجاوزت الحد الأقصى المطلق (${currentCredits} ساعة). يرجى زيادة حمولة هذا الفصل أو تمديد الخريطة الزمنية للفصول.`,
+        };
       }
     }
   }
+}
 
-  // 6. Verify if all remaining courses are scheduled
-  const unscheduled = remaining.filter((c) => !assigned[c.id]);
-  if (unscheduled.length > 0) {
-    const unscheduledNames = unscheduled.slice(0, 5).map((c) => c.name).join("، ");
-    const dots = unscheduled.length > 5 ? "..." : "";
-    return {
-      success: false,
-      error: `لم يتمكن المحرك من جدولة جميع المواد المتبقية (${unscheduledNames}${dots} - المجموع ${unscheduled.length} مواد) ضمن الخريطة الزمنية المحددة. يرجى زيادة سعة الفصول الدراسية أو تمديد فترة التخطيط لتسع المواد المتبقية.`,
-    };
-  }
-
+// 6. Verify if all remaining courses are scheduled
+const unscheduled = remaining.filter((c) => !assigned[c.id]);
+if (unscheduled.length > 0) {
+  const unscheduledNames = unscheduled.slice(0, 5).map((c) => c.name).join("، ");
+  const dots = unscheduled.length > 5 ? "..." : "";
   return {
-    success: true,
-    plan: assigned,
-    overloadedSemesters,
-    warnings,
+    success: false,
+    error: `لم يتمكن المحرك من جدولة جميع المواد المتبقية (${unscheduledNames}${dots} - المجموع ${unscheduled.length} مواد) ضمن الخريطة الزمنية المحددة. يرجى زيادة سعة الفصول الدراسية أو تمديد فترة التخطيط لتسع المواد المتبقية.`,
   };
+}
+
+return {
+  success: true,
+  plan: assigned,
+  overloadedSemesters,
+  warnings,
+};
 }
