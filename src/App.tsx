@@ -93,6 +93,33 @@ export const getPathForCourse = (nodeId: string) => {
   };
 };
 
+// Helper function to unify availability logic across the app
+const isCourseAvailable = (
+  course: Course,
+  completed: Set<string>,
+  categoryCredits: Record<string, number>,
+  allCourses: Course[]
+): boolean => {
+  if (completed.has(course.id)) return false;
+
+  // Check category requirements for electives
+  const req = categoryRequirements[course.category] || 999;
+  const comp = categoryCredits[course.category] || 0;
+  if (comp >= req && course.category.includes("اختياري")) return false;
+
+  // Check Prerequisites
+  const prereqsMet = course.prerequisites.every((p) => completed.has(p));
+  if (!prereqsMet) return false;
+
+  // Check Co-requisites
+  if (!course.coPrerequisites || course.coPrerequisites.length === 0) return true;
+  return course.coPrerequisites.every((cpId) => {
+    if (completed.has(cpId)) return true;
+    const cpCourse = allCourses.find(ac => ac.id === cpId);
+    return cpCourse ? cpCourse.prerequisites.every(p => completed.has(p)) : true;
+  });
+};
+
 // Local storage hook
 function useLocalStorage<T>(key: string, initialValue: T) {
   const [storedValue, setStoredValue] = useState<T>(() => {
@@ -296,6 +323,7 @@ function FlowComponent() {
     "dark_mode",
     false,
   );
+  const [showAllInMap, setShowAllInMap] = useState(false);
 
   const [hoveredCourseId, setHoveredCourseId] = useState<string | null>(null);
 
@@ -428,32 +456,9 @@ function FlowComponent() {
 
   // Compute available courses
   const availableCourses = useMemo(() => {
-    const checkAvailability = (course: Course): boolean => {
-      if (completedCourses.has(course.id)) return false;
-
-      // Check category requirements for electives
-      const req = categoryRequirements[course.category] || 999;
-      const comp = completedCreditsPerCategory[course.category] || 0;
-      if (comp >= req && course.category.includes("اختياري")) return false;
-
-      const prereqsMet = course.prerequisites.every((prereq) =>
-        completedCourses.has(prereq),
-      );
-      if (!prereqsMet) return false;
-
-      // Co-requisites check: can be taken if co-req is completed OR also available
-      if (!course.coPrerequisites || course.coPrerequisites.length === 0) return true;
-
-      return course.coPrerequisites.every((cpId) => {
-        if (completedCourses.has(cpId)) return true;
-        const cpCourse = courses.find(ac => ac.id === cpId);
-        if (!cpCourse) return true;
-        // Check if the co-requisite itself is available (its own prereqs are met)
-        return cpCourse.prerequisites.every(p => completedCourses.has(p));
-      });
-    };
-
-    return courses.filter((course) => checkAvailability(course));
+    return courses.filter((course) =>
+      isCourseAvailable(course, completedCourses, completedCreditsPerCategory, courses)
+    );
   }, [completedCourses, completedCreditsPerCategory, courses]);
 
   const groupedCourseList = useMemo(() => {
@@ -743,7 +748,7 @@ function FlowComponent() {
         const cObj = courses.find((c) => c.id === n.id);
         const isElective = cObj?.category === 'متطلب جامعة اختياري' || cObj?.category === 'متطلب تخصص اختياري';
         const isActiveElective = isElective && selectedElectiveIds.has(n.id);
-        const isHidden = isElective && !isActiveElective;
+        const isHidden = !showAllInMap && isElective && !isActiveElective;
 
         const isCompleted = completedCourses.has(n.id);
         const isAvailable = availableCourses.some((c) => c.id === n.id);
@@ -908,6 +913,7 @@ function FlowComponent() {
     availableCourses,
     toggleCourseCompletion,
     selectedElectives,
+    showAllInMap,
   ]);
 
   return (
@@ -924,6 +930,21 @@ function FlowComponent() {
           <div className="flex justify-between items-start w-full xl:w-auto gap-4">
             <div>
               <h1 className="text-lg sm:text-2xl font-bold text-gray-900 dark:text-slate-100 mb-1 flex flex-wrap items-center gap-3">
+                <div className="flex items-center gap-2 bg-gray-100 dark:bg-slate-700 p-1 rounded-lg border border-gray-200 dark:border-slate-600 ml-2">
+                  <button
+                    onClick={() => setShowAllInMap(false)}
+                    className={cn("px-2 py-1 text-[10px] font-black rounded-md transition-all", !showAllInMap ? "bg-white dark:bg-slate-500 shadow-sm" : "text-gray-400")}
+                  >
+                    خطة التخرج
+                  </button>
+                  <button
+                    onClick={() => setShowAllInMap(true)}
+                    className={cn("px-2 py-1 text-[10px] font-black rounded-md transition-all", showAllInMap ? "bg-white dark:bg-slate-500 shadow-sm" : "text-gray-400")}
+                  >
+                    كامل المنهاج
+                  </button>
+                </div>
+
                 <BookOpen className="text-blue-600 dark:text-blue-400 hidden sm:block" size={24} />
                 خريطة المتطلبات الأكاديمية
                 <button
@@ -2310,12 +2331,13 @@ function FlowComponent() {
                           if (SEMESTERS.indexOf(s) < SEMESTERS.indexOf(currentPlanningSemester!)) allPrev.add(id);
                         });
 
+                        const tempCredits: Record<string, number> = {}; // To handle limit check during planning
                         const available = courses.filter(c => {
                           const isComp = completedCourses.has(c.id);
                           const isPlannedInPrev = Object.entries(plannedCourses).some(([id, s]) => id === c.id && SEMESTERS.indexOf(s) < SEMESTERS.indexOf(currentPlanningSemester!));
                           const isPlannedNow = plannedCourses[c.id] === currentPlanningSemester;
                           if (isComp || isPlannedInPrev || isPlannedNow) return false;
-                          return c.prerequisites.every(p => allPrev.has(p));
+                          return isCourseAvailable(c, allPrev, {}, courses);
                         });
 
                         const grouped = available.reduce((acc, c) => {
