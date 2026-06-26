@@ -23,7 +23,10 @@ export const courseCommonNames: Record<string, string> = {
     '12140420': 'VHDL',
     '11300001': 'برمجة مرئية',
     '12140523': 'ويب',
+    '12140535':'تنجيم',
 };
+
+export const TOTAL_CREDITS = 164; // Added this constant
 
 export const getYearFromId = (id: string): string => {
     if (id.length >= 6) {
