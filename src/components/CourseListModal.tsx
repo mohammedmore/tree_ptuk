@@ -1,5 +1,5 @@
 import React from "react";
-import { X, LayoutList, BookOpen, ChevronDown, ChevronUp, CircleCheckBig, Trash2, CalendarDays } from "lucide-react";
+import { X, LayoutList, BookOpen, ChevronDown, ChevronUp, CircleCheckBig, Trash2, CalendarDays, Search } from "lucide-react";
 import { cn } from "../utils";
 import { Course, categoryRequirements } from "../data";
 
@@ -19,6 +19,7 @@ interface CourseListModalProps {
   setPlanningCourseId: (id: string | null) => void;
   setIsPlannerOpen: (isOpen: boolean) => void;
   completedCreditsPerCategory: Record<string, number>;
+  plannedCourses: Record<string, any>;
 }
 
 const CourseListModal: React.FC<CourseListModalProps> = ({
@@ -37,8 +38,22 @@ const CourseListModal: React.FC<CourseListModalProps> = ({
   setPlanningCourseId,
   setIsPlannerOpen,
   completedCreditsPerCategory,
+  plannedCourses,
 }) => {
+  const [searchQuery, setSearchQuery] = React.useState("");
+
   if (!isCourseListModalOpen) return null;
+
+  const filteredGroupedCourseList = (Object.entries(groupedCourseList) as [string, Course[]][]).reduce((acc, [category, items]) => {
+    const filteredItems = items.filter(c => 
+      c.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
+      c.id.toLowerCase().includes(searchQuery.toLowerCase())
+    );
+    if (filteredItems.length > 0) {
+      acc[category] = filteredItems;
+    }
+    return acc;
+  }, {} as Record<string, Course[]>);
 
   return (
     <div
@@ -46,14 +61,14 @@ const CourseListModal: React.FC<CourseListModalProps> = ({
       onClick={onClose}
     >
       <div
-        className="bg-white dark:bg-slate-900 rounded-3xl p-0 w-full max-w-2xl shadow-2xl animate-in zoom-in-95 duration-300 relative overflow-hidden border border-gray-100 dark:border-slate-800 flex flex-col max-h-[90vh]"
+        className="bg-white dark:bg-slate-900 rounded-3xl p-0 w-full max-w-2xl shadow-2xl animate-in zoom-in-95 duration-300 relative overflow-hidden border border-gray-100 dark:border-slate-700 flex flex-col max-h-[90vh]"
         dir="rtl"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="absolute top-0 right-0 left-0 h-1.5 bg-gradient-to-r from-blue-600 via-blue-500 to-indigo-500"></div>
 
         {/* Header */}
-        <div className="p-6 border-b border-gray-100 dark:border-slate-850 flex justify-between items-center bg-gray-50/50 dark:bg-slate-950/20 shrink-0">
+        <div className="p-6 border-b border-gray-100 dark:border-slate-700 flex justify-between items-center bg-gray-50/50 dark:bg-slate-950/20 shrink-0">
           <h2 className="text-xl font-black text-gray-800 dark:text-slate-100 flex items-center gap-3">
             <div className="bg-gradient-to-br from-blue-500 to-blue-600 p-2.5 rounded-2xl text-white shadow-lg shadow-blue-200 dark:shadow-none">
               <LayoutList size={24} />
@@ -64,7 +79,7 @@ const CourseListModal: React.FC<CourseListModalProps> = ({
         </div>
 
         {/* Tabs */}
-        <div className="flex border-b border-gray-100 dark:border-slate-800 px-6 pt-2 gap-6 bg-gray-50/30 dark:bg-slate-900/30 shrink-0">
+        <div className="flex border-b border-gray-100 dark:border-slate-700 px-6 pt-2 gap-6 bg-gray-50/30 dark:bg-slate-900/30 shrink-0">
           <button
             className={cn(
               "pb-3 px-1 text-sm font-black border-b-2 transition-colors",
@@ -102,6 +117,18 @@ const CourseListModal: React.FC<CourseListModalProps> = ({
 
         <div className="p-6 overflow-y-auto flex-1 scrollbar-thin">
           <div className="space-y-4">
+            {/* Search Bar */}
+            <div className="relative">
+              <Search className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
+              <input
+                type="text"
+                placeholder="ابحث عن مادة باسمها أو رمزها..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full pr-10 pl-4 py-2.5 bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 outline-none dark:text-slate-200"
+              />
+            </div>
+
             <div className="flex items-center justify-between">
               <h3 className="text-xs font-black text-gray-500 dark:text-slate-400 flex items-center gap-2">
                 <BookOpen size={14} /> تصنيف المواد حسب النوع
@@ -122,13 +149,13 @@ const CourseListModal: React.FC<CourseListModalProps> = ({
             </div>
 
             <div className="space-y-3">
-              {Object.keys(groupedCourseList).length === 0 ? (
-                <div className="text-center py-10 text-sm font-bold text-gray-400">لا توجد مواد في هذا القسم حالياً</div>
+              {Object.keys(filteredGroupedCourseList).length === 0 ? (
+                <div className="text-center py-10 text-sm font-bold text-gray-400">لا توجد مواد تطابق البحث حالياً</div>
               ) : (
-                Object.entries(groupedCourseList).map(([category, items]) => {
+                (Object.entries(filteredGroupedCourseList) as [string, Course[]][]).map(([category, items]) => {
                   const isExpanded = expandedCourseListCategories[category] === true;
                   return (
-                    <div key={category} className="border border-gray-100 dark:border-slate-800 rounded-2xl overflow-hidden shadow-sm">
+                    <div key={category} className="border border-gray-100 dark:border-slate-700 rounded-2xl overflow-hidden shadow-sm">
                       <button
                         onClick={() => setExpandedCourseListCategories(prev => ({ ...prev, [category]: !isExpanded }))}
                         className="w-full flex items-center justify-between p-3.5 bg-gray-50 dark:bg-slate-800/80 hover:bg-gray-100 transition-colors"

@@ -46,10 +46,10 @@ import {
   Sun,
   ChevronDown,
   ChevronUp,
+  Calculator,
 } from "lucide-react";
 import "@xyflow/react/dist/style.css";
 import { courses, Course, categoryRequirements } from "./data";
-import { generateSmartPlan } from "./scheduler";
 
 import { getLayoutedElements, cn } from "./utils";
 import { getCourseDetails } from "./courseExplanations";
@@ -57,7 +57,7 @@ import { getCourseDetails } from "./courseExplanations";
 import {
   courseCommonNames,
   SEMESTERS,
-  TOTAL_CREDITS // Import TOTAL_CREDITS
+  TOTAL_CREDITS
 } from "./constants";
 import CourseNode from "./CourseNode";
 import ListView from "./ListView";
@@ -68,6 +68,7 @@ import PlanningModeModal from "./components/PlanningModeModal"; // Import the ne
 import CourseListModal from "./components/CourseListModal"; // Import the new component
 import DynamicCourseDetailsModal from "./components/DynamicCourseDetailsModal"; // Import the new component
 import PlannerView from "./components/PlannerView"; // Import the new component
+import { GPAModal } from "./components/GPAModal";
 
 // تحسين: تمرير الـ edges كمعامل لجعل الدالة نقية (Pure Function) وقابلة للاختبار
 export const getPathForCourse = (nodeId: string, edges: Edge[]) => {
@@ -303,6 +304,7 @@ function FlowComponent() {
   const [isPlannerOpen, setIsPlannerOpen] = useState(false);
   const [currentPlanningSemester, setCurrentPlanningSemester] = useState<string | null>(null);
   const [isCourseListModalOpen, setIsCourseListModalOpen] = useState(false);
+  const [isGPAModalOpen, setIsGPAModalOpen] = useState(false);
   const [courseListTab, setCourseListTab] = useState<"available" | "completed" | "all">("available");
   const [expandedCourseListCategories, setExpandedCourseListCategories] = useState<Record<string, boolean>>({});
   const [hasHighGpa, setHasHighGpa] = useState(false);
@@ -339,6 +341,11 @@ function FlowComponent() {
   const [isDarkMode, setIsDarkMode] = useLocalStorage<boolean>(
     "dark_mode",
     false,
+  );
+
+  const [courseGrades, setCourseGrades] = useLocalStorage<Record<string, number>>(
+    "course_grades",
+    {}
   );
 
   const [hoveredCourseId, setHoveredCourseId] = useState<string | null>(null);
@@ -394,6 +401,7 @@ function FlowComponent() {
     "plan_end_semester",
     "hide_past_semesters",
     "dark_mode",
+    "course_grades",
   ];
 
   const confirmReset = () => {
@@ -516,6 +524,18 @@ function FlowComponent() {
       return acc;
     }, 0);
   }, [completedCourses, plannedCourses, activeCourses]);
+
+  const plannedCreditsPerCategory = useMemo(() => {
+    return courses.reduce(
+      (acc, course) => {
+        if (!completedCourses.has(course.id) && plannedCourses[course.id]) {
+          acc[course.category] = (acc[course.category] || 0) + course.credits;
+        }
+        return acc;
+      },
+      {} as Record<string, number>,
+    );
+  }, [plannedCourses, completedCourses]);
 
   const progressPercentage =
     Math.round((completedCredits / TOTAL_CREDITS) * 100) || 0;
@@ -956,6 +976,18 @@ function FlowComponent() {
                 >
                   <LayoutList size={16} />
                   قائمة المواد
+                </button>
+                <button
+                  onClick={() => {
+                    setIsGPAModalOpen(true);
+                    setSelectedNodeId(null);
+                    setIsDetailsOpen(false);
+                    setHoveredCourseId(null);
+                  }}
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-indigo-500 hover:bg-indigo-600 text-white rounded-lg transition-colors cursor-pointer shadow-sm font-black"
+                >
+                  <Calculator size={16} />
+                  المعدل والدرجات
                 </button>
                 <button
                   onClick={(e) => {
@@ -1834,6 +1866,7 @@ function FlowComponent() {
           plannedCourses={plannedCourses}
           completedCourses={completedCourses}
           courses={courses}
+          courseGrades={courseGrades}
         />
 
         {/* Planning Mode Modal */}
@@ -1872,6 +1905,7 @@ function FlowComponent() {
           setPlanningCourseId={setPlanningCourseId}
           setIsPlannerOpen={setIsPlannerOpen}
           completedCreditsPerCategory={completedCreditsPerCategory}
+          plannedCourses={plannedCourses}
         />
 
         {/* Planner View Modal */}
@@ -1892,10 +1926,21 @@ function FlowComponent() {
           setPlanningCourseId={setPlanningCourseId}
           completedCredits={completedCredits}
           plannedCredits={plannedCredits}
+          completedCreditsPerCategory={completedCreditsPerCategory}
+          plannedCreditsPerCategory={plannedCreditsPerCategory}
           getAllPrerequisites={getAllPrerequisites}
           setIsExportModalOpen={setIsExportModalOpen}
           onOpenPlanningMode={() => setIsPlanningModeOpen(true)}
           toggleCourseCompletion={toggleCourseCompletion}
+        />
+        {/* GPAModal */}
+        <GPAModal
+          isOpen={isGPAModalOpen}
+          onClose={() => setIsGPAModalOpen(false)}
+          courses={courses}
+          completedCourses={completedCourses}
+          courseGrades={courseGrades}
+          setCourseGrades={setCourseGrades}
         />
       </div>
     </div>
