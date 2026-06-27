@@ -24,6 +24,8 @@ interface PlannerViewProps {
   plannedCredits: number;
   getAllPrerequisites: (courseId: string) => Set<string>;
   setIsExportModalOpen: React.Dispatch<React.SetStateAction<boolean>>;
+  onOpenPlanningMode: () => void;
+  toggleCourseCompletion: (courseId: string) => void;
 }
 
 const PlannerView: React.FC<PlannerViewProps> = ({
@@ -45,9 +47,14 @@ const PlannerView: React.FC<PlannerViewProps> = ({
   plannedCredits,
   getAllPrerequisites,
   setIsExportModalOpen,
+  onOpenPlanningMode,
+  toggleCourseCompletion,
 }) => {
   const [plannerSelectedCourse, setPlannerSelectedCourse] = React.useState<Course | null>(null);
   const [isRescheduling, setIsRescheduling] = React.useState(false);
+
+  // Add console log to check the prop
+  console.log("PlannerView: toggleCourseCompletion prop received:", toggleCourseCompletion);
 
   if (!isPlannerOpen) return null;
 
@@ -55,6 +62,8 @@ const PlannerView: React.FC<PlannerViewProps> = ({
     Math.round((completedCredits / TOTAL_CREDITS) * 100) || 0;
   const plannedPercentage =
     Math.round((plannedCredits / TOTAL_CREDITS) * 100) || 0;
+
+  const allSemestersEmpty = Object.keys(plannedCourses).length === 0;
 
   return (
     <div
@@ -152,225 +161,245 @@ const PlannerView: React.FC<PlannerViewProps> = ({
           </div>
         )}
 
-        <div className="flex-1 overflow-x-auto bg-gray-50 dark:bg-slate-950/40 rounded-xl border border-gray-200 dark:border-slate-800 p-4">
-          <div className="flex gap-4 min-w-max h-full">
-            {SEMESTERS.filter((sem) => {
-              if (hidePastSemesters) {
+        {allSemestersEmpty ? (
+          <div className="flex-1 flex flex-col items-center justify-center text-gray-500 dark:text-slate-400 p-4 text-center bg-gray-50 dark:bg-slate-950/40 rounded-xl border border-gray-200 dark:border-slate-800">
+            <Sparkles size={48} className="mb-4 text-orange-400" />
+            <p className="text-lg font-bold mb-2">لا توجد مواد مخططة بعد!</p>
+            <p className="text-sm mb-4">
+              ابدأ بإنشاء خطتك الأكاديمية من خلال وضع التخطيط.
+            </p>
+            <button
+              onClick={() => {
+                onClose(); // Close PlannerView
+                onOpenPlanningMode(); // Open PlanningModeModal
+              }}
+              className="flex items-center gap-2 px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl transition-colors cursor-pointer shadow-lg font-bold"
+            >
+              <CalendarDays size={20} />
+              اذهب إلى وضع التخطيط
+            </button>
+          </div>
+        ) : (
+          <div className="flex-1 overflow-x-auto bg-gray-50 dark:bg-slate-950/40 rounded-xl border border-gray-200 dark:border-slate-800 p-4">
+            <div className="flex gap-4 min-w-max h-full">
+              {SEMESTERS.filter((sem) => {
+                if (hidePastSemesters) {
+                  return (
+                    SEMESTERS.indexOf(sem) >=
+                    SEMESTERS.indexOf(planStartSemester)
+                  );
+                }
+                return true;
+              }).map((sem) => {
+                const isPastSem =
+                  SEMESTERS.indexOf(sem) <
+                  SEMESTERS.indexOf(planStartSemester);
+                const semCourses = Object.entries(plannedCourses)
+                  .filter(([id, semester]) => semester === sem)
+                  .map(([id]) => courses.find((c) => c.id === id)!)
+                  .filter(Boolean);
                 return (
-                  SEMESTERS.indexOf(sem) >=
-                  SEMESTERS.indexOf(planStartSemester)
-                );
-              }
-              return true;
-            }).map((sem) => {
-              const isPastSem =
-                SEMESTERS.indexOf(sem) <
-                SEMESTERS.indexOf(planStartSemester);
-              const semCourses = Object.entries(plannedCourses)
-                .filter(([id, semester]) => semester === sem)
-                .map(([id]) => courses.find((c) => c.id === id)!)
-                .filter(Boolean);
-              return (
-                <div
-                  key={sem}
-                  className={cn(
-                    "w-64 flex flex-col h-full rounded-xl border shrink-0 overflow-hidden group transition-all",
-                    isPastSem
-                      ? "bg-slate-100/60 dark:bg-slate-900/40 border-dashed border-slate-300 dark:border-slate-700 opacity-[0.72] ring-1 ring-slate-100 dark:ring-slate-900 select-none"
-                      : "bg-white dark:bg-slate-800 border-gray-200 dark:border-slate-700",
-                  )}
-                >
                   <div
+                    key={sem}
                     className={cn(
-                      "p-3 border-b border-gray-100 dark:border-slate-750 flex justify-between items-center transition-colors relative group/header",
+                      "w-64 flex flex-col h-full rounded-xl border shrink-0 overflow-hidden group transition-all",
                       isPastSem
-                        ? "bg-slate-200/90 dark:bg-slate-950/60 text-slate-400 dark:text-slate-500 cursor-not-allowed"
-                        : planningCourseId
-                          ? "cursor-pointer hover:bg-orange-100 dark:hover:bg-orange-950/30 bg-orange-50/50 dark:bg-orange-950/10"
-                          : "bg-gray-50 dark:bg-slate-900/60",
-                      !!planningCourseId &&
-                      !isPastSem &&
-                      "border-orange-200 dark:border-orange-900/50",
+                        ? "bg-slate-100/60 dark:bg-slate-900/40 border-dashed border-slate-300 dark:border-slate-700 opacity-[0.72] ring-1 ring-slate-100 dark:ring-slate-900 select-none"
+                        : "bg-white dark:bg-slate-800 border-gray-200 dark:border-slate-700",
                     )}
-                    onClick={() => {
-                      if (planningCourseId && !isPastSem) {
-                        setPlannedCourses((prev) => ({
-                          ...prev,
-                          [planningCourseId]: sem,
-                        }));
-                        setPlanningCourseId(null);
-                      }
-                    }}
                   >
-                    <div>
-                      <h3 className="font-bold text-gray-700 dark:text-slate-200 text-xs mb-1 flex items-center gap-1.5 flex-wrap">
-                        {isPastSem && (
-                          <Lock
-                            size={12}
-                            className="text-slate-400 dark:text-slate-500 shrink-0"
-                          />
-                        )}
-                        <span>{sem}</span>
-                        {isPastSem && (
-                          <span className="text-[9px] bg-slate-250 text-slate-600 px-1.5 py-0.2 rounded font-black">
-                            مجتاز/سابق
-                          </span>
-                        )}
-                      </h3>
-                      <span className="text-[10px] bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 text-gray-500 dark:text-slate-400 px-2 py-0.5 rounded-full font-bold">
-                        {semCourses.reduce(
-                          (sum, c) => sum + c.credits,
-                          0,
-                        )}{" "}
-                        س.م
-                      </span>
-                    </div>
-                    {!planningCourseId && semCourses.length > 0 && (
-                      <div className="flex gap-1 items-center shrink-0">
-                        {/* زر حذف جميع المواد المخططة في هذا الفصل */}
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setPlannedCourses((prev) => {
-                              const next = { ...prev };
-                              semCourses.forEach((c) => {
-                                delete next[c.id];
-                              });
-                              return next;
-                            });
-                          }}
-                          className="opacity-0 group-hover/header:opacity-100 p-1 bg-red-50 text-red-500 hover:bg-red-100 hover:text-red-700 rounded-md transition-all shadow-sm border border-red-200"
-                          title="حذف كل مواد الفصل من الخطة"
-                        >
-                          <Trash2 size={14} />
-                        </button>
-
-                        {semCourses.some(
-                          (c) => !completedCourses.has(c.id),
-                        ) && (
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setCompletedCourses((prev) => {
-                                  const next = new Set(prev);
-                                  semCourses.forEach((c) => {
-                                    if (!next.has(c.id)) {
-                                      next.add(c.id);
-                                      getAllPrerequisites(c.id).forEach(
-                                        (pre) => next.add(pre),
-                                      );
-                                    }
-                                  });
-                                  return next;
-                                });
-                              }}
-                              className="opacity-0 group-hover/header:opacity-100 p-1 bg-emerald-50 text-emerald-600 hover:bg-emerald-100 hover:text-emerald-700 rounded-md transition-all shadow-sm border border-emerald-200"
-                              title="إنجاز كل مواد الفصل"
-                            >
-                              <CircleCheckBig size={14} />
-                            </button>
-                          )}
-                      </div>
-                    )}
-                  </div>
-
-                  <div className="flex-1 overflow-y-auto p-2 flex flex-col gap-2">
-                    {semCourses.map((c) => {
-                      const isCompleted = completedCourses.has(c.id);
-                      return (
-                        <div
-                          key={c.id}
-                          onClick={() => setPlannerSelectedCourse(c)}
-                          className={cn(
-                            "p-3 border rounded-lg flex flex-col relative group/card shadow-sm cursor-pointer transition-all duration-200 hover:shadow-md hover:border-indigo-300 hover:bg-neutral-50/50 hover:-translate-y-0.5 active:scale-[0.98]",
-                            isCompleted
-                              ? "bg-emerald-50 dark:bg-emerald-950/20 border-emerald-100/60 dark:border-emerald-900/50 hover:border-emerald-200"
-                              : "bg-gray-50 dark:bg-slate-900 border-gray-100 dark:border-slate-750 hover:border-orange-200 dark:hover:border-orange-900/50",
-                          )}
-                        >
-                          <div className="flex justify-between items-start">
-                            <span
-                              className={cn(
-                                "text-[10px] font-bold tracking-widest",
-                                isCompleted
-                                  ? "text-emerald-500"
-                                  : "text-gray-500 dark:text-slate-500",
-                              )}
-                            >
-                              {c.id}
-                            </span>
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setPlannedCourses((prev) => {
-                                  const next = { ...prev };
-                                  delete next[c.id];
-                                  return next;
-                                });
-                              }}
-                              className="p-1 text-gray-400 dark:text-slate-600 hover:text-red-500 hover:bg-red-50 rounded opacity-0 group-hover/card:opacity-100 transition-all"
-                              title="حذف من الخطة"
-                            >
-                              <Trash2 size={12} />
-                            </button>
-                          </div>
-                          <span
-                            className={cn(
-                              "text-sm font-bold leading-tight mt-1",
-                              isCompleted
-                                ? "text-emerald-800 dark:text-emerald-300"
-                                : "text-gray-800 dark:text-slate-200",
-                            )}
-                          >
-                            {c.name}{" "}
-                            {isCompleted && (
-                              <CircleCheckBig
-                                size={14}
-                                className="inline-block pb-0.5 text-emerald-500 align-middle"
-                              />
-                            )}
-                          </span>
-                        </div>
-                      );
-                    })}
-                    {planningCourseId && !isPastSem && (
-                      <button
-                        onClick={() => {
+                    <div
+                      className={cn(
+                        "p-3 border-b border-gray-100 dark:border-slate-750 flex justify-between items-center transition-colors relative group/header",
+                        isPastSem
+                          ? "bg-slate-200/90 dark:bg-slate-950/60 text-slate-400 dark:text-slate-500 cursor-not-allowed"
+                          : planningCourseId
+                            ? "cursor-pointer hover:bg-orange-100 dark:hover:bg-orange-950/30 bg-orange-50/50 dark:bg-orange-950/10"
+                            : "bg-gray-50 dark:bg-slate-900/60",
+                        !!planningCourseId &&
+                        !isPastSem &&
+                        "border-orange-200 dark:border-orange-900/50",
+                      )}
+                      onClick={() => {
+                        if (planningCourseId && !isPastSem) {
                           setPlannedCourses((prev) => ({
                             ...prev,
                             [planningCourseId]: sem,
                           }));
                           setPlanningCourseId(null);
-                        }}
-                        className="w-full mt-2 py-3 border-2 border-dashed border-orange-200 text-orange-500 hover:border-orange-400 hover:bg-orange-50 rounded-lg text-sm font-bold transition-colors opacity-0 group-hover:opacity-100"
-                      >
-                        + أضف{" "}
-                        {
-                          courses.find((c) => c.id === planningCourseId)
-                            ?.name
-                        }{" "}
-                        هنا
-                      </button>
-                    )}
-                    {!planningCourseId && semCourses.length === 0 && (
-                      <div className="flex-1 flex flex-col items-center justify-center text-gray-400 dark:text-slate-600 p-4 text-center">
-                        <CalendarDays
-                          size={24}
-                          className="mb-2 opacity-20"
-                        />
-                        <p className="text-xs font-medium">
-                          {isPastSem
-                            ? "فصل سابق تم تجاوزه"
-                            : "هذا الفصل فارغ"}
-                        </p>
+                        }
+                      }}
+                    >
+                      <div>
+                        <h3 className="font-bold text-gray-700 dark:text-slate-200 text-xs mb-1 flex items-center gap-1.5 flex-wrap">
+                          {isPastSem && (
+                            // Replaced <Lock> with a span for testing
+                            <span className="text-slate-400 dark:text-slate-500 shrink-0">
+                              [قفل]
+                            </span>
+                          )}
+                          <span>{sem}</span>
+                          {isPastSem && (
+                            <span className="text-[9px] bg-slate-250 text-slate-600 px-1.5 py-0.2 rounded font-black">
+                              مجتاز/سابق
+                            </span>
+                          )}
+                        </h3>
+                        <span className="text-[10px] bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 text-gray-500 dark:text-slate-400 px-2 py-0.5 rounded-full font-bold">
+                          {semCourses.reduce(
+                            (sum, c) => sum + c.credits,
+                            0,
+                          )}{" "}
+                          س.م
+                        </span>
                       </div>
-                    )}
+                      {!planningCourseId && semCourses.length > 0 && (
+                        <div className="flex gap-1 items-center shrink-0">
+                          {/* زر حذف جميع المواد المخططة في هذا الفصل */}
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setPlannedCourses((prev) => {
+                                const next = { ...prev };
+                                semCourses.forEach((c) => {
+                                  delete next[c.id];
+                                });
+                                return next;
+                              });
+                            }}
+                            className="opacity-0 group-hover/header:opacity-100 p-1 bg-red-50 text-red-500 hover:bg-red-100 hover:text-red-700 rounded-md transition-all shadow-sm border border-red-200"
+                            title="حذف كل مواد الفصل من الخطة"
+                          >
+                            <Trash2 size={14} />
+                          </button>
+
+                          {semCourses.some(
+                            (c) => !completedCourses.has(c.id),
+                          ) && (
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setCompletedCourses((prev) => {
+                                    const next = new Set(prev);
+                                    semCourses.forEach((c) => {
+                                      if (!next.has(c.id)) {
+                                        next.add(c.id);
+                                        getAllPrerequisites(c.id).forEach(
+                                          (pre) => next.add(pre),
+                                        );
+                                      }
+                                    });
+                                    return next;
+                                  });
+                                }}
+                                className="opacity-0 group-hover/header:opacity-100 p-1 bg-emerald-50 text-emerald-600 hover:bg-emerald-100 hover:text-emerald-700 rounded-md transition-all shadow-sm border border-emerald-200"
+                                title="إنجاز كل مواد الفصل"
+                              >
+                                <CircleCheckBig size={14} />
+                              </button>
+                            )}
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="flex-1 overflow-y-auto p-2 flex flex-col gap-2">
+                      {semCourses.map((c) => {
+                        const isCompleted = completedCourses.has(c.id);
+                        return (
+                          <div
+                            key={c.id}
+                            onClick={() => setPlannerSelectedCourse(c)}
+                            className={cn(
+                              "p-3 border rounded-lg flex flex-col relative group/card shadow-sm cursor-pointer transition-all duration-200 hover:shadow-md hover:border-indigo-300 hover:bg-neutral-50/50 hover:-translate-y-0.5 active:scale-[0.98]",
+                              isCompleted
+                                ? "bg-emerald-50 dark:bg-emerald-950/20 border-emerald-100/60 dark:border-emerald-900/50 hover:border-emerald-200"
+                                : "bg-gray-50 dark:bg-slate-900 border-gray-100 dark:border-slate-750 hover:border-orange-200 dark:hover:border-orange-900/50",
+                            )}
+                          >
+                            <div className="flex justify-between items-start">
+                              <span
+                                className={cn(
+                                  "text-[10px] font-bold tracking-widest",
+                                  isCompleted
+                                    ? "text-emerald-500"
+                                    : "text-gray-500 dark:text-slate-500",
+                                )}
+                              >
+                                {c.id}
+                              </span>
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setPlannedCourses((prev) => {
+                                    const next = { ...prev };
+                                    delete next[c.id];
+                                    return next;
+                                  });
+                                }}
+                                className="p-1 text-gray-400 dark:text-slate-600 hover:text-red-500 hover:bg-red-50 rounded opacity-0 group-hover/card:opacity-100 transition-all"
+                                title="حذف من الخطة"
+                              >
+                                <Trash2 size={12} />
+                              </button>
+                            </div>
+                            <span
+                              className={cn(
+                                "text-sm font-bold leading-tight mt-1",
+                                isCompleted
+                                  ? "text-emerald-800 dark:text-emerald-300"
+                                  : "text-gray-800 dark:text-slate-200",
+                              )}
+                            >
+                              {c.name}{" "}
+                              {isCompleted && (
+                                <CircleCheckBig
+                                  size={14}
+                                  className="inline-block pb-0.5 text-emerald-500 align-middle"
+                                />
+                              )}
+                            </span>
+                          </div>
+                        );
+                      })}
+                      {planningCourseId && !isPastSem && (
+                        <button
+                          onClick={() => {
+                            setPlannedCourses((prev) => ({
+                              ...prev,
+                              [planningCourseId]: sem,
+                            }));
+                            setPlanningCourseId(null);
+                          }}
+                          className="w-full mt-2 py-3 border-2 border-dashed border-orange-200 text-orange-500 hover:border-orange-400 hover:bg-orange-50 rounded-lg text-sm font-bold transition-colors opacity-0 group-hover:opacity-100"
+                        >
+                          + أضف{" "}
+                          {
+                            courses.find((c) => c.id === planningCourseId)
+                              ?.name
+                          }{" "}
+                          هنا
+                        </button>
+                      )}
+                      {!planningCourseId && semCourses.length === 0 && (
+                        <div className="flex-1 flex flex-col items-center justify-center text-gray-400 dark:text-slate-600 p-4 text-center">
+                          <CalendarDays
+                            size={24}
+                            className="mb-2 opacity-20"
+                          />
+                          <p className="text-xs font-medium">
+                            {isPastSem
+                              ? "فصل سابق تم تجاوزه"
+                              : "هذا الفصل فارغ"}
+                          </p>
+                        </div>
+                      )}
+                    </div>
                   </div>
-                </div>
-              );
-            })}
+                );
+              })}
+            </div>
           </div>
-        </div>
+        )}
       </div>
 
       <DynamicCourseDetailsModal

@@ -1899,6 +1899,8 @@ function FlowComponent() {
           plannedCredits={plannedCredits}
           getAllPrerequisites={getAllPrerequisites}
           setIsExportModalOpen={setIsExportModalOpen}
+          onOpenPlanningMode={() => setIsPlanningModeOpen(true)}
+          toggleCourseCompletion={toggleCourseCompletion}
         />
       </div>
     </div>
