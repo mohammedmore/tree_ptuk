@@ -67,6 +67,7 @@ import ExportModal from "./components/ExportModal"; // Import the new component
 import PlanningModeModal from "./components/PlanningModeModal"; // Import the new component
 import CourseListModal from "./components/CourseListModal"; // Import the new component
 import DynamicCourseDetailsModal from "./components/DynamicCourseDetailsModal"; // Import the new component
+import PlannerView from "./components/PlannerView"; // Import the new component
 
 // تحسين: تمرير الـ edges كمعامل لجعل الدالة نقية (Pure Function) وقابلة للاختبار
 export const getPathForCourse = (nodeId: string, edges: Edge[]) => {
@@ -962,9 +963,11 @@ function FlowComponent() {
                   قائمة المواد
                 </button>
                 <button
-                  onClick={() => {
+                  onClick={(e) => {
+                    e.stopPropagation(); // Prevent event bubbling
                     setIsPlannerOpen(true);
-                    setSelectedNodeId(null); // تصفير المادة المحددة
+                    setPlannerSelectedCourse(null); // Ensure no specific course is selected when opening the main planner
+                    setSelectedNodeId(null);
                     setIsDetailsOpen(false);
                     setHoveredCourseId(null);
                     setPlanningCourseId(null);
@@ -1633,7 +1636,7 @@ function FlowComponent() {
                                 )}
                                 <span className="text-xs text-gray-500 dark:text-slate-400 font-semibold">
                                   {comp} / {req}{" "}
-                                  <span className="text-[10px]">ساعات</span>
+                                  <span className="10px">ساعات</span>
                                 </span>
                               </div>
                             </div>
@@ -1757,7 +1760,7 @@ function FlowComponent() {
                       / <span className="text-gray-500 dark:text-slate-500 text-sm">{TOTAL_CREDITS}</span>
                     </div>
                   </div>
-                  <div className="w-full h-3 bg-gray-100 dark:bg-slate-800 rounded-full overflow-hidden shadow-inner mb-4 relative">
+                  <div className="w-full h-3 bg-gray-100 dark:bg-slate-800 rounded-full overflow-hidden relative">
                     {/* طبقة المخطط له (برتقالي) */}
                     <div
                       className="absolute right-0 top-0 h-full bg-orange-400 rounded-full transition-all duration-1000 ease-out"
@@ -1876,19 +1879,26 @@ function FlowComponent() {
           completedCreditsPerCategory={completedCreditsPerCategory}
         />
 
-        {/* Dynamic Detailed Course overlay inside Planner */}
-        <DynamicCourseDetailsModal
+        {/* Planner View Modal */}
+        <PlannerView
           isPlannerOpen={isPlannerOpen}
-          plannerSelectedCourse={plannerSelectedCourse}
-          setPlannerSelectedCourse={setPlannerSelectedCourse}
-          completedCourses={completedCourses}
+          onClose={() => setIsPlannerOpen(false)}
           plannedCourses={plannedCourses}
           setPlannedCourses={setPlannedCourses}
-          isRescheduling={isRescheduling}
-          setIsRescheduling={setIsRescheduling}
+          completedCourses={completedCourses}
+          setCompletedCourses={setCompletedCourses}
           planStartSemester={planStartSemester}
+          setPlanStartSemester={setPlanStartSemester}
           planEndSemester={planEndSemester}
-          toggleCourseCompletion={toggleCourseCompletion}
+          setPlanEndSemester={setPlanEndSemester}
+          hidePastSemesters={hidePastSemesters}
+          setHidePastSemesters={setHidePastSemesters}
+          planningCourseId={planningCourseId}
+          setPlanningCourseId={setPlanningCourseId}
+          completedCredits={completedCredits}
+          plannedCredits={plannedCredits}
+          getAllPrerequisites={getAllPrerequisites}
+          setIsExportModalOpen={setIsExportModalOpen}
         />
       </div>
     </div>
