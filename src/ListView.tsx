@@ -160,14 +160,14 @@ export default function ListView({
                     <span className="text-gray-500 dark:text-slate-400 bg-gray-50 dark:bg-slate-900 px-1.5 py-0.5 rounded border border-gray-100 dark:border-slate-800 shrink-0">{course.credits} س</span>
                 </div>
 
-                {slotId && (
+                {slotId && ELECTIVE_SLOTS_DEFS[slotId] && (
                     <div className="flex flex-col gap-1 bg-gray-50 dark:bg-slate-900 border border-gray-150 dark:border-slate-750 p-2 rounded-lg">
                         <select
-                            value={course.id}
+                            value={selectedElectives[slotId] || course.id || ''}
                             onChange={(e) => setSelectedElectives((prev: any) => ({ ...prev, [slotId]: e.target.value }))}
                             className="bg-transparent text-[11px] font-black text-gray-850 dark:text-slate-100 cursor-pointer outline-none"
                         >
-                            {courses.filter((c: Course) => c.category === ELECTIVE_SLOTS_DEFS[slotId].category).map((opt: Course) => (
+                            {courses.filter((c: Course) => c.category === ELECTIVE_SLOTS_DEFS[slotId]?.category).map((opt: Course) => (
                                 <option key={opt.id} value={opt.id} className="text-gray-900">{opt.name}</option>
                             ))}
                         </select>
@@ -317,7 +317,18 @@ export default function ListView({
                             </div>
                             <motion.div layout className="flex-1 overflow-y-auto p-3 flex flex-col gap-3 scrollbar-thin">
                                 <AnimatePresence mode="popLayout">
-                                    {itemsList.map(item => item.type === 'course' ? renderCard(item.course) : renderCard(courses.find((c: Course) => c.id === selectedElectives[item.slotId]) || (courses.length > 0 ? courses[0] : {} as Course), ELECTIVE_SLOTS_DEFS[item.slotId].label, item.slotId))}
+                                    {itemsList.map(item => {
+                                        if (item.type === 'course') {
+                                            return renderCard(item.course);
+                                        } else {
+                                            const selectedCourseId = selectedElectives[item.slotId];
+                                            const course = courses.find((c: Course) => c.id === selectedCourseId);
+                                            if (course && ELECTIVE_SLOTS_DEFS[item.slotId]) {
+                                                return renderCard(course, ELECTIVE_SLOTS_DEFS[item.slotId].label, item.slotId);
+                                            }
+                                            return null;
+                                        }
+                                    })}
                                 </AnimatePresence>
                             </motion.div>
                         </div>

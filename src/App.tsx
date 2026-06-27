@@ -107,7 +107,8 @@ const isCourseAvailable = (
   course: Course,
   completed: Set<string>,
   categoryCredits: Record<string, number>,
-  allCourses: Course[]
+  allCourses: Course[],
+  currentPlannedCourses: Set<string> = new Set() // New parameter for courses planned in the current semester
 ): boolean => {
   if (completed.has(course.id)) return false;
 
@@ -123,9 +124,15 @@ const isCourseAvailable = (
   // Check Co-requisites
   if (!course.coPrerequisites || course.coPrerequisites.length === 0) return true;
   return course.coPrerequisites.every((cpId) => {
-    if (completed.has(cpId)) return true;
+    // A co-requisite is met if it's completed OR it's planned for the current semester
+    if (completed.has(cpId) || currentPlannedCourses.has(cpId)) return true;
+    
+    // The co-requisite itself must be available (its prerequisites must be met)
     const cpCourse = allCourses.find(ac => ac.id === cpId);
-    return cpCourse ? cpCourse.prerequisites.every(p => completed.has(p)) : true;
+    if (!cpCourse) return false; // Co-requisite course not found
+    
+    // Check if the co-requisite's prerequisites are met (excluding itself if it's a co-requisite of itself, which shouldn't happen)
+    return cpCourse.prerequisites.every(p => completed.has(p));
   });
 };
 
@@ -868,18 +875,6 @@ function FlowComponent() {
             animated: false,
             style: { stroke: "#6ee7b7", strokeWidth: 1.5, opacity: 0.7 },
             markerEnd: { type: MarkerType.ArrowClosed, color: "#6ee7b7" },
-          };
-        } else if (isDescendantEdge) {
-          return {
-            ...e,
-            animated: true,
-            style: {
-              stroke: "#9ca3af",
-              strokeWidth: 1.5,
-              strokeDasharray: "4",
-              opacity: 0.7,
-            },
-            markerEnd: { type: MarkerType.ArrowClosed, color: "#9ca3af" },
           };
         } else {
           return {
@@ -1761,7 +1756,7 @@ function FlowComponent() {
                     </div>
                   </div>
                   <div className="w-full h-3 bg-gray-100 dark:bg-slate-800 rounded-full overflow-hidden relative">
-                    {/* طبقة المخطط له (برتقالي) */}
+                    {/* الشريط البرتقالي: يمثل المنجز + المخطط له كخلفية متصلة */}
                     <div
                       className="absolute right-0 top-0 h-full bg-orange-400 rounded-full transition-all duration-1000 ease-out"
                       style={{ width: `${progressPercentage + plannedPercentage}%` }}

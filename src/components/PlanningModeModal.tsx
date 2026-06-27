@@ -1,7 +1,7 @@
 import React from "react";
 import { X, CalendarDays, BookOpen, ChevronDown, ChevronUp, CircleCheckBig } from "lucide-react";
 import { cn } from "../utils";
-import { Course, categoryRequirements } from "../data";
+import { Course, courses, categoryRequirements } from "../data"; // Ensure 'courses' is imported
 import { SEMESTERS } from "../constants";
 
 interface PlanningModeModalProps {
@@ -180,6 +180,11 @@ const PlanningModeModal: React.FC<PlanningModeModalProps> = ({
                                   >
                                     <div className="flex flex-col items-start gap-0.5">
                                       <span className="text-[11px] font-bold text-gray-800 dark:text-slate-200 group-hover:text-blue-600 transition-colors">{c.name}</span>
+                                      {c.coPrerequisites && c.coPrerequisites.length > 0 && (
+                                        <span className="text-[8px] font-semibold text-purple-600 dark:text-purple-400 bg-purple-50 dark:bg-purple-900/30 px-1.5 py-0.5 rounded-md">
+                                          {c.coPrerequisites.map(cpId => courses.find(course => course.id === cpId)?.name || cpId).join(', ')}
+                                        </span>
+                                      )}
                                       <span className="text-[9px] font-mono text-gray-400">{c.id}</span>
                                     </div>
                                     <span className="text-[10px] font-black text-blue-600 bg-blue-50 dark:bg-blue-900/30 px-2 py-0.5 rounded-md">{c.credits} س</span>
