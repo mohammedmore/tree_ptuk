@@ -29,10 +29,10 @@ export const BaseModal: React.FC<BaseModalProps> = ({
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.95, y: 20 }}
             onClick={(e) => e.stopPropagation()}
-            className={cn("bg-white dark:bg-slate-900 rounded-3xl shadow-2xl relative overflow-hidden border border-gray-100 dark:border-slate-800 flex flex-col max-h-[90vh] w-full", maxWidth, className)}
+            className={cn("bg-white dark:bg-slate-900 rounded-3xl shadow-2xl relative overflow-hidden border border-gray-100 dark:border-slate-700 flex flex-col max-h-[90vh] w-full", maxWidth, className)}
           >
             {title && (
-              <div className="p-6 border-b border-gray-100 dark:border-slate-850 flex justify-between items-center bg-gray-50/50 dark:bg-slate-950/20 shrink-0">
+              <div className="p-6 border-b border-gray-100 dark:border-slate-700 flex justify-between items-center bg-gray-50/50 dark:bg-slate-950/20 shrink-0">
                 <div className="text-xl font-black text-gray-800 dark:text-slate-100">{title}</div>
                 <button onClick={onClose} className="p-2 text-gray-400 hover:bg-gray-100 dark:hover:bg-slate-800 rounded-full transition-colors"><X size={20} /></button>
               </div>

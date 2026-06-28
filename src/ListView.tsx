@@ -262,11 +262,29 @@ export default function ListView({
 
                     if (cat.isSemester) {
                         const semCourses = activeCourses.filter((c: any) => getRecommendedSemesterOfCourse(c) === cat.key);
-                        totalCr = semCourses.reduce((s: any, c: any) => s + c.credits, 0);
-                        doneCr = semCourses.filter((c: any) => completedCourses.has(c.id)).reduce((s: any, c: any) => s + c.credits, 0);
                         const mandatory = semCourses.filter((c: any) => !c.category.includes('اختياري'));
                         const slots = SEMESTER_ELECTIVE_SLOTS[cat.key] || [];
                         itemsList = [...mandatory.map(c => ({ type: 'course', course: c })), ...slots.map(s => ({ type: 'slot', slotId: s }))];
+
+                        // Calculate total and done credits based on what's actually in the itemsList (mandatory + slots)
+                        totalCr = itemsList.reduce((sum, item) => {
+                            if (item.type === 'course') return sum + item.course.credits;
+                            if (item.type === 'slot') {
+                                const slotDef = ELECTIVE_SLOTS_DEFS[item.slotId];
+                                const defaultCourse = courses.find((c: Course) => c.id === slotDef?.defaultCourseId);
+                                return sum + (defaultCourse?.credits || 0);
+                            }
+                            return sum;
+                        }, 0);
+
+                        doneCr = itemsList.reduce((sum, item) => {
+                            const cId = item.type === 'course' ? item.course.id : selectedElectives[item.slotId];
+                            if (cId && completedCourses.has(cId)) {
+                                const course = courses.find((c: Course) => c.id === cId);
+                                return sum + (course?.credits || 0);
+                            }
+                            return sum;
+                        }, 0);
                     } else {
                         totalCr = cat.req || 0;
                         doneCr = completedCreditsPerCategory[cat.key] || 0;

@@ -1,5 +1,5 @@
 import React from "react";
-import { X, CalendarDays, BookOpen, ChevronDown, ChevronUp, CircleCheckBig } from "lucide-react";
+import { X, CalendarDays, BookOpen, ChevronDown, ChevronUp, CircleCheckBig, Search } from "lucide-react";
 import { cn } from "../utils";
 import { Course, courses, categoryRequirements } from "../data"; // Ensure 'courses' is imported
 import { SEMESTERS } from "../constants";
@@ -44,12 +44,12 @@ const PlanningModeModal: React.FC<PlanningModeModalProps> = ({
   setExpandedPlanningCategories,
   setIsPlannerOpen,
 }) => {
-  if (!isPlanningModeOpen) return null;
+  const [searchQuery, setSearchQuery] = React.useState("");
 
   const allPrev = React.useMemo(() => {
     const prev = new Set(completedCourses);
     if (currentPlanningSemester) {
-      Object.entries(plannedCourses).forEach(([id, s]) => {
+      (Object.entries(plannedCourses) as [string, string][]).forEach(([id, s]) => {
         if (SEMESTERS.indexOf(s) < SEMESTERS.indexOf(currentPlanningSemester)) {
           prev.add(id);
         }
@@ -62,7 +62,7 @@ const PlanningModeModal: React.FC<PlanningModeModalProps> = ({
     if (!currentPlanningSemester) return [];
     return courses.filter(c => {
       const isComp = completedCourses.has(c.id);
-      const isPlannedInPrev = Object.entries(plannedCourses).some(([id, s]) => id === c.id && SEMESTERS.indexOf(s) < SEMESTERS.indexOf(currentPlanningSemester));
+      const isPlannedInPrev = (Object.entries(plannedCourses) as [string, string][]).some(([id, s]) => id === c.id && SEMESTERS.indexOf(s) < SEMESTERS.indexOf(currentPlanningSemester));
       const isPlannedNow = plannedCourses[c.id] === currentPlanningSemester;
       if (isComp || isPlannedInPrev || isPlannedNow) return false;
       return isCourseAvailable(c, allPrev, completedCreditsPerCategory, courses);
@@ -70,12 +70,17 @@ const PlanningModeModal: React.FC<PlanningModeModalProps> = ({
   }, [currentPlanningSemester, completedCourses, plannedCourses, courses, isCourseAvailable, allPrev, completedCreditsPerCategory]);
 
   const groupedAvailable = React.useMemo(() => {
-    return available.reduce((acc, c) => {
-      if (!acc[c.category]) acc[c.category] = [];
-      acc[c.category].push(c);
-      return acc;
-    }, {} as Record<string, Course[]>);
-  }, [available]);
+    return available
+      .filter(c => 
+        c.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
+        c.id.toLowerCase().includes(searchQuery.toLowerCase())
+      )
+      .reduce((acc, c) => {
+        if (!acc[c.category]) acc[c.category] = [];
+        acc[c.category].push(c);
+        return acc;
+      }, {} as Record<string, Course[]>);
+  }, [available, searchQuery]);
 
   const currentSemesterPlannedCredits = React.useMemo(() => {
     if (!currentPlanningSemester) return 0;
@@ -83,6 +88,8 @@ const PlanningModeModal: React.FC<PlanningModeModalProps> = ({
       .filter(([id, s]) => s === currentPlanningSemester)
       .reduce((sum, [id]) => sum + (courses.find(cr => cr.id === id)?.credits || 0), 0);
   }, [plannedCourses, currentPlanningSemester, courses]);
+
+  if (!isPlanningModeOpen) return null;
 
   const isSummer = currentPlanningSemester?.includes("صيفي");
   const creditLimit = isSummer ? (hasHighGpa ? 10 : 9) : (hasHighGpa ? 21 : 18);
@@ -94,14 +101,14 @@ const PlanningModeModal: React.FC<PlanningModeModalProps> = ({
       onClick={onClose}
     >
       <div
-        className="bg-white dark:bg-slate-900 rounded-3xl p-0 w-full max-w-2xl shadow-2xl animate-in zoom-in-95 duration-300 relative overflow-hidden border border-gray-100 dark:border-slate-800 flex flex-col max-h-[90vh]"
+        className="bg-white dark:bg-slate-900 rounded-3xl p-0 w-full max-w-2xl shadow-2xl animate-in zoom-in-95 duration-300 relative overflow-hidden border border-gray-100 dark:border-slate-700 flex flex-col max-h-[90vh]"
         dir="rtl"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="absolute top-0 right-0 left-0 h-1.5 bg-gradient-to-r from-orange-600 via-orange-500 to-yellow-500"></div>
 
         {/* Header */}
-        <div className="p-6 border-b border-gray-100 dark:border-slate-850 flex justify-between items-center bg-gray-50/50 dark:bg-slate-950/20 shrink-0">
+        <div className="p-6 border-b border-gray-100 dark:border-slate-700 flex justify-between items-center bg-gray-50/50 dark:bg-slate-950/20 shrink-0">
           <h2 className="text-xl font-black text-gray-800 dark:text-slate-100 flex items-center gap-3">
             <div className="bg-gradient-to-br from-orange-500 to-orange-600 p-2.5 rounded-2xl text-white shadow-lg shadow-orange-200 dark:shadow-none">
               <CalendarDays size={24} />
@@ -114,7 +121,7 @@ const PlanningModeModal: React.FC<PlanningModeModalProps> = ({
         <div className="p-6 overflow-y-auto">
           {!currentPlanningSemester ? (
             <div className="space-y-6">
-              <div className="p-4 bg-orange-50 dark:bg-orange-950/20 rounded-2xl border border-orange-100 dark:border-orange-900/30">
+              <div className="p-4 bg-orange-50 dark:bg-orange-500/10 rounded-2xl border border-orange-100 dark:border-orange-500/30">
                 <p className="text-sm font-bold text-orange-800 dark:text-orange-300 leading-relaxed">
                   أهلاً بك في وضع التخطيط . يرجى تحديد الفصل الدراسي القادم الذي ترغب في البدء بتخطيط مواده:
                 </p>
@@ -124,7 +131,7 @@ const PlanningModeModal: React.FC<PlanningModeModalProps> = ({
                   <button
                     key={s}
                     onClick={() => setCurrentPlanningSemester(s)}
-                    className="text-right p-4 rounded-2xl border border-gray-100 dark:border-slate-800 bg-white dark:bg-slate-800 hover:border-orange-500 transition-all text-xs font-black dark:text-slate-200 shadow-sm"
+                    className="text-right p-4 rounded-2xl border border-gray-100 dark:border-slate-700 bg-white dark:bg-slate-800 hover:border-orange-500 transition-all text-xs font-black dark:text-slate-200 shadow-sm"
                   >
                     {s}
                   </button>
@@ -136,6 +143,18 @@ const PlanningModeModal: React.FC<PlanningModeModalProps> = ({
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 {/* Column 1: Available to Add */}
                 <div className="space-y-4">
+                  {/* Search Bar */}
+                  <div className="relative">
+                    <Search className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
+                    <input
+                      type="text"
+                      placeholder="ابحث في المواد المتاحة..."
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      className="w-full pr-10 pl-4 py-2 bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl text-xs focus:ring-2 focus:ring-orange-500 outline-none dark:text-slate-200"
+                    />
+                  </div>
+
                   <div className="flex items-center justify-between">
                     <h3 className="text-xs font-black text-gray-500 dark:text-slate-400 flex items-center gap-2">
                       <BookOpen size={14} /> المواد المتاحة هذا الفصل
@@ -158,10 +177,10 @@ const PlanningModeModal: React.FC<PlanningModeModalProps> = ({
                     {Object.keys(groupedAvailable).length === 0 ? (
                       <div className="text-center py-10 text-xs font-bold text-gray-400">لا توجد مواد متاحة حالياً للجدولة</div>
                     ) : (
-                      Object.entries(groupedAvailable).map(([category, items]) => {
+                      (Object.entries(groupedAvailable) as [string, Course[]][]).map(([category, items]) => {
                         const isExpanded = expandedPlanningCategories[category] === true; // Default to closed
                         return (
-                          <div key={category} className="border border-gray-100 dark:border-slate-800 rounded-2xl overflow-hidden shadow-sm">
+                          <div key={category} className="border border-gray-100 dark:border-slate-700 rounded-2xl overflow-hidden shadow-sm">
                             <button
                               onClick={() => setExpandedPlanningCategories(prev => ({ ...prev, [category]: !isExpanded }))}
                               className="w-full flex items-center justify-between p-3 bg-gray-50 dark:bg-slate-800/80 hover:bg-gray-100 transition-colors"
@@ -206,13 +225,13 @@ const PlanningModeModal: React.FC<PlanningModeModalProps> = ({
                 </div>
 
                 {/* Column 2: Selected in Current Semester */}
-                <div className="bg-gray-50 dark:bg-slate-800/40 rounded-3xl p-5 flex flex-col gap-4 border border-gray-100 dark:border-slate-800">
+                <div className="bg-gray-50 dark:bg-slate-800/40 rounded-3xl p-5 flex flex-col gap-4 border border-gray-100 dark:border-slate-700">
                   <h3 className="text-sm font-black text-gray-800 dark:text-slate-100">المواد المجدولة في هذا الفصل:</h3>
                   <div className="flex-1 space-y-2 min-h-[100px]">
                     {Object.entries(plannedCourses).filter(([id, s]) => s === currentPlanningSemester).map(([id]) => {
                       const c = courses.find(cr => cr.id === id);
                       return (
-                        <div key={id} className="bg-white dark:bg-slate-900 p-2.5 rounded-xl border border-gray-100 dark:border-slate-800 flex justify-between items-center shadow-sm">
+                        <div key={id} className="bg-white dark:bg-slate-900 p-2.5 rounded-xl border border-gray-100 dark:border-slate-700 flex justify-between items-center shadow-sm">
                           <span className="text-xs font-bold text-gray-700 dark:text-slate-300 truncate pl-2">{c?.name}</span>
                           <button onClick={() => setPlannedCourses(prev => { const n = { ...prev }; delete n[id]; return n; })} className="text-red-400 hover:text-red-600 p-1"><X size={14} /></button>
                         </div>

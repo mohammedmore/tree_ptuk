@@ -135,7 +135,7 @@ export const getRecommendedSemesterOfCourse = (course: { id: string; category: s
         return parseInt(lastChar) % 2 === 0 ? 'السنة الثانية - الفصل الأول' : 'السنة الخامسة - الفصل الأول';
     }
 
-    if (course.category === 'متطلب tخصص اختياري') {
+    if (course.category === 'متطلب تخصص اختياري') {
         if (yearStr === '4') {
             const lastChar = course.id.charAt(course.id.length - 1);
             return parseInt(lastChar) % 2 === 0 ? 'السنة الرابعة - الفصل الأول' : 'السنة الرابعة - الفصل الثاني';

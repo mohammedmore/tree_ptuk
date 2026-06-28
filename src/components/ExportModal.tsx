@@ -13,6 +13,7 @@ interface ExportModalProps {
   plannedCourses: Record<string, string>;
   completedCourses: Set<string>;
   courses: Course[];
+  courseGrades: Record<string, number>;
 }
 
 const ExportModal: React.FC<ExportModalProps> = ({
@@ -22,10 +23,73 @@ const ExportModal: React.FC<ExportModalProps> = ({
   plannedCourses,
   completedCourses,
   courses,
+  courseGrades,
 }) => {
   const [isExportLoading, setIsExportLoading] = React.useState(false);
+  const fileInputRef = React.useRef<HTMLInputElement>(null);
+
+  const gpa = React.useMemo(() => {
+    let totalPoints = 0;
+    let totalCreditsWithGrades = 0;
+    
+    (Object.entries(courseGrades) as [string, number][]).forEach(([courseId, grade]) => {
+      if (!completedCourses.has(courseId)) return;
+      const course = courses.find(c => c.id === courseId);
+      if (course) {
+        totalPoints += grade * course.credits;
+        totalCreditsWithGrades += course.credits;
+      }
+    });
+    
+    if (totalCreditsWithGrades === 0) return 0;
+    return totalPoints / totalCreditsWithGrades;
+  }, [courseGrades, completedCourses, courses]);
 
   if (!isExportModalOpen) return null;
+
+  const exportToJson = () => {
+    const data = {
+      completed_courses: Array.from(completedCourses),
+      planned_courses: plannedCourses,
+      course_grades: courseGrades,
+      // Add other relevant settings if they exist in localStorage
+      plan_start_semester: localStorage.getItem("plan_start_semester"),
+      plan_end_semester: localStorage.getItem("plan_end_semester"),
+      dark_mode: localStorage.getItem("dark_mode"),
+    };
+    
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `نسخة-احتياطية-خطة-${new Date().toLocaleDateString("ar-EG")}.json`;
+    link.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const importFromJson = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      try {
+        const data = JSON.parse(event.target?.result as string);
+        
+        if (data.completed_courses) localStorage.setItem("completed_courses", JSON.stringify(data.completed_courses));
+        if (data.planned_courses) localStorage.setItem("planned_courses", JSON.stringify(data.planned_courses));
+        if (data.course_grades) localStorage.setItem("course_grades", JSON.stringify(data.course_grades));
+        if (data.plan_start_semester) localStorage.setItem("plan_start_semester", data.plan_start_semester);
+        if (data.plan_end_semester) localStorage.setItem("plan_end_semester", data.plan_end_semester);
+        
+        alert("تم استيراد البيانات بنجاح! سيتم إعادة تحميل الصفحة لتطبيق التغييرات.");
+        window.location.reload();
+      } catch (err) {
+        alert("خطأ في قراءة ملف النسخة الاحتياطية.");
+      }
+    };
+    reader.readAsText(file);
+  };
 
   const exportToImage = async () => {
     const element = document.getElementById("study-plan-printable");
@@ -154,6 +218,28 @@ const ExportModal: React.FC<ExportModalProps> = ({
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-3">
+            <input 
+              type="file" 
+              ref={fileInputRef} 
+              onChange={importFromJson} 
+              accept=".json" 
+              className="hidden" 
+            />
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              className="bg-white text-gray-700 border border-gray-200 px-4 py-2.5 rounded-xl font-bold flex items-center gap-2 hover:bg-gray-50 transition-all"
+            >
+              <Sparkles size={18} className="text-blue-500" />
+              استيراد نسخة
+            </button>
+            <button
+              onClick={exportToJson}
+              className="bg-white text-gray-700 border border-gray-200 px-4 py-2.5 rounded-xl font-bold flex items-center gap-2 hover:bg-gray-50 transition-all"
+            >
+              <Download size={18} className="text-gray-500" />
+              تصدير نسخة JSON
+            </button>
+            <div className="h-8 w-px bg-gray-200 mx-1 hidden md:block"></div>
             <button
               onClick={exportToImage}
               disabled={isExportLoading}
@@ -219,6 +305,16 @@ const ExportModal: React.FC<ExportModalProps> = ({
                   {completedCredits} / {TOTAL_CREDITS}
                 </div>
               </div>
+              {gpa > 0 && (
+                <div className="text-left py-2 px-4 bg-indigo-600 text-white rounded-xl">
+                  <div className="text-xs opacity-70 uppercase tracking-widest font-black">
+                    المعدل التراكمي
+                  </div>
+                  <div className="text-2xl font-black">
+                    %{gpa.toFixed(2)}
+                  </div>
+                </div>
+              )}
             </div>
 
             <div className="space-y-10">
