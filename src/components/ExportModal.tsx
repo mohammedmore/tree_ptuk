@@ -35,7 +35,7 @@ const ExportModal: React.FC<ExportModalProps> = ({
     (Object.entries(courseGrades) as [string, number][]).forEach(([courseId, grade]) => {
       if (!completedCourses.has(courseId)) return;
       const course = courses.find(c => c.id === courseId);
-      if (course) {
+      if (course && grade > 0) {
         totalPoints += grade * course.credits;
         totalCreditsWithGrades += course.credits;
       }

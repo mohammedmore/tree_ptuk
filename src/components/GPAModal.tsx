@@ -69,7 +69,10 @@ export const GPAModal: React.FC<GPAModalProps> = ({
   }, [completedList, courseGrades, whatIfGrades, completedCourses, courses]);
 
   const totalCompletedCredits = completedList.reduce((sum, c) => sum + c.credits, 0);
-  const creditsWithGrades = completedList.filter(c => (courseGrades[c.id] || 0) > 0).reduce((sum, c) => sum + c.credits, 0);
+  const creditsWithGrades = completedList.filter(c => {
+    const grade = courseGrades[c.id];
+    return grade !== undefined && grade > 0;
+  }).reduce((sum, c) => sum + c.credits, 0);
 
   return (
     <BaseModal
@@ -162,19 +165,43 @@ export const GPAModal: React.FC<GPAModalProps> = ({
                   </div>
                   
                   <div className="flex items-center gap-3">
+                    <div className="flex flex-col items-center ml-2">
+                      <span className="text-[10px] font-black text-emerald-500 dark:text-emerald-400 mb-1 uppercase tracking-tighter">مجتازة</span>
+                      <input
+                        type="checkbox"
+                        checked={courseGrades[course.id] === -1}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setCourseGrades(prev => ({ ...prev, [course.id]: -1 }));
+                          } else {
+                            setCourseGrades(prev => {
+                              const next = { ...prev };
+                              delete next[course.id];
+                              return next;
+                            });
+                          }
+                        }}
+                        className="w-5 h-5 rounded-lg border-gray-200 dark:border-slate-700 text-indigo-600 focus:ring-indigo-500 bg-gray-50 dark:bg-slate-800 transition-all cursor-pointer"
+                      />
+                    </div>
+                    <div className="w-px h-8 bg-gray-100 dark:bg-slate-700 mx-1"></div>
                     <div className="flex flex-col items-end">
                       <span className="text-[10px] font-black text-gray-500 dark:text-slate-400 mb-1 uppercase tracking-tighter">الدرجة الحالية</span>
                       <input
                         type="number"
                         min="0"
                         max="100"
-                        placeholder="--"
-                        value={courseGrades[course.id] || ""}
+                        placeholder={courseGrades[course.id] === -1 ? "مجتاز" : "--"}
+                        disabled={courseGrades[course.id] === -1}
+                        value={courseGrades[course.id] === -1 ? "" : (courseGrades[course.id] || "")}
                         onChange={(e) => {
                           const val = Math.min(100, Math.max(0, parseFloat(e.target.value) || 0));
                           setCourseGrades(prev => ({ ...prev, [course.id]: val }));
                         }}
-                        className="w-16 text-center py-1.5 bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-lg text-sm font-black text-indigo-600 dark:text-indigo-400 outline-none focus:ring-2 focus:ring-indigo-500"
+                        className={cn(
+                          "w-16 text-center py-1.5 bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-lg text-sm font-black text-indigo-600 dark:text-indigo-400 outline-none focus:ring-2 focus:ring-indigo-500 transition-all",
+                          courseGrades[course.id] === -1 && "opacity-50 cursor-not-allowed bg-gray-100 dark:bg-slate-900"
+                        )}
                       />
                     </div>
                     <div className="w-px h-8 bg-gray-100 dark:bg-slate-700 mx-1"></div>
