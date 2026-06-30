@@ -76,6 +76,7 @@ export const courses: Course[] = [
   { id: '15020102', name: 'فيزياء عامه (2)', prerequisites: ['15020101'], credits: 3, category: 'متطلب كلية إجباري' },
   { id: '15020105', name: 'مختبر فيزياء عامه (1)', prerequisites: [], coPrerequisites: ['15020101'], credits: 1, category: 'متطلب كلية إجباري' },
   { id: '15020106', name: 'مختبر فيزياء عامه (2)', prerequisites: [], coPrerequisites: ['15020102'], credits: 1, category: 'متطلب كلية إجباري' },
+  { id: '12210444', name: 'مقدمة في منهجية البحث العلمي', prerequisites: ['15200112'], credits: 3, category: 'متطلب كلية إجباري' },
 
   // متطلب تخصص إجباري
   { id: '12110236', name: 'الدوائر الكهربائية', prerequisites: ['15010101', '15020102'], credits: 3, category: 'متطلب تخصص إجباري' },
