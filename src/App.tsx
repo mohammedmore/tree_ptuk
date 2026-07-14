@@ -348,11 +348,6 @@ function FlowComponent() {
     {}
   );
 
-  const [courseRepeats, setCourseRepeats] = useLocalStorage<Record<string, number>>(
-    "course_repeats",
-    {}
-  );
-
   const [failedCourseIds, setFailedCourseIds] = useLocalStorage<string[]>(
     "failed_course_ids",
     []
@@ -412,14 +407,12 @@ function FlowComponent() {
     "hide_past_semesters",
     "dark_mode",
     "course_grades",
-    "course_repeats",
     "failed_course_ids",
   ];
 
   const confirmReset = () => {
     setCompletedCourses(new Set());
     setPlannedCourses({});
-    setCourseRepeats({});
     setFailedCourseIds([]);
     localStorageKeys.forEach(key => window.localStorage.removeItem(key)); // Clear only app-specific keys
     setShowResetConfirm(false);
@@ -1955,8 +1948,6 @@ function FlowComponent() {
           completedCourses={completedCourses}
           courseGrades={courseGrades}
           setCourseGrades={setCourseGrades}
-          courseRepeats={courseRepeats}
-          setCourseRepeats={setCourseRepeats}
           failedCourseIds={new Set(failedCourseIds)}
           setFailedCourseIds={(ids) => setFailedCourseIds(Array.from(ids))}
         />

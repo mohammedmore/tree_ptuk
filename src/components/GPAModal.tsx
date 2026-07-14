@@ -11,8 +11,6 @@ interface GPAModalProps {
   completedCourses: Set<string>;
   courseGrades: Record<string, number>;
   setCourseGrades: React.Dispatch<React.SetStateAction<Record<string, number>>>;
-  courseRepeats: Record<string, number>;
-  setCourseRepeats: React.Dispatch<React.SetStateAction<Record<string, number>>>;
   failedCourseIds: Set<string>;
   setFailedCourseIds: (ids: Set<string>) => void;
 }
@@ -24,8 +22,6 @@ export const GPAModal: React.FC<GPAModalProps> = ({
   completedCourses,
   courseGrades,
   setCourseGrades,
-  courseRepeats,
-  setCourseRepeats,
   failedCourseIds,
   setFailedCourseIds,
 }) => {
@@ -35,7 +31,6 @@ export const GPAModal: React.FC<GPAModalProps> = ({
   const [isFailedListOpen, setIsFailedListOpen] = React.useState(false);
   const [isWhatIfListOpen, setIsWhatIfListOpen] = React.useState(false);
   const [whatIfGrades, setWhatIfGrades] = React.useState<Record<string, number>>({});
-  const [showRepeatTooltip, setShowRepeatTooltip] = React.useState<string | null>(null);
 
   const failedAvailableCourses = React.useMemo(() => {
     const available = courses.filter(c => 
@@ -88,14 +83,11 @@ export const GPAModal: React.FC<GPAModalProps> = ({
     
     combinedCourseList.forEach(course => {
       let grade = grades[course.id] || 0;
-      let repeats = courseRepeats[course.id] || 0;
 
       // "What-if" logic for courses already in the list: 
-      // If a new grade is provided, it counts as an additional repeat.
       // Condition: course grade must be <= 75 to allow what-if logic
       if (includeHypothetical && whatIfGrades[course.id] > 0 && !(courseGrades[course.id] > 75)) {
         grade = whatIfGrades[course.id];
-        repeats += 1;
       }
 
       // We count the course if it has a grade > 0 OR if it's explicitly in the failed list
@@ -109,7 +101,7 @@ export const GPAModal: React.FC<GPAModalProps> = ({
           if (grade > 0) {
             totalPoints += grade * course.credits;
           }
-          totalCredits += course.credits * (1 + repeats);
+          totalCredits += course.credits;
         }
       }
     });
@@ -129,18 +121,18 @@ export const GPAModal: React.FC<GPAModalProps> = ({
     return totalCredits === 0 ? 0 : totalPoints / totalCredits;
   };
 
-  const currentGPA = React.useMemo(() => calculateGPA(courseGrades), [combinedCourseList, courseGrades, courseRepeats]);
+  const currentGPA = React.useMemo(() => calculateGPA(courseGrades), [combinedCourseList, courseGrades]);
 
   const whatIfGPA = React.useMemo(() => {
     const combinedGrades = { ...courseGrades, ...whatIfGrades };
     return calculateGPA(combinedGrades, true);
-  }, [combinedCourseList, courseGrades, whatIfGrades, courseRepeats]);
+  }, [combinedCourseList, courseGrades, whatIfGrades]);
 
   const totalCompletedCredits = combinedCourseList.reduce((sum, c) => sum + (completedCourses.has(c.id) ? c.credits : 0), 0);
   const creditsWithGrades = combinedCourseList.filter(c => {
     const grade = courseGrades[c.id];
     return (grade !== undefined && grade >= 0) || failedCourseIds.has(c.id);
-  }).reduce((sum, c) => sum + c.credits * (1 + (courseRepeats[c.id] || 0)), 0);
+  }).reduce((sum, c) => sum + c.credits, 0);
 
   return (
     <BaseModal
@@ -499,41 +491,6 @@ export const GPAModal: React.FC<GPAModalProps> = ({
                         className={cn(
                           "w-16 text-center py-1.5 bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-lg text-sm font-black text-indigo-600 dark:text-indigo-400 outline-none focus:ring-2 focus:ring-indigo-500 transition-all",
                           courseGrades[course.id] === -1 && "opacity-50 cursor-not-allowed bg-gray-100 dark:bg-slate-900"
-                        )}
-                      />
-                    </div>
-                    <div className="w-px h-8 bg-gray-100 dark:bg-slate-700 mx-1"></div>
-                    <div className="flex flex-col items-end relative">
-                      <div className="flex items-center gap-1 mb-1">
-                        {showRepeatTooltip === course.id && (
-                          <div className="absolute bottom-full mb-2 right-0 bg-gray-800 text-white text-[10px] py-1 px-2 rounded shadow-lg z-50 whitespace-nowrap animate-in fade-in slide-in-from-bottom-1 duration-200">
-                            {courseGrades[course.id] > 75 ? "لا يمكن إعادة مادة علامتها أعلى من 75" : "أدخل عدد مرات إعادة المادة"}
-                          </div>
-                        )}
-                        <button 
-                          onClick={() => {
-                            setShowRepeatTooltip(course.id);
-                            setTimeout(() => setShowRepeatTooltip(null), 5000);
-                          }}
-                          className="text-gray-400 hover:text-indigo-500 transition-colors"
-                        >
-                          <Info size={12} />
-                        </button>
-                        <span className="text-[10px] font-black text-gray-500 dark:text-slate-400 uppercase tracking-tighter">الإعادة</span>
-                      </div>
-                      <input
-                        type="number"
-                        min="0"
-                        max="10"
-                        value={courseRepeats[course.id] || 0}
-                        disabled={courseGrades[course.id] > 75}
-                        onChange={(e) => {
-                          const val = Math.max(0, parseInt(e.target.value) || 0);
-                          setCourseRepeats(prev => ({ ...prev, [course.id]: val }));
-                        }}
-                        className={cn(
-                          "w-12 text-center py-1.5 bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-lg text-sm font-black text-gray-600 dark:text-slate-300 outline-none focus:ring-2 focus:ring-indigo-500 transition-all",
-                          courseGrades[course.id] > 75 && "opacity-50 cursor-not-allowed bg-gray-100 dark:bg-slate-900"
                         )}
                       />
                     </div>
