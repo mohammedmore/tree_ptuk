@@ -348,6 +348,11 @@ function FlowComponent() {
     {}
   );
 
+  const [courseRepeats, setCourseRepeats] = useLocalStorage<Record<string, number>>(
+    "course_repeats",
+    {}
+  );
+
   const [hoveredCourseId, setHoveredCourseId] = useState<string | null>(null);
 
   const hoveredPath = useMemo(() => {
@@ -402,11 +407,13 @@ function FlowComponent() {
     "hide_past_semesters",
     "dark_mode",
     "course_grades",
+    "course_repeats",
   ];
 
   const confirmReset = () => {
     setCompletedCourses(new Set());
     setPlannedCourses({});
+    setCourseRepeats({});
     localStorageKeys.forEach(key => window.localStorage.removeItem(key)); // Clear only app-specific keys
     setShowResetConfirm(false);
     // Reload to ensure all states are truly reset from scratch
@@ -1941,6 +1948,8 @@ function FlowComponent() {
           completedCourses={completedCourses}
           courseGrades={courseGrades}
           setCourseGrades={setCourseGrades}
+          courseRepeats={courseRepeats}
+          setCourseRepeats={setCourseRepeats}
         />
       </div>
     </div>

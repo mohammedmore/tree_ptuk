@@ -11,6 +11,8 @@ interface GPAModalProps {
   completedCourses: Set<string>;
   courseGrades: Record<string, number>;
   setCourseGrades: React.Dispatch<React.SetStateAction<Record<string, number>>>;
+  courseRepeats: Record<string, number>;
+  setCourseRepeats: React.Dispatch<React.SetStateAction<Record<string, number>>>;
 }
 
 export const GPAModal: React.FC<GPAModalProps> = ({
@@ -20,9 +22,12 @@ export const GPAModal: React.FC<GPAModalProps> = ({
   completedCourses,
   courseGrades,
   setCourseGrades,
+  courseRepeats,
+  setCourseRepeats,
 }) => {
   const [searchQuery, setSearchQuery] = React.useState("");
   const [whatIfGrades, setWhatIfGrades] = React.useState<Record<string, number>>({});
+  const [showRepeatTooltip, setShowRepeatTooltip] = React.useState<string | null>(null);
 
   const completedList = React.useMemo(() => {
     return courses.filter(c => completedCourses.has(c.id));
@@ -39,10 +44,20 @@ export const GPAModal: React.FC<GPAModalProps> = ({
     let totalCredits = 0;
     
     completedList.forEach(course => {
-      const grade = grades[course.id] || 0;
+      let grade = grades[course.id] || 0;
+      let repeats = courseRepeats[course.id] || 0;
+
+      // "What-if" logic for completed courses: 
+      // If a new grade is provided for a course already completed, 
+      // it counts as an additional repeat (re-taking the course to improve grade).
+      if (includeHypothetical && whatIfGrades[course.id] > 0) {
+        grade = whatIfGrades[course.id];
+        repeats += 1;
+      }
+
       if (grade > 0) {
         totalPoints += grade * course.credits;
-        totalCredits += course.credits;
+        totalCredits += course.credits * (1 + repeats);
       }
     });
 
@@ -202,6 +217,37 @@ export const GPAModal: React.FC<GPAModalProps> = ({
                           "w-16 text-center py-1.5 bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-lg text-sm font-black text-indigo-600 dark:text-indigo-400 outline-none focus:ring-2 focus:ring-indigo-500 transition-all",
                           courseGrades[course.id] === -1 && "opacity-50 cursor-not-allowed bg-gray-100 dark:bg-slate-900"
                         )}
+                      />
+                    </div>
+                    <div className="w-px h-8 bg-gray-100 dark:bg-slate-700 mx-1"></div>
+                    <div className="flex flex-col items-end relative">
+                      <div className="flex items-center gap-1 mb-1">
+                        {showRepeatTooltip === course.id && (
+                          <div className="absolute bottom-full mb-2 right-0 bg-gray-800 text-white text-[10px] py-1 px-2 rounded shadow-lg z-50 whitespace-nowrap animate-in fade-in slide-in-from-bottom-1 duration-200">
+                            أدخل عدد مرات إعادة المادة
+                          </div>
+                        )}
+                        <button 
+                          onClick={() => {
+                            setShowRepeatTooltip(course.id);
+                            setTimeout(() => setShowRepeatTooltip(null), 5000);
+                          }}
+                          className="text-gray-400 hover:text-indigo-500 transition-colors"
+                        >
+                          <Info size={12} />
+                        </button>
+                        <span className="text-[10px] font-black text-gray-500 dark:text-slate-400 uppercase tracking-tighter">الإعادة</span>
+                      </div>
+                      <input
+                        type="number"
+                        min="0"
+                        max="10"
+                        value={courseRepeats[course.id] || 0}
+                        onChange={(e) => {
+                          const val = Math.max(0, parseInt(e.target.value) || 0);
+                          setCourseRepeats(prev => ({ ...prev, [course.id]: val }));
+                        }}
+                        className="w-12 text-center py-1.5 bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-lg text-sm font-black text-gray-600 dark:text-slate-300 outline-none focus:ring-2 focus:ring-indigo-500 transition-all"
                       />
                     </div>
                     <div className="w-px h-8 bg-gray-100 dark:bg-slate-700 mx-1"></div>
