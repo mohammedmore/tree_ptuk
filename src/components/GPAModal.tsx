@@ -57,6 +57,7 @@ export const GPAModal: React.FC<GPAModalProps> = ({
     const available = courses.filter(c => 
       !completedCourses.has(c.id) && 
       !failedCourseIds.has(c.id) &&
+      !whatIfGrades.hasOwnProperty(c.id) &&
       (c.name.includes(whatIfSearchQuery) || c.id.includes(whatIfSearchQuery))
     );
     const grouped: Record<string, Course[]> = {};
@@ -236,7 +237,9 @@ export const GPAModal: React.FC<GPAModalProps> = ({
                                key={c.id}
                                className="w-full text-right px-4 py-2 text-xs font-bold text-gray-700 dark:text-gray-200 hover:bg-red-50 dark:hover:bg-red-900/20 hover:text-red-600 dark:hover:text-red-400 transition-colors flex items-center justify-between"
                                onClick={() => {
-                                 setFailedCourseIds(prev => new Set([...prev, c.id]));
+                                 const next = new Set(failedCourseIds);
+                                 next.add(c.id);
+                                 setFailedCourseIds(next);
                                  setFailedSearchQuery("");
                                  setIsFailedListOpen(false);
                                }}
@@ -262,17 +265,42 @@ export const GPAModal: React.FC<GPAModalProps> = ({
                      if (!course) return null;
                      return (
                        <div key={id} className="flex items-center justify-between p-2 bg-white dark:bg-slate-800 rounded-xl border border-red-100 dark:border-red-900/30">
-                         <span className="text-[10px] font-bold dark:text-gray-300">{course.name}</span>
-                         <button 
-                           onClick={() => setFailedCourseIds(prev => {
-                             const next = new Set(prev);
-                             next.delete(id);
-                             return next;
-                           })}
-                           className="text-gray-400 hover:text-red-500"
-                         >
-                           <Trash2 size={14} />
-                         </button>
+                         <div className="flex flex-col">
+                           <span className="text-[10px] font-bold dark:text-gray-300">{course.name}</span>
+                           <span className="text-[8px] text-gray-400 font-bold">{course.credits}س - {id}</span>
+                         </div>
+                         <div className="flex items-center gap-2">
+                           <input
+                             type="number"
+                             min="0"
+                             max="100"
+                             placeholder="درجة"
+                             value={courseGrades[id] || ""}
+                             onChange={(e) => {
+                               const val = Math.min(100, Math.max(0, parseFloat(e.target.value) || 0));
+                               setCourseGrades(prev => ({ ...prev, [id]: val }));
+                             }}
+                             className="w-12 text-center py-1 bg-red-50 dark:bg-red-500/10 border border-red-200 dark:border-red-500/30 rounded-lg text-[10px] font-black text-red-600 dark:text-red-400 outline-none focus:ring-1 focus:ring-red-500"
+                           />
+                           <button 
+                             onClick={() => {
+                               const next = new Set(failedCourseIds);
+                               next.delete(id);
+                               setFailedCourseIds(next);
+                               // Also clear the grade if it's not a completed course
+                               if (!completedCourses.has(id)) {
+                                 setCourseGrades(prev => {
+                                   const updated = { ...prev };
+                                   delete updated[id];
+                                   return updated;
+                                 });
+                               }
+                             }}
+                             className="text-gray-400 hover:text-red-500 p-1"
+                           >
+                             <Trash2 size={14} />
+                           </button>
+                         </div>
                        </div>
                      );
                    })}
