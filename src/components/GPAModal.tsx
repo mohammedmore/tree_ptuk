@@ -103,10 +103,13 @@ export const GPAModal: React.FC<GPAModalProps> = ({
       const hasGradeEntry = grades.hasOwnProperty(course.id) || (includeHypothetical && whatIfGrades.hasOwnProperty(course.id));
       
       if (hasGradeEntry || failedCourseIds.has(course.id)) {
-        if (grade > 0) {
-          totalPoints += grade * course.credits;
+        // Exclude "Pass/Fail" (-1) from numeric GPA calculation
+        if (grade !== -1) {
+          if (grade > 0) {
+            totalPoints += grade * course.credits;
+          }
+          totalCredits += course.credits * (1 + repeats);
         }
-        totalCredits += course.credits * (1 + repeats);
       }
     });
 
