@@ -353,6 +353,11 @@ function FlowComponent() {
     {}
   );
 
+  const [failedCourseIds, setFailedCourseIds] = useLocalStorage<string[]>(
+    "failed_course_ids",
+    []
+  );
+
   const [hoveredCourseId, setHoveredCourseId] = useState<string | null>(null);
 
   const hoveredPath = useMemo(() => {
@@ -408,12 +413,14 @@ function FlowComponent() {
     "dark_mode",
     "course_grades",
     "course_repeats",
+    "failed_course_ids",
   ];
 
   const confirmReset = () => {
     setCompletedCourses(new Set());
     setPlannedCourses({});
     setCourseRepeats({});
+    setFailedCourseIds([]);
     localStorageKeys.forEach(key => window.localStorage.removeItem(key)); // Clear only app-specific keys
     setShowResetConfirm(false);
     // Reload to ensure all states are truly reset from scratch
@@ -1950,6 +1957,8 @@ function FlowComponent() {
           setCourseGrades={setCourseGrades}
           courseRepeats={courseRepeats}
           setCourseRepeats={setCourseRepeats}
+          failedCourseIds={new Set(failedCourseIds)}
+          setFailedCourseIds={(ids) => setFailedCourseIds(Array.from(ids))}
         />
       </div>
     </div>
