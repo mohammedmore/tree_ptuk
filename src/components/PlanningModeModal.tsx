@@ -1,8 +1,9 @@
 import React from "react";
-import { X, CalendarDays, BookOpen, ChevronDown, ChevronUp, CircleCheckBig, Search } from "lucide-react";
+import { X, CalendarDays, BookOpen, ChevronDown, ChevronUp, CircleCheckBig, Search, AlertTriangle } from "lucide-react";
 import { cn } from "../utils";
 import { Course, courses, categoryRequirements } from "../data"; // Ensure 'courses' is imported
 import { SEMESTERS } from "../constants";
+import { getSemesterType, isCourseAvailableInSemester, formatOfferings } from "../courseOfferings";
 
 interface PlanningModeModalProps {
   isPlanningModeOpen: boolean;
@@ -45,6 +46,7 @@ const PlanningModeModal: React.FC<PlanningModeModalProps> = ({
   setIsPlannerOpen,
 }) => {
   const [searchQuery, setSearchQuery] = React.useState("");
+  const [hourFilter, setHourFilter] = React.useState<number | null>(null);
 
   const allPrev = React.useMemo(() => {
     const prev = new Set(completedCourses);
@@ -65,22 +67,23 @@ const PlanningModeModal: React.FC<PlanningModeModalProps> = ({
       const isPlannedInPrev = (Object.entries(plannedCourses) as [string, string][]).some(([id, s]) => id === c.id && SEMESTERS.indexOf(s) < SEMESTERS.indexOf(currentPlanningSemester));
       const isPlannedNow = plannedCourses[c.id] === currentPlanningSemester;
       if (isComp || isPlannedInPrev || isPlannedNow) return false;
-      return isCourseAvailable(c, allPrev, completedCreditsPerCategory, courses);
+      return isCourseAvailable(c, allPrev, completedCreditsPerCategory);
     });
   }, [currentPlanningSemester, completedCourses, plannedCourses, courses, isCourseAvailable, allPrev, completedCreditsPerCategory]);
 
   const groupedAvailable = React.useMemo(() => {
     return available
       .filter(c => 
-        c.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
-        c.id.toLowerCase().includes(searchQuery.toLowerCase())
+        (c.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
+        c.id.toLowerCase().includes(searchQuery.toLowerCase())) &&
+        (!hourFilter || c.credits === hourFilter)
       )
       .reduce((acc, c) => {
         if (!acc[c.category]) acc[c.category] = [];
         acc[c.category].push(c);
         return acc;
       }, {} as Record<string, Course[]>);
-  }, [available, searchQuery]);
+  }, [available, searchQuery, hourFilter]);
 
   const currentSemesterPlannedCredits = React.useMemo(() => {
     if (!currentPlanningSemester) return 0;
@@ -88,6 +91,17 @@ const PlanningModeModal: React.FC<PlanningModeModalProps> = ({
       .filter(([id, s]) => s === currentPlanningSemester)
       .reduce((sum, [id]) => sum + (courses.find(cr => cr.id === id)?.credits || 0), 0);
   }, [plannedCourses, currentPlanningSemester, courses]);
+
+  const totalPlannedAndCompletedCreditsPerCategory = React.useMemo(() => {
+    const counts: Record<string, number> = { ...completedCreditsPerCategory };
+    Object.keys(plannedCourses).forEach(id => {
+      const course = courses.find(c => c.id === id);
+      if (course) {
+        counts[course.category] = (counts[course.category] || 0) + course.credits;
+      }
+    });
+    return counts;
+  }, [completedCreditsPerCategory, plannedCourses, courses]);
 
   if (!isPlanningModeOpen) return null;
 
@@ -155,6 +169,37 @@ const PlanningModeModal: React.FC<PlanningModeModalProps> = ({
                     />
                   </div>
 
+                  {/* Hour Filter */}
+                  <div className="flex gap-2 p-1.5 bg-gray-50/50 dark:bg-slate-900/50 rounded-xl border border-gray-100 dark:border-slate-700/50">
+                    <button 
+                      onClick={() => setHourFilter(null)} 
+                      className={cn(
+                        "flex-1 py-1.5 text-[10px] font-black rounded-lg transition-all",
+                        !hourFilter ? "bg-white dark:bg-slate-800 text-orange-600 dark:text-orange-400 shadow-sm" : "text-gray-400 hover:text-gray-600 dark:hover:text-slate-300"
+                      )}
+                    >
+                      الكل
+                    </button>
+                    <button 
+                      onClick={() => setHourFilter(3)} 
+                      className={cn(
+                        "flex-1 py-1.5 text-[10px] font-black rounded-lg transition-all",
+                        hourFilter === 3 ? "bg-white dark:bg-slate-800 text-orange-600 dark:text-orange-400 shadow-sm" : "text-gray-400 hover:text-gray-600 dark:hover:text-slate-300"
+                      )}
+                    >
+                      3 ساعات
+                    </button>
+                    <button 
+                      onClick={() => setHourFilter(1)} 
+                      className={cn(
+                        "flex-1 py-1.5 text-[10px] font-black rounded-lg transition-all",
+                        hourFilter === 1 ? "bg-white dark:bg-slate-800 text-orange-600 dark:text-orange-400 shadow-sm" : "text-gray-400 hover:text-gray-600 dark:hover:text-slate-300"
+                      )}
+                    >
+                      ساعة (مختبر)
+                    </button>
+                  </div>
+
                   <div className="flex items-center justify-between">
                     <h3 className="text-xs font-black text-gray-500 dark:text-slate-400 flex items-center gap-2">
                       <BookOpen size={14} /> المواد المتاحة هذا الفصل
@@ -179,36 +224,80 @@ const PlanningModeModal: React.FC<PlanningModeModalProps> = ({
                     ) : (
                       (Object.entries(groupedAvailable) as [string, Course[]][]).map(([category, items]) => {
                         const isExpanded = expandedPlanningCategories[category] === true; // Default to closed
+                        const currentCatCredits = totalPlannedAndCompletedCreditsPerCategory[category] || 0;
+                        const requiredCatCredits = categoryRequirements[category] || 0;
+                        const isExceeded = currentCatCredits > requiredCatCredits;
+
                         return (
-                          <div key={category} className="border border-gray-100 dark:border-slate-700 rounded-2xl overflow-hidden shadow-sm">
+                          <div key={category} className={cn("border rounded-2xl overflow-hidden shadow-sm transition-all", isExceeded ? "border-red-300 bg-red-50/20" : "border-gray-100 dark:border-slate-700")}>
                             <button
                               onClick={() => setExpandedPlanningCategories(prev => ({ ...prev, [category]: !isExpanded }))}
                               className="w-full flex items-center justify-between p-3 bg-gray-50 dark:bg-slate-800/80 hover:bg-gray-100 transition-colors"
                             >
-                              <span className="text-[11px] font-black text-gray-700 dark:text-slate-200">{category} ({items.length})</span>
+                              <div className="flex flex-col items-start gap-1">
+                                <span className="text-[11px] font-black text-gray-700 dark:text-slate-200">{category} ({items.length})</span>
+                                <div className="flex items-center gap-2">
+                                  <div className="w-20 h-1.5 bg-gray-200 dark:bg-slate-700 rounded-full overflow-hidden">
+                                    <div 
+                                      className={cn("h-full transition-all", isExceeded ? "bg-red-500" : currentCatCredits >= requiredCatCredits ? "bg-emerald-500" : "bg-blue-500")}
+                                      style={{ width: `${Math.min(100, (currentCatCredits / requiredCatCredits) * 100)}%` }}
+                                    ></div>
+                                  </div>
+                                  <span className={cn("text-[9px] font-bold", isExceeded ? "text-red-600" : "text-gray-400")}>
+                                    {currentCatCredits} / {requiredCatCredits} س
+                                  </span>
+                                </div>
+                              </div>
                               {isExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
                             </button>
 
                             {isExpanded && (
                               <div className="p-2 bg-white dark:bg-slate-900/50 space-y-1.5 animate-in slide-in-from-top-1 duration-200">
-                                {items.map(c => (
-                                  <button
-                                    key={c.id}
-                                    onClick={() => setPlannedCourses(prev => ({ ...prev, [c.id]: currentPlanningSemester! }))}
-                                    className="w-full text-right p-2.5 bg-white dark:bg-slate-800 border border-gray-100 dark:border-slate-700 rounded-xl hover:border-blue-400 hover:shadow-sm transition-all flex justify-between items-center group"
-                                  >
-                                    <div className="flex flex-col items-start gap-0.5">
-                                      <span className="text-[11px] font-bold text-gray-800 dark:text-slate-200 group-hover:text-blue-600 transition-colors">{c.name}</span>
-                                      {c.coPrerequisites && c.coPrerequisites.length > 0 && (
-                                        <span className="text-[8px] font-semibold text-purple-600 dark:text-purple-400 bg-purple-50 dark:bg-purple-900/30 px-1.5 py-0.5 rounded-md">
-                                          {c.coPrerequisites.map(cpId => courses.find(course => course.id === cpId)?.name || cpId).join(', ')}
-                                        </span>
+                                {items.map(c => {
+                                  const alreadyPlannedSomewhere = !!plannedCourses[c.id];
+                                  const semesterType = getSemesterType(currentPlanningSemester!);
+                                  const isNotAvailableInSemester = c.availableSemesters && !isCourseAvailableInSemester(c.id, semesterType);
+                                   
+                                  return (
+                                    <button
+                                      key={c.id}
+                                      disabled={alreadyPlannedSomewhere}
+                                      onClick={() => setPlannedCourses(prev => ({ ...prev, [c.id]: currentPlanningSemester! }))}
+                                      className={cn(
+                                        "w-full text-right p-2.5 bg-white dark:bg-slate-800 border rounded-xl hover:border-blue-400 hover:shadow-sm transition-all flex justify-between items-center group",
+                                        alreadyPlannedSomewhere && "opacity-40 cursor-not-allowed grayscale",
+                                        isNotAvailableInSemester && "border-red-300 dark:border-red-700/50 bg-red-50/30 dark:bg-red-950/20 opacity-60"
                                       )}
-                                      <span className="text-[9px] font-mono text-gray-400">{c.id}</span>
-                                    </div>
-                                    <span className="text-[10px] font-black text-blue-600 bg-blue-50 dark:bg-blue-900/30 px-2 py-0.5 rounded-md">{c.credits} س</span>
-                                  </button>
-                                ))}
+                                      title={isNotAvailableInSemester ? `⚠️ هذه المادة غير متاحة في ${currentPlanningSemester}` : ""}
+                                    >
+                                      <div className="flex flex-col items-start gap-0.5">
+                                        <div className="flex items-center gap-1.5">
+                                          <span className="text-[11px] font-bold text-gray-800 dark:text-slate-200 group-hover:text-blue-600 transition-colors">{c.name}</span>
+                                          {alreadyPlannedSomewhere && (
+                                            <span className="text-[7px] bg-gray-100 dark:bg-slate-700 text-gray-400 px-1 rounded">مجدولة مسبقاً</span>
+                                          )}
+                                          {isNotAvailableInSemester && (
+                                            <span className="text-[7px] bg-red-100 dark:bg-red-900/50 text-red-600 dark:text-red-300 px-1.5 py-0.5 rounded flex items-center gap-0.5 font-semibold">
+                                              <AlertTriangle size={8} /> غير متاحة
+                                            </span>
+                                          )}
+                                        </div>
+                                        {c.coPrerequisites && c.coPrerequisites.length > 0 && (
+                                          <span className="text-[8px] font-semibold text-purple-600 dark:text-purple-400 bg-purple-50 dark:bg-purple-900/30 px-1.5 py-0.5 rounded-md">
+                                            {c.coPrerequisites.map(cpId => courses.find(course => course.id === cpId)?.name || cpId).join(', ')}
+                                          </span>
+                                        )}
+                                        {c.availableSemesters && (
+                                          <span className="text-[8px] font-semibold text-purple-600 dark:text-purple-400">
+                                            💡 متاح: {formatOfferings(c.availableSemesters)}
+                                          </span>
+                                        )}
+                                        <span className="text-[9px] font-mono text-gray-400">{c.id}</span>
+                                      </div>
+                                      <span className="text-[10px] font-black text-blue-600 bg-blue-50 dark:bg-blue-900/30 px-2 py-0.5 rounded-md">{c.credits} س</span>
+                                    </button>
+                                  );
+                                })}
                               </div>
                             )}
                           </div>

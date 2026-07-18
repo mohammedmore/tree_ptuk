@@ -40,7 +40,7 @@ import {
   Image as ImageIcon,
   MessageCircle,
   Heart,
-  Map,
+  Map as MapIcon,
   LayoutList,
   Moon,
   Sun,
@@ -223,6 +223,7 @@ const initialNodes: Node[] = courses.map((course) => ({
     credits: course.credits,
     category: course.category,
     commonName: courseCommonNames[course.id],
+    availableSemesters: course.availableSemesters,
   },
   position: { x: 0, y: 0 },
 }));
@@ -348,6 +349,11 @@ function FlowComponent() {
     {}
   );
 
+  const [courseRepeats, setCourseRepeats] = useLocalStorage<Record<string, number>>(
+    "course_repeats",
+    {}
+  );
+
   const [failedCourseIds, setFailedCourseIds] = useLocalStorage<string[]>(
     "failed_course_ids",
     []
@@ -407,12 +413,14 @@ function FlowComponent() {
     "hide_past_semesters",
     "dark_mode",
     "course_grades",
+    "course_repeats",
     "failed_course_ids",
   ];
 
   const confirmReset = () => {
     setCompletedCourses(new Set());
     setPlannedCourses({});
+    setCourseRepeats({});
     setFailedCourseIds([]);
     localStorageKeys.forEach(key => window.localStorage.removeItem(key)); // Clear only app-specific keys
     setShowResetConfirm(false);
@@ -969,7 +977,7 @@ function FlowComponent() {
                   }}
                   className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg transition-colors cursor-pointer shadow-sm ml-auto sm:ml-0 font-black"
                 >
-                  <Map size={16} />
+                  <MapIcon size={16} />
                   وضع التخطيط
                 </button>
                 <button
@@ -1113,7 +1121,7 @@ function FlowComponent() {
                 )}
                 title="عرض الخريطة التفاعلية"
               >
-                <Map size={14} />
+                <MapIcon size={14} />
                 <span>الخريطة التفاعلية</span>
               </button>
               <button
@@ -1948,6 +1956,8 @@ function FlowComponent() {
           completedCourses={completedCourses}
           courseGrades={courseGrades}
           setCourseGrades={setCourseGrades}
+          courseRepeats={courseRepeats}
+          setCourseRepeats={setCourseRepeats}
           failedCourseIds={new Set(failedCourseIds)}
           setFailedCourseIds={(ids) => setFailedCourseIds(Array.from(ids))}
         />

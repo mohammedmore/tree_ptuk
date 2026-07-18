@@ -1,5 +1,5 @@
 import React from "react";
-import { Calculator, TrendingUp, Search, Info, Trash2, PlusCircle } from "lucide-react";
+import { Calculator, TrendingUp, Search, Info, Trash2, PlusCircle, Sparkles, Target } from "lucide-react";
 import { BaseModal } from "./BaseModal";
 import { Course } from "../data";
 import { cn } from "../utils";
@@ -31,12 +31,43 @@ export const GPAModal: React.FC<GPAModalProps> = ({
   const [isFailedListOpen, setIsFailedListOpen] = React.useState(false);
   const [isWhatIfListOpen, setIsWhatIfListOpen] = React.useState(false);
   const [whatIfGrades, setWhatIfGrades] = React.useState<Record<string, number>>({});
+  const [targetGPA, setTargetGPA] = React.useState<number | "">("");
+
+  const remainingCredits = React.useMemo(() => {
+    const earnedCredits = courses
+      .filter(c => completedCourses.has(c.id) && (courseGrades[c.id] || 0) !== -1)
+      .reduce((sum, c) => sum + c.credits, 0);
+    return 164 - earnedCredits; // assuming 164 is total credits
+  }, [courses, completedCourses, courseGrades]);
+
+  const requiredAverage = React.useMemo(() => {
+    if (targetGPA === "" || targetGPA <= 0 || remainingCredits <= 0) return null;
+    
+    let currentTotalPoints = 0;
+    let currentCountedCredits = 0;
+
+    courses.forEach(c => {
+      if (completedCourses.has(c.id) && courseGrades[c.id] > 0 && courseGrades[c.id] !== -1) {
+        currentTotalPoints += courseGrades[c.id] * c.credits;
+        currentCountedCredits += c.credits;
+      }
+    });
+
+    const totalCreditsNeeded = 164; // Can be made dynamic later
+    const neededPoints = (targetGPA * totalCreditsNeeded) - currentTotalPoints;
+    
+    if (neededPoints <= 0) return 0;
+    
+    const avg = neededPoints / remainingCredits;
+    return avg;
+  }, [targetGPA, remainingCredits, courses, completedCourses, courseGrades]);
 
   const failedAvailableCourses = React.useMemo(() => {
+    const query = failedSearchQuery.toLowerCase();
     const available = courses.filter(c => 
       !completedCourses.has(c.id) && 
       !failedCourseIds.has(c.id) &&
-      (c.name.includes(failedSearchQuery) || c.id.includes(failedSearchQuery))
+      (c.name.toLowerCase().includes(query) || c.id.toLowerCase().includes(query))
     );
     const grouped: Record<string, Course[]> = {};
     available.forEach(course => {
@@ -49,11 +80,12 @@ export const GPAModal: React.FC<GPAModalProps> = ({
   }, [courses, completedCourses, failedCourseIds, failedSearchQuery]);
 
   const whatIfAvailableCourses = React.useMemo(() => {
+    const query = whatIfSearchQuery.toLowerCase();
     const available = courses.filter(c => 
       !completedCourses.has(c.id) && 
       !failedCourseIds.has(c.id) &&
       !whatIfGrades.hasOwnProperty(c.id) &&
-      (c.name.includes(whatIfSearchQuery) || c.id.includes(whatIfSearchQuery))
+      (c.name.toLowerCase().includes(query) || c.id.toLowerCase().includes(query))
     );
     const grouped: Record<string, Course[]> = {};
     available.forEach(course => {
@@ -72,8 +104,9 @@ export const GPAModal: React.FC<GPAModalProps> = ({
   }, [courses, completedCourses, failedCourseIds]);
 
   const filteredList = React.useMemo(() => {
+    const query = searchQuery.toLowerCase();
     return combinedCourseList.filter(c => 
-      c.name.includes(searchQuery) || c.id.includes(searchQuery)
+      c.name.toLowerCase().includes(query) || c.id.toLowerCase().includes(query)
     );
   }, [combinedCourseList, searchQuery]);
 
@@ -152,7 +185,7 @@ export const GPAModal: React.FC<GPAModalProps> = ({
     >
       <div className="p-6 space-y-8" dir="rtl">
         {/* GPA Summary Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div className="bg-gradient-to-br from-indigo-600 to-blue-700 dark:from-indigo-900 dark:to-blue-900 p-6 rounded-3xl text-white shadow-lg shadow-indigo-200 dark:shadow-none relative overflow-hidden">
             <div className="absolute top-0 right-0 p-4 opacity-10">
               <TrendingUp size={80} />
@@ -170,7 +203,10 @@ export const GPAModal: React.FC<GPAModalProps> = ({
             </div>
           </div>
  
-          <div className="bg-white dark:bg-slate-900 p-6 rounded-3xl border border-gray-100 dark:border-slate-700 shadow-sm flex flex-col justify-between">
+          <div className="bg-white dark:bg-slate-900 p-6 rounded-3xl border border-gray-100 dark:border-slate-700 shadow-sm flex flex-col justify-between relative overflow-hidden">
+            <div className="absolute top-0 right-0 p-4 opacity-5 pointer-events-none">
+              <Sparkles size={60} />
+            </div>
             <div>
               <div className="flex justify-between items-start mb-2">
                 <div className="text-sm font-bold text-gray-500 dark:text-slate-400">حساب "ماذا لو"</div>
@@ -182,6 +218,38 @@ export const GPAModal: React.FC<GPAModalProps> = ({
             </div>
             <div className="text-[10px] text-gray-400 font-bold leading-relaxed">
               تظهر هذه النتيجة المعدل المتوقع بناءً على العلامات الحالية مضافاً إليها التوقعات التي تدخلها أدناه.
+            </div>
+          </div>
+
+          <div className="bg-gradient-to-br from-emerald-500 to-teal-600 dark:from-emerald-900 dark:to-teal-900 p-6 rounded-3xl text-white shadow-lg shadow-emerald-200 dark:shadow-none relative overflow-hidden">
+            <div className="absolute top-0 right-0 p-4 opacity-10">
+              <Target size={60} />
+            </div>
+            <div className="relative z-10 h-full flex flex-col">
+              <div className="text-sm font-bold opacity-80 mb-1">محاكي المعدل المستهدف</div>
+              <div className="flex-1 flex flex-col justify-center gap-2">
+                <div className="flex items-center gap-2">
+                  <input
+                    type="number"
+                    step="0.1"
+                    min="0"
+                    max="100"
+                    value={targetGPA}
+                    onChange={(e) => setTargetGPA(e.target.value === "" ? "" : parseFloat(e.target.value))}
+                    className="w-20 bg-white/20 border border-white/30 rounded-lg py-1 px-2 text-white font-black outline-none focus:ring-2 focus:ring-white/50 text-center"
+                    placeholder="80.0"
+                  />
+                  <span className="text-xs font-bold">% هدف</span>
+                </div>
+                {requiredAverage !== null && (
+                  <div className="mt-2">
+                    <div className="text-[10px] font-bold opacity-80">المعدل المطلوب في الـ {remainingCredits} س المتبقية:</div>
+                    <div className="text-2xl font-black">
+                      {requiredAverage > 100 ? "مستحيل!" : `%${requiredAverage.toFixed(2)}`}
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         </div>

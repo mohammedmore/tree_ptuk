@@ -1,9 +1,10 @@
 import React from "react";
-import { X, CalendarDays, CircleCheckBig, Trash2 } from "lucide-react";
+import { X, CalendarDays, CircleCheckBig, Trash2, AlertCircle } from "lucide-react";
 import { cn } from "../utils";
 import { Course, courses, categoryRequirements } from "../data";
 import { getCourseDetails } from "../courseExplanations";
 import { SEMESTERS } from "../constants";
+import { formatOfferings, getSemesterType, isCourseAvailableInSemester } from "../courseOfferings";
 
 interface DynamicCourseDetailsModalProps {
   isPlannerOpen: boolean;
@@ -145,6 +146,22 @@ const DynamicCourseDetailsModal: React.FC<DynamicCourseDetailsModalProps> = ({
           <h3 className="text-xl font-black text-gray-950 dark:text-slate-100 leading-tight text-right">
             {plannerSelectedCourse.name}
           </h3>
+          <div className="mt-2 flex items-center justify-end gap-2">
+            <span className="text-[10px] font-bold text-gray-400">تقييمك للصعوبة:</span>
+            {[1, 2, 3, 4, 5].map((star) => (
+              <button
+                key={star}
+                className={cn(
+                  "w-6 h-6 rounded-md text-[10px] font-black transition-all",
+                  details.difficulty >= star * 2
+                    ? "bg-amber-100 text-amber-600 border border-amber-200"
+                    : "bg-gray-50 text-gray-300 border border-gray-100"
+                )}
+              >
+                ★
+              </button>
+            ))}
+          </div>
         </div>
 
         <div
@@ -152,6 +169,18 @@ const DynamicCourseDetailsModal: React.FC<DynamicCourseDetailsModalProps> = ({
         >
           المسار الأكاديمي: {details.trackName}
         </div>
+
+        {plannerSelectedCourse.availableSemesters && (
+          <div className="bg-purple-50 dark:bg-purple-950/30 border border-purple-200 dark:border-purple-800 rounded-xl p-3 text-right">
+            <div className="flex items-center gap-2 mb-2">
+              <CalendarDays size={14} className="text-purple-600 dark:text-purple-400" />
+              <h4 className="text-xs font-black text-purple-600 dark:text-purple-400">فترات طرح المساق</h4>
+            </div>
+            <p className="text-xs text-purple-900 dark:text-purple-200 font-semibold">
+              {formatOfferings(plannerSelectedCourse.availableSemesters)}
+            </p>
+          </div>
+        )}
 
         <div className="space-y-1.5">
           <h4 className="text-xs font-black text-gray-400 uppercase tracking-wider text-right">

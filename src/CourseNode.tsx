@@ -1,10 +1,11 @@
-import React from "react";
+import React, { memo } from "react";
 import { Handle, Position } from "@xyflow/react";
-import { CircleCheckBig, Lock, Info, CalendarDays } from "lucide-react";
+import { CircleCheckBig, Lock, Info, CalendarDays, Snowflake } from "lucide-react";
 import { cn } from "./utils";
+import { formatOfferings } from "./courseOfferings";
 
 const CourseNode = ({ data, isConnectable }: any) => {
-    const { isSelected, isAncestor, isDescendant, isDirectPrereq, isDirectDep, isCompleted, isAvailable, isCriticalPath, isPlanned, toggleCompleted, showDetails, onPlan, opacity = 1 } = data;
+    const { isSelected, isAncestor, isDescendant, isDirectPrereq, isDirectDep, isCompleted, isAvailable, isCriticalPath, isPlanned, toggleCompleted, showDetails, onPlan, opacity = 1, seasonal, availableSemesters } = data;
     const isLocked = !isCompleted && !isAvailable;
 
     let containerClass = "w-52 h-24 bg-white border border-gray-200 rounded-xl p-3 flex flex-col justify-between shadow-sm relative group";
@@ -77,6 +78,25 @@ const CourseNode = ({ data, isConnectable }: any) => {
                 {isLocked && !isCompleted && <Lock size={12} />}
             </button>
 
+            {availableSemesters && availableSemesters.length > 0 && (
+                <div 
+                  className="absolute bottom-1 right-1 flex items-center gap-0.5 bg-purple-100 dark:bg-purple-900/50 text-purple-600 dark:text-purple-400 px-1.5 py-0.5 rounded text-[7px] font-semibold truncate max-w-[130px]"
+                  title={`متاح في: ${formatOfferings(availableSemesters)}`}
+                >
+                    <CalendarDays size={7} />
+                    <span>{formatOfferings(availableSemesters)}</span>
+                </div>
+            )}
+            {seasonal && !availableSemesters && (
+                <div 
+                  className="absolute bottom-1 right-1 flex items-center gap-0.5 bg-blue-100 dark:bg-blue-900/50 text-blue-600 dark:text-blue-400 px-1 rounded text-[8px] font-black"
+                  title={seasonal === 'first' ? "يطرح في الفصل الأول فقط" : seasonal === 'second' ? "يطرح في الفصل الثاني فقط" : "يطرح في كلا الفصلين"}
+                >
+                    <Snowflake size={8} />
+                    {seasonal === 'first' ? 'فصل 1' : seasonal === 'second' ? 'فصل 2' : 'دائم'}
+                </div>
+            )}
+
             <div className="flex-1 flex flex-col justify-center py-1">
                 <div className="flex items-center justify-center gap-1.5 mb-1 px-6">
                     <span className={cn(idClass, "shrink-0 font-mono")}>{data.id}</span>
@@ -103,4 +123,4 @@ const CourseNode = ({ data, isConnectable }: any) => {
     );
 };
 
-export default CourseNode;
+export default memo(CourseNode);
