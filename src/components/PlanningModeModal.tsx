@@ -67,7 +67,7 @@ const PlanningModeModal: React.FC<PlanningModeModalProps> = ({
       const isPlannedInPrev = (Object.entries(plannedCourses) as [string, string][]).some(([id, s]) => id === c.id && SEMESTERS.indexOf(s) < SEMESTERS.indexOf(currentPlanningSemester));
       const isPlannedNow = plannedCourses[c.id] === currentPlanningSemester;
       if (isComp || isPlannedInPrev || isPlannedNow) return false;
-      return isCourseAvailable(c, allPrev, completedCreditsPerCategory);
+      return isCourseAvailable(c, allPrev, completedCreditsPerCategory, courses);
     });
   }, [currentPlanningSemester, completedCourses, plannedCourses, courses, isCourseAvailable, allPrev, completedCreditsPerCategory]);
 
