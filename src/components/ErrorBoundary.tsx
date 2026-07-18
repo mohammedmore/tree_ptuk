@@ -14,6 +14,9 @@ export class ErrorBoundary extends Component<Props, State> {
     hasError: false
   };
 
+  // Ensure TypeScript recognizes the props property on this class
+  public props!: Props;
+
   public static getDerivedStateFromError(_: Error): State {
     return { hasError: true };
   }
@@ -44,6 +47,6 @@ export class ErrorBoundary extends Component<Props, State> {
       );
     }
 
-    return this.children;
+    return this.props.children;
   }
 }
