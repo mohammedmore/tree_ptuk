@@ -8,27 +8,27 @@ const CourseNode = ({ data, isConnectable }: any) => {
     const { isSelected, isAncestor, isDescendant, isDirectPrereq, isDirectDep, isCompleted, isAvailable, isCriticalPath, isPlanned, toggleCompleted, showDetails, onPlan, opacity = 1, seasonal, availableSemesters } = data;
     const isLocked = !isCompleted && !isAvailable;
 
-    let containerClass = "w-52 h-24 bg-white border border-gray-200 rounded-xl p-3 flex flex-col justify-between shadow-sm relative group";
-    let idClass = "text-[10px] text-gray-400 font-bold tracking-wider uppercase";
-    let titleClass = "text-[11px] font-bold text-gray-700 leading-tight text-center px-6 line-clamp-2";
+    let containerClass = "w-64 h-auto bg-white border border-gray-200 rounded-2xl p-4 flex flex-col gap-2 shadow-sm relative group";
+    let idClass = "text-[11px] text-gray-400 font-bold tracking-wider uppercase";
+    let titleClass = "text-[13px] font-bold text-gray-700 leading-tight text-right line-clamp-3";
 
     if (isSelected) {
-        containerClass = "w-52 h-24 bg-white border-2 border-blue-500 rounded-xl p-3 flex flex-col justify-between shadow-lg scale-105 z-10 relative group";
-        idClass = "text-[10px] text-blue-600 font-bold tracking-wider uppercase";
-        titleClass = "text-[11px] font-bold text-gray-900 leading-tight text-center px-6 line-clamp-2";
+        containerClass = "w-64 h-auto bg-white border-2 border-blue-500 rounded-2xl p-4 flex flex-col gap-2 shadow-lg scale-105 z-10 relative group";
+        idClass = "text-[11px] text-blue-600 font-bold tracking-wider uppercase";
+        titleClass = "text-[13px] font-bold text-gray-900 leading-tight text-right line-clamp-3";
     } else if (isDirectPrereq) {
-        containerClass = "w-52 h-24 bg-emerald-100 border-2 border-emerald-600 rounded-xl p-3 flex flex-col justify-between shadow-md relative group scale-105 z-10";
+        containerClass = "w-64 h-auto bg-emerald-100 border-2 border-emerald-600 rounded-2xl p-4 flex flex-col gap-2 shadow-md relative group scale-105 z-10";
     } else if (isDirectDep) {
-        containerClass = "w-52 h-24 bg-indigo-50 border-2 border-indigo-500 rounded-xl p-3 flex flex-col justify-between shadow-md relative group scale-105 z-10";
+        containerClass = "w-64 h-auto bg-indigo-50 border-2 border-indigo-500 rounded-2xl p-4 flex flex-col gap-2 shadow-md relative group scale-105 z-10";
     } else if (isCompleted) {
-        containerClass = "w-52 h-24 bg-[#f0fdf4] border-2 border-emerald-400 rounded-xl p-3 flex flex-col justify-between shadow-sm hover:shadow-md cursor-pointer transition-all relative group";
-        idClass = "text-[10px] text-emerald-600 font-bold tracking-wider uppercase";
+        containerClass = "w-64 h-auto bg-[#f0fdf4] border-2 border-emerald-400 rounded-2xl p-4 flex flex-col gap-2 shadow-sm hover:shadow-md cursor-pointer transition-all relative group";
+        idClass = "text-[11px] text-emerald-600 font-bold tracking-wider uppercase";
     } else if (isPlanned) {
-        containerClass = "w-52 h-24 bg-orange-50 border-2 border-orange-400 rounded-xl p-3 flex flex-col justify-between shadow-sm hover:shadow-md cursor-pointer transition-all relative group";
+        containerClass = "w-64 h-auto bg-orange-50 border-2 border-orange-400 rounded-2xl p-4 flex flex-col gap-2 shadow-sm hover:shadow-md cursor-pointer transition-all relative group";
     } else if (isAvailable) {
-        containerClass = "w-52 h-24 bg-blue-50 border-2 border-blue-400 rounded-xl p-3 flex flex-col justify-between shadow-sm hover:shadow-md cursor-pointer transition-all relative group";
+        containerClass = "w-64 h-auto bg-blue-50 border-2 border-blue-400 rounded-2xl p-4 flex flex-col gap-2 shadow-sm hover:shadow-md cursor-pointer transition-all relative group";
     } else if (opacity < 1) {
-        containerClass = "w-52 h-24 bg-white border border-gray-200 rounded-xl p-3 flex flex-col justify-between opacity-40 shadow-none relative group";
+        containerClass = "w-64 h-auto bg-white border border-gray-200 rounded-2xl p-4 flex flex-col gap-2 opacity-40 shadow-none relative group";
     }
 
     return (
@@ -46,10 +46,10 @@ const CourseNode = ({ data, isConnectable }: any) => {
                     e.stopPropagation();
                     if (showDetails) showDetails();
                 }}
-                className="absolute top-3 right-3 w-5 h-5 rounded flex items-center justify-center bg-gray-50 dark:bg-slate-700 text-gray-400 hover:text-blue-500 dark:text-slate-400 dark:hover:text-blue-400 border border-gray-200 dark:border-slate-600 transition-colors z-20"
+                className="absolute top-3 right-3 w-6 h-6 rounded flex items-center justify-center bg-gray-50 dark:bg-slate-700 text-gray-400 hover:text-blue-500 dark:text-slate-400 dark:hover:text-blue-400 border border-gray-200 dark:border-slate-600 transition-colors z-20"
                 title="عرض التفاصيل والمعلومات"
             >
-                <Info size={12} />
+                <Info size={14} />
             </button>
 
             <button
@@ -58,50 +58,31 @@ const CourseNode = ({ data, isConnectable }: any) => {
                     if (onPlan) onPlan();
                 }}
                 className={cn(
-                    "absolute top-3 left-9 w-5 h-5 rounded flex items-center justify-center transition-colors z-20 border",
+                    "absolute top-3 left-12 w-6 h-6 rounded flex items-center justify-center transition-colors z-20 border",
                     isPlanned ? "bg-orange-500 text-white border-none" : "bg-gray-50 dark:bg-slate-700 text-gray-400 hover:text-orange-500 dark:border-slate-600"
                 )}
                 title="جدولة المساق في الخطة"
             >
-                <CalendarDays size={12} />
+                <CalendarDays size={14} />
             </button>
 
             <button
                 onClick={(e) => { e.stopPropagation(); if (toggleCompleted) toggleCompleted(); }}
                 className={cn(
-                    "absolute top-3 left-3 w-5 h-5 rounded flex items-center justify-center transition-colors z-20",
+                    "absolute top-3 left-3 w-6 h-6 rounded flex items-center justify-center transition-colors z-20",
                     isCompleted ? "bg-emerald-500 border-none text-white" : isLocked ? "bg-gray-100 text-gray-400 cursor-not-allowed" : "bg-white border border-gray-300 hover:border-emerald-400",
                 )}
                 title={isCompleted ? "تحديد كغير منجز" : isLocked ? "مغلقة" : "تحديد كمنجز"}
             >
-                {isCompleted && <CircleCheckBig size={14} className="text-white" />}
-                {isLocked && !isCompleted && <Lock size={12} />}
+                {isCompleted && <CircleCheckBig size={16} className="text-white" />}
+                {isLocked && !isCompleted && <Lock size={14} />}
             </button>
 
-            {availableSemesters && availableSemesters.length > 0 && (
-                <div 
-                  className="absolute bottom-1 right-1 flex items-center gap-0.5 bg-purple-100 dark:bg-purple-900/50 text-purple-600 dark:text-purple-400 px-1.5 py-0.5 rounded text-[7px] font-semibold truncate max-w-[130px]"
-                  title={`متاح في: ${formatOfferings(availableSemesters)}`}
-                >
-                    <CalendarDays size={7} />
-                    <span>{formatOfferings(availableSemesters)}</span>
-                </div>
-            )}
-            {seasonal && !availableSemesters && (
-                <div 
-                  className="absolute bottom-1 right-1 flex items-center gap-0.5 bg-blue-100 dark:bg-blue-900/50 text-blue-600 dark:text-blue-400 px-1 rounded text-[8px] font-black"
-                  title={seasonal === 'first' ? "يطرح في الفصل الأول فقط" : seasonal === 'second' ? "يطرح في الفصل الثاني فقط" : "يطرح في كلا الفصلين"}
-                >
-                    <Snowflake size={8} />
-                    {seasonal === 'first' ? 'فصل 1' : seasonal === 'second' ? 'فصل 2' : 'دائم'}
-                </div>
-            )}
-
-            <div className="flex-1 flex flex-col justify-center py-1">
-                <div className="flex items-center justify-center gap-1.5 mb-1 px-6">
+            <div className="pt-2">
+                <div className="flex items-center gap-2 mb-1">
                     <span className={cn(idClass, "shrink-0 font-mono")}>{data.id}</span>
                     {data.commonName && (
-                        <span className="text-[8px] font-black text-blue-600 bg-blue-50/80 px-1 rounded border border-blue-150 shrink-0">
+                        <span className="text-[9px] font-black text-blue-600 bg-blue-50/80 px-1.5 py-0.5 rounded border border-blue-150 shrink-0">
                             {data.commonName}
                         </span>
                     )}
@@ -109,13 +90,39 @@ const CourseNode = ({ data, isConnectable }: any) => {
                 <div className={titleClass}>{data.label}</div>
             </div>
 
-            <div className="flex justify-between items-center mt-2 pt-2 border-t border-gray-100/50">
-                <span className="text-[10px] font-medium text-gray-500 bg-gray-100/50 px-1.5 py-0.5 rounded truncate max-w-[120px]">
-                    {data.category}
-                </span>
-                <span className="text-[10px] font-bold text-gray-600 bg-gray-100/50 px-1.5 py-0.5 rounded">
-                    {data.credits} س
-                </span>
+            <div className="space-y-2 text-[11px] font-medium">
+                <div className="flex items-center justify-between gap-2 px-2 py-1.5 bg-gray-50/50 dark:bg-slate-800/30 rounded-lg">
+                    <span className="text-gray-500 dark:text-slate-400">الفئة:</span>
+                    <span className="text-gray-700 dark:text-slate-200 font-semibold text-right">{data.category}</span>
+                </div>
+                
+                <div className="flex items-center justify-between gap-2 px-2 py-1.5 bg-blue-50/50 dark:bg-blue-900/20 rounded-lg">
+                    <span className="text-blue-600 dark:text-blue-400">الساعات:</span>
+                    <span className="text-blue-700 dark:text-blue-300 font-bold">{data.credits} ساعة</span>
+                </div>
+
+                {availableSemesters && availableSemesters.length > 0 && (
+                    <div className="flex items-center justify-between gap-2 px-2 py-1.5 bg-purple-50/50 dark:bg-purple-900/20 rounded-lg">
+                        <div className="flex items-center gap-1 text-purple-600 dark:text-purple-400">
+                            <CalendarDays size={12} />
+                            <span>الفصول:</span>
+                        </div>
+                        <span className="text-purple-700 dark:text-purple-300 font-semibold text-right" title={`متاح في: ${formatOfferings(availableSemesters)}`}>
+                            {formatOfferings(availableSemesters)}
+                        </span>
+                    </div>
+                )}
+                {seasonal && !availableSemesters && (
+                    <div className="flex items-center justify-between gap-2 px-2 py-1.5 bg-blue-50/50 dark:bg-blue-900/20 rounded-lg">
+                        <div className="flex items-center gap-1 text-blue-600 dark:text-blue-400">
+                            <Snowflake size={12} />
+                            <span>الفصول:</span>
+                        </div>
+                        <span className="text-blue-700 dark:text-blue-300 font-semibold">
+                            {seasonal === 'first' ? 'الفصل الأول فقط' : seasonal === 'second' ? 'الفصل الثاني فقط' : 'كل الفصول'}
+                        </span>
+                    </div>
+                )}
             </div>
 
             <Handle type="source" position={Position.Left} isConnectable={isConnectable} className="w-2 h-2 opacity-0" />
