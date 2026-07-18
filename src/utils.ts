@@ -15,14 +15,14 @@ export const getLayoutedElements = (nodes: Node[], edges: Edge[], direction = 'R
   // Configure layout configuration logic with wider visual separation to avoid overlapping
   dagreGraph.setGraph({ 
     rankdir: direction,
-    nodesep: 80, // Space between nodes in the same rank (Y-axis separation)
-    ranksep: 120, // Space between ranks/semesters (X-axis separation)
-    marginx: 40,
-    marginy: 40,
+    nodesep: 120, // Space between nodes in the same rank (Y-axis separation) - زيادة من 80
+    ranksep: 150, // Space between ranks/semesters (X-axis separation) - زيادة من 120
+    marginx: 50,  // زيادة من 40
+    marginy: 50,  // زيادة من 40
   });
 
-  const nodeWidth = 220;
-  const nodeHeight = 100;
+  const nodeWidth = 256;  // تحديث ليعكس البطاقة الجديدة (w-64 = 256px تقريبا)
+  const nodeHeight = 280; // زيادة للارتفاع المتغير
 
   nodes.forEach((node) => {
     dagreGraph.setNode(node.id, { width: nodeWidth, height: nodeHeight });
