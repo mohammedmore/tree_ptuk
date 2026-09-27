@@ -5,30 +5,47 @@ import { cn } from "./utils";
 import { formatOfferings } from "./courseOfferings";
 
 const CourseNode = ({ data, isConnectable }: any) => {
-    const { isSelected, isAncestor, isDescendant, isDirectPrereq, isDirectDep, isCompleted, isAvailable, isCriticalPath, isPlanned, toggleCompleted, showDetails, onPlan, opacity = 1, seasonal, availableSemesters } = data;
+    const { isSelected, isDirectPrereq, isDirectDep, isCompleted, isAvailable, isPlanned, toggleCompleted, showDetails, onPlan, opacity = 1, seasonal, availableSemesters } = data;
     const isLocked = !isCompleted && !isAvailable;
 
-    let containerClass = "w-64 h-auto bg-white border border-gray-200 rounded-2xl p-4 flex flex-col gap-2 shadow-sm relative group";
-    let idClass = "text-[11px] text-gray-400 font-bold tracking-wider uppercase";
-    let titleClass = "text-[13px] font-bold text-gray-700 leading-tight text-right line-clamp-3";
+    // Base card design with better spacing
+    let containerClass = "w-64 h-auto bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl p-3 flex flex-col gap-2 shadow-sm relative group transition-all duration-300";
+    let titleClass = "text-[13px] font-bold text-gray-700 dark:text-gray-200 leading-snug text-right line-clamp-2";
+    let badgeBg = "bg-gray-100 dark:bg-slate-700";
+    let badgeText = "text-gray-600 dark:text-slate-300";
 
+    // Semantic Status Colors
     if (isSelected) {
-        containerClass = "w-64 h-auto bg-white border-2 border-blue-500 rounded-2xl p-4 flex flex-col gap-2 shadow-lg scale-105 z-10 relative group";
-        idClass = "text-[11px] text-blue-600 font-bold tracking-wider uppercase";
-        titleClass = "text-[13px] font-bold text-gray-900 leading-tight text-right line-clamp-3";
+        containerClass = "w-64 h-auto bg-white dark:bg-slate-800 border-2 border-amber-500 dark:border-amber-400 rounded-xl p-3 flex flex-col gap-2 shadow-lg scale-105 z-10 relative group transition-all duration-300";
+        titleClass = "text-[13px] font-bold text-gray-900 dark:text-white leading-snug text-right line-clamp-2";
+        badgeBg = "bg-amber-100 dark:bg-amber-900/30";
+        badgeText = "text-amber-700 dark:text-amber-300";
     } else if (isDirectPrereq) {
-        containerClass = "w-64 h-auto bg-emerald-100 border-2 border-emerald-600 rounded-2xl p-4 flex flex-col gap-2 shadow-md relative group scale-105 z-10";
+        containerClass = "w-64 h-auto bg-white dark:bg-slate-800 border-2 border-emerald-500 dark:border-emerald-400 rounded-xl p-3 flex flex-col gap-2 shadow-md scale-105 z-10 relative group transition-all duration-300";
+        badgeBg = "bg-emerald-100 dark:bg-emerald-900/30";
+        badgeText = "text-emerald-700 dark:text-emerald-300";
     } else if (isDirectDep) {
-        containerClass = "w-64 h-auto bg-indigo-50 border-2 border-indigo-500 rounded-2xl p-4 flex flex-col gap-2 shadow-md relative group scale-105 z-10";
+        containerClass = "w-64 h-auto bg-white dark:bg-slate-800 border-2 border-indigo-500 dark:border-indigo-400 rounded-xl p-3 flex flex-col gap-2 shadow-md scale-105 z-10 relative group transition-all duration-300";
+        badgeBg = "bg-indigo-100 dark:bg-indigo-900/30";
+        badgeText = "text-indigo-700 dark:text-indigo-300";
     } else if (isCompleted) {
-        containerClass = "w-64 h-auto bg-[#f0fdf4] border-2 border-emerald-400 rounded-2xl p-4 flex flex-col gap-2 shadow-sm hover:shadow-md cursor-pointer transition-all relative group";
-        idClass = "text-[11px] text-emerald-600 font-bold tracking-wider uppercase";
+        containerClass = "w-64 h-auto bg-white dark:bg-slate-800 border-2 border-emerald-500 dark:border-emerald-400 rounded-xl p-3 flex flex-col gap-2 shadow-sm hover:shadow-md cursor-pointer transition-all relative group";
+        badgeBg = "bg-emerald-100 dark:bg-emerald-900/30";
+        badgeText = "text-emerald-700 dark:text-emerald-300";
     } else if (isPlanned) {
-        containerClass = "w-64 h-auto bg-orange-50 border-2 border-orange-400 rounded-2xl p-4 flex flex-col gap-2 shadow-sm hover:shadow-md cursor-pointer transition-all relative group";
+        containerClass = "w-64 h-auto bg-white dark:bg-slate-800 border-2 border-orange-400 dark:border-orange-400 rounded-xl p-3 flex flex-col gap-2 shadow-sm hover:shadow-md cursor-pointer transition-all relative group";
+        badgeBg = "bg-orange-100 dark:bg-orange-900/30";
+        badgeText = "text-orange-700 dark:text-orange-300";
     } else if (isAvailable) {
-        containerClass = "w-64 h-auto bg-blue-50 border-2 border-blue-400 rounded-2xl p-4 flex flex-col gap-2 shadow-sm hover:shadow-md cursor-pointer transition-all relative group";
+        containerClass = "w-64 h-auto bg-white dark:bg-slate-800 border-2 border-blue-500 dark:border-blue-400 rounded-xl p-3 flex flex-col gap-2 shadow-sm hover:shadow-md cursor-pointer transition-all relative group";
+        badgeBg = "bg-blue-100 dark:bg-blue-900/30";
+        badgeText = "text-blue-700 dark:text-blue-300";
+    } else if (isLocked) {
+        containerClass = "w-64 h-auto bg-gray-50 dark:bg-slate-800/50 border border-gray-300 dark:border-slate-600 rounded-xl p-3 flex flex-col gap-2 opacity-60 shadow-none relative group transition-all duration-300";
+        badgeBg = "bg-gray-200 dark:bg-slate-700";
+        badgeText = "text-gray-500 dark:text-slate-400";
     } else if (opacity < 1) {
-        containerClass = "w-64 h-auto bg-white border border-gray-200 rounded-2xl p-4 flex flex-col gap-2 opacity-40 shadow-none relative group";
+        containerClass = "w-64 h-auto bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl p-3 flex flex-col gap-2 opacity-40 shadow-none relative group transition-all duration-300";
     }
 
     return (
@@ -78,47 +95,37 @@ const CourseNode = ({ data, isConnectable }: any) => {
                 {isLocked && !isCompleted && <Lock size={14} />}
             </button>
 
-            <div className="pt-2">
-                <div className="flex items-center gap-2 mb-1">
-                    <span className={cn(idClass, "shrink-0 font-mono")}>{data.id}</span>
-                    {data.commonName && (
-                        <span className="text-[9px] font-black text-blue-600 bg-blue-50/80 px-1.5 py-0.5 rounded border border-blue-150 shrink-0">
-                            {data.commonName}
-                        </span>
-                    )}
-                </div>
-                <div className={titleClass}>{data.label}</div>
+            {/* Course Code Badge */}
+            <div className={cn(
+                "px-2.5 py-1 rounded-lg font-mono font-bold text-xs tracking-wider",
+                badgeBg,
+                badgeText
+            )}>
+                {data.id}
             </div>
 
-            <div className="space-y-2 text-[11px] font-medium">
-                <div className="flex items-center justify-between gap-2 px-2 py-1.5 bg-gray-50/50 dark:bg-slate-800/30 rounded-lg">
-                    <span className="text-gray-500 dark:text-slate-400">الفئة:</span>
-                    <span className="text-gray-700 dark:text-slate-200 font-semibold text-right">{data.category}</span>
-                </div>
-                
-                <div className="flex items-center justify-between gap-2 px-2 py-1.5 bg-blue-50/50 dark:bg-blue-900/20 rounded-lg">
-                    <span className="text-blue-600 dark:text-blue-400">الساعات:</span>
-                    <span className="text-blue-700 dark:text-blue-300 font-bold">{data.credits} ساعة</span>
-                </div>
+            {/* Course Name */}
+            <div className={titleClass}>{data.label}</div>
 
+            {/* Credits and Info */}
+            <div className="flex items-center justify-between gap-2">
+                <div className={cn(
+                    "px-2 py-0.5 rounded text-xs font-bold",
+                    badgeBg,
+                    badgeText
+                )}>
+                    {data.credits} ساعة
+                </div>
                 {availableSemesters && availableSemesters.length > 0 && (
-                    <div className="flex items-center justify-between gap-2 px-2 py-1.5 bg-purple-50/50 dark:bg-purple-900/20 rounded-lg">
-                        <div className="flex items-center gap-1 text-purple-600 dark:text-purple-400">
-                            <CalendarDays size={12} />
-                            <span>الفصول:</span>
-                        </div>
-                        <span className="text-purple-700 dark:text-purple-300 font-semibold text-right" title={`متاح في: ${formatOfferings(availableSemesters)}`}>
-                            {formatOfferings(availableSemesters)}
-                        </span>
+                    <div className="flex items-center gap-1 text-[10px] text-gray-500 dark:text-slate-400">
+                        <CalendarDays size={11} />
+                        <span className="font-semibold">{formatOfferings(availableSemesters)}</span>
                     </div>
                 )}
                 {seasonal && !availableSemesters && (
-                    <div className="flex items-center justify-between gap-2 px-2 py-1.5 bg-blue-50/50 dark:bg-blue-900/20 rounded-lg">
-                        <div className="flex items-center gap-1 text-blue-600 dark:text-blue-400">
-                            <Snowflake size={12} />
-                            <span>الفصول:</span>
-                        </div>
-                        <span className="text-blue-700 dark:text-blue-300 font-semibold">
+                    <div className="flex items-center gap-1 text-[10px] text-gray-500 dark:text-slate-400">
+                        <Snowflake size={11} />
+                        <span className="font-semibold">
                             {seasonal === 'first' ? 'الفصل الأول فقط' : seasonal === 'second' ? 'الفصل الثاني فقط' : 'كل الفصول'}
                         </span>
                     </div>

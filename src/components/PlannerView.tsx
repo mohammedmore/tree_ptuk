@@ -420,7 +420,9 @@ const PlannerView: React.FC<PlannerViewProps> = ({
                                     {c.id}
                                   </span>
                                   {planWarnings[c.id] && !isCompleted && (
-                                    <AlertTriangle size={12} className="text-amber-500" title={planWarnings[c.id].join('\n')} />
+                                    <span title={planWarnings[c.id].join('\n')}>
+                                      <AlertTriangle size={12} className="text-amber-500" aria-hidden="true" />
+                                    </span>
                                   )}
                                 </div>
                                 <button

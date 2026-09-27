@@ -13,7 +13,6 @@ import {
 import { cn } from "./utils";
 import {
     courseCommonNames,
-    getYearFromId,
     SEMESTERS,
     getRecommendedSemesterOfCourse,
     ELECTIVE_SLOTS_DEFS,
@@ -37,9 +36,7 @@ export default function ListView({
     selectedElectives,
     setSelectedElectives,
     completedCreditsPerCategory,
-    isDarkMode = false,
     courses = [],
-    focusNode,
     setPlanningCourseId,
     setIsPlannerOpen
     , hoveredCourseId // New prop
@@ -47,6 +44,7 @@ export default function ListView({
     , hoveredPath // New prop
 }: any) {
     const [hideCompletedInList, setHideCompletedInList] = useState(false);
+    const [expandedCategories, setExpandedCategories] = useState<Record<string, boolean>>({});
 
     const categories = useMemo(() => (
         listGroupBy === "category"
@@ -218,7 +216,7 @@ export default function ListView({
                             )}
                             title="تثبيت المسار"
                         >
-                            <Pin size={10} className={cn("transform rotate-[25deg]", isPinned && "rotate-0")} />
+                            <Pin size={10} className={cn("transform rotate-25", isPinned && "rotate-0")} />
                         </button>
                         <button onClick={(e) => { e.stopPropagation(); toggleCourseCompletion(course.id); }} className={cn("p-1 rounded border transition-colors", isComp ? "bg-red-50 text-red-650 dark:bg-red-950/40 dark:text-red-400 border-red-100" : (isAvail ? "bg-emerald-50 text-emerald-600 border-emerald-100 dark:bg-emerald-950/40 dark:text-emerald-400" : "opacity-30 cursor-not-allowed"))} disabled={!isComp && !isAvail}>
                             {isComp ? <Trash2 size={10} /> : <CircleCheckBig size={10} />}
@@ -233,13 +231,13 @@ export default function ListView({
     };
 
     return (
-        <div className="flex-1 overflow-x-auto bg-slate-50/40 dark:bg-slate-950/60 p-5 flex flex-col h-full animate-fade-in" dir="rtl">
-            <div className="mb-4 flex flex-col lg:flex-row items-center justify-between gap-4 bg-white dark:bg-slate-800 p-3 rounded-2xl border border-gray-150 dark:border-slate-700/60 shadow-sm shrink-0">
+        <div className="flex-1 overflow-x-auto bg-slate-50/40 dark:bg-slate-950/60 p-2 sm:p-5 flex flex-col h-full animate-fade-in" dir="rtl">
+            <div className="mb-3 sm:mb-4 flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-2 sm:gap-4 bg-white dark:bg-slate-800 p-2 sm:p-3 rounded-2xl border border-gray-150 dark:border-slate-700/60 shadow-sm shrink-0">
                 <div className="flex items-center gap-2">
                     <LayoutList size={18} className="text-blue-500" />
                     <span className="text-xs font-black text-gray-800 dark:text-slate-200">فرز وتصفح المواد:</span>
                     <div className="mr-4 hidden md:flex items-center gap-1.5 px-3 py-1 bg-amber-50 dark:bg-amber-900/20 border border-amber-100 dark:border-amber-800/50 rounded-lg">
-                        <Pin size={12} className="text-amber-600 rotate-[25deg]" />
+                        <Pin size={12} className="text-amber-600 rotate-25" />
                         <span className="text-[10px] font-bold text-amber-700 dark:text-amber-400">ملاحظة: عند تثبيت مادة، يظهر كامل مسارها ويرتفع للأعلى.</span>
                     </div>
                 </div>
@@ -254,11 +252,12 @@ export default function ListView({
                 </label>
             </div>
 
-            <div className="flex-1 flex gap-5 overflow-x-auto pb-4 items-start scrollbar-thin">
+            {/* Mobile: Accordion View / Desktop: Horizontal Scroll View */}
+            <div className="flex-1 flex flex-col sm:flex-row gap-3 sm:gap-5 overflow-y-auto sm:overflow-x-auto pb-4 items-start scrollbar-thin">
                 {categories.map((cat) => {
-                    let itemsList: any[] = [];
-                    let totalCr = 0;
-                    let doneCr = 0;
+                    let itemsList: any[];
+                    let totalCr: number;
+                    let doneCr: number;
 
                     if (cat.isSemester) {
                         const semCourses = activeCourses.filter((c: any) => getRecommendedSemesterOfCourse(c) === cat.key);
@@ -266,7 +265,6 @@ export default function ListView({
                         const slots = SEMESTER_ELECTIVE_SLOTS[cat.key] || [];
                         itemsList = [...mandatory.map(c => ({ type: 'course', course: c })), ...slots.map(s => ({ type: 'slot', slotId: s }))];
 
-                        // Calculate total and done credits based on what's actually in the itemsList (mandatory + slots)
                         totalCr = itemsList.reduce((sum, item) => {
                             if (item.type === 'course') return sum + item.course.credits;
                             if (item.type === 'slot') {
@@ -308,7 +306,6 @@ export default function ListView({
                         });
                     }
 
-                    // خوارزمية رفع المسار للأعلى: العناصر التي تنتمي للمسار المثبت أو الممرر عليه تأخذ الأولوية في الترتيب
                     const activePathIds = pinnedPath?.allPathNodeIds;
                     if (activePathIds) {
                         itemsList = [...itemsList].sort((a, b) => {
@@ -317,38 +314,61 @@ export default function ListView({
                             const aInPath = activePathIds.has(aId);
                             const bInPath = activePathIds.has(bId);
 
-                            if (aInPath && !bInPath) return -1; // ارفع العنصر a للأعلى
-                            if (!aInPath && bInPath) return 1;  // ارفع العنصر b للأعلى
-                            return 0; // حافظ على الترتيب الأصلي
+                            if (aInPath && !bInPath) return -1;
+                            if (!aInPath && bInPath) return 1;
+                            return 0;
                         });
                     }
 
                     const isColumnDone = doneCr >= totalCr && totalCr > 0;
+                    const isExpanded = expandedCategories[cat.key] ?? true; // Default to expanded
+
                     return (
-                        <div key={cat.key} className="w-72 shrink-0 bg-white dark:bg-slate-800 border border-gray-150 dark:border-slate-700/60 rounded-2xl flex flex-col h-full max-h-[75vh] shadow-sm overflow-hidden">
-                            <div className="p-4 bg-gray-50/50 dark:bg-slate-900/40 border-b border-gray-150 dark:border-slate-750">
+                        <div key={cat.key} className="w-full sm:w-72 max-w-75 shrink-0 bg-white dark:bg-slate-800 border border-gray-150 dark:border-slate-700/60 rounded-2xl flex flex-col shadow-sm overflow-hidden">
+                            {/* Header - Clickable on mobile for accordion */}
+                            <div
+                                className="p-4 bg-gray-50/50 dark:bg-slate-900/40 border-b border-gray-150 dark:border-slate-750 cursor-pointer sm:cursor-default"
+                                onClick={() => setExpandedCategories(prev => ({ ...prev, [cat.key]: !isExpanded }))}
+                            >
                                 <div className="flex justify-between items-center mb-2">
                                     <h3 className="text-xs font-black text-gray-800 dark:text-slate-100 truncate pr-2">{cat.label}</h3>
-                                    <span className={cn("text-[10px] font-black px-2 py-0.5 rounded-full border", isColumnDone ? "bg-emerald-100 text-emerald-700 border-emerald-200" : "bg-blue-50 text-blue-700 border-blue-100")}>{doneCr} / {totalCr} س</span>
+                                    <div className="flex items-center gap-2">
+                                        <span className={cn("text-[10px] font-black px-2 py-0.5 rounded-full border", isColumnDone ? "bg-emerald-100 text-emerald-700 border-emerald-200" : "bg-blue-50 text-blue-700 border-blue-100")}>{doneCr} / {totalCr} س</span>
+                                        <span className="sm:hidden text-gray-400">
+                                            {isExpanded ? '▼' : '▶'}
+                                        </span>
+                                    </div>
                                 </div>
                                 <div className="h-1.5 bg-gray-200 dark:bg-slate-700 rounded-full overflow-hidden"><div className={cn("h-full transition-all duration-1000", isColumnDone ? "bg-emerald-500" : "bg-blue-500")} style={{ width: `${Math.min(100, (doneCr / (totalCr || 1)) * 100)}%` }} /></div>
                             </div>
-                            <motion.div layout className="flex-1 overflow-y-auto p-3 flex flex-col gap-3 scrollbar-thin">
-                                <AnimatePresence mode="popLayout">
-                                    {itemsList.map(item => {
-                                        if (item.type === 'course') {
-                                            return renderCard(item.course);
-                                        } else {
-                                            const selectedCourseId = selectedElectives[item.slotId];
-                                            const course = courses.find((c: Course) => c.id === selectedCourseId);
-                                            if (course && ELECTIVE_SLOTS_DEFS[item.slotId]) {
-                                                return renderCard(course, ELECTIVE_SLOTS_DEFS[item.slotId].label, item.slotId);
-                                            }
-                                            return null;
-                                        }
-                                    })}
-                                </AnimatePresence>
-                            </motion.div>
+
+                            {/* Content - Collapsible on mobile, always visible on desktop */}
+                            <AnimatePresence>
+                                {(isExpanded || window.innerWidth >= 640) && (
+                                    <motion.div
+                                        layout
+                                        initial={{ height: 0, opacity: 0 }}
+                                        animate={{ height: "auto", opacity: 1 }}
+                                        exit={{ height: 0, opacity: 0 }}
+                                        className="flex-1 overflow-y-auto p-3 flex flex-col gap-3 scrollbar-thin"
+                                    >
+                                        <AnimatePresence mode="popLayout">
+                                            {itemsList.map(item => {
+                                                if (item.type === 'course') {
+                                                    return renderCard(item.course);
+                                                } else {
+                                                    const selectedCourseId = selectedElectives[item.slotId];
+                                                    const course = courses.find((c: Course) => c.id === selectedCourseId);
+                                                    if (course && ELECTIVE_SLOTS_DEFS[item.slotId]) {
+                                                        return renderCard(course, ELECTIVE_SLOTS_DEFS[item.slotId].label, item.slotId);
+                                                    }
+                                                    return null;
+                                                }
+                                            })}
+                                        </AnimatePresence>
+                                    </motion.div>
+                                )}
+                            </AnimatePresence>
                         </div>
                     );
                 })}

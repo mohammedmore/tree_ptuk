@@ -7,6 +7,18 @@ export interface Course {
   category: string;
   seasonal?: 'first' | 'second' | 'both'; // 'first' = الفصل الأول, 'second' = الفصل الثاني, 'both' = كلاهما
   availableSemesters?: ('first' | 'second' | 'summer')[]; // فترات طرح المادة: الفصل الأول، الثاني، الصيفي
+  resourceLink?: string; // Optional link to IVR Library resources for this course
+}
+
+export interface ScheduleEntry {
+  day?: string;
+  startTime: string;
+  endTime: string;
+  location?: string;
+  instructor?: string;
+  days?: string[];
+  room?: string;
+  section?: string;
 }
 
 export const categoryRequirements: Record<string, number> = {

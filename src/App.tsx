@@ -5,7 +5,6 @@ import React, {
   useMemo,
   useRef,
 } from "react";
-import { motion } from "motion/react";
 import {
   ReactFlow,
   Controls,
@@ -18,38 +17,28 @@ import {
   ReactFlowProvider,
   useReactFlow,
 } from "@xyflow/react";
-import { toPng } from "html-to-image";
-import { jsPDF } from "jspdf";
 import {
-  Menu,
   X,
   Search,
   CircleCheckBig,
   Lock,
   BookOpen,
   Trash2,
-  Maximize,
   Target,
   Download,
   Printer,
   Upload,
   Pin,
   CalendarDays,
-  Sparkles,
-  Loader2,
-  Image as ImageIcon,
   MessageCircle,
-  Heart,
   Map as MapIcon,
   LayoutList,
   Moon,
   Sun,
-  ChevronDown,
-  ChevronUp,
   Calculator,
 } from "lucide-react";
 import "@xyflow/react/dist/style.css";
-import { courses, Course, categoryRequirements } from "./data";
+import { courses, Course, ScheduleEntry, categoryRequirements } from "./data";
 
 import { getLayoutedElements, cn } from "./utils";
 import { getCourseDetails } from "./courseExplanations";
@@ -66,9 +55,9 @@ import SupportModal from "./components/SupportModal"; // Import the new componen
 import ExportModal from "./components/ExportModal"; // Import the new component
 import PlanningModeModal from "./components/PlanningModeModal"; // Import the new component
 import CourseListModal from "./components/CourseListModal"; // Import the new component
-import DynamicCourseDetailsModal from "./components/DynamicCourseDetailsModal"; // Import the new component
 import PlannerView from "./components/PlannerView"; // Import the new component
 import { GPAModal } from "./components/GPAModal";
+import { WeeklyScheduleModal } from "./components/WeeklyScheduleModal";
 
 // تحسين: تمرير الـ edges كمعامل لجعل الدالة نقية (Pure Function) وقابلة للاختبار
 export const getPathForCourse = (nodeId: string, edges: Edge[]) => {
@@ -284,9 +273,9 @@ function FlowComponent() {
   const [plannedCourses, setPlannedCourses] = useLocalStorage<
     Record<string, string>
   >("planned_courses", {});
-  const [prioritizedElectives, setPrioritizedElectives] = useLocalStorage<
-    Set<string>
-  >("prioritized_electives", new Set());
+  const [weeklySchedule, setWeeklySchedule] = useLocalStorage<
+    Record<string, Record<string, ScheduleEntry>>
+  >("weekly_schedule", {});
   const [selectedElectives, setSelectedElectives] = useLocalStorage<Record<string, string>>(
     "selected_electives_map",
     {
@@ -303,20 +292,18 @@ function FlowComponent() {
   const [isPlanningModeOpen, setIsPlanningModeOpen] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isPlannerOpen, setIsPlannerOpen] = useState(false);
+  const [isWeeklyScheduleOpen, setIsWeeklyScheduleOpen] = useState(false);
   const [currentPlanningSemester, setCurrentPlanningSemester] = useState<string | null>(null);
   const [isCourseListModalOpen, setIsCourseListModalOpen] = useState(false);
   const [isGPAModalOpen, setIsGPAModalOpen] = useState(false);
   const [courseListTab, setCourseListTab] = useState<"available" | "completed" | "all">("available");
   const [expandedCourseListCategories, setExpandedCourseListCategories] = useState<Record<string, boolean>>({});
   const [hasHighGpa, setHasHighGpa] = useState(false);
-  const [showElectivesList, setShowElectivesList] = useState(false);
   const [expandedPlanningCategories, setExpandedPlanningCategories] = useState<Record<string, boolean>>({});
-  const [isExportLoading, setIsExportLoading] = useState(false);
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
   const [isSupportModalOpen, setIsSupportModalOpen] = useState(false);
   const [planningCourseId, setPlanningCourseId] = useState<string | null>(null);
   const [showResetConfirm, setShowResetConfirm] = useState(false);
-  const [showCriticalPath, setShowCriticalPath] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [activeTab, setActiveTab] = useState<"available" | "completed" | "all">(
     "available",
@@ -331,9 +318,6 @@ function FlowComponent() {
     "plan_end_semester",
     SEMESTERS[SEMESTERS.length - 1],
   );
-  const [plannerSelectedCourse, setPlannerSelectedCourse] =
-    useState<Course | null>(null);
-  const [isRescheduling, setIsRescheduling] = useState(false);
   const [hidePastSemesters, setHidePastSemesters] = useLocalStorage<boolean>(
     "hide_past_semesters",
     true,
@@ -349,11 +333,6 @@ function FlowComponent() {
     {}
   );
 
-  const [courseRepeats, setCourseRepeats] = useLocalStorage<Record<string, number>>(
-    "course_repeats",
-    {}
-  );
-
   const [failedCourseIds, setFailedCourseIds] = useLocalStorage<string[]>(
     "failed_course_ids",
     []
@@ -365,7 +344,7 @@ function FlowComponent() {
     if (!hoveredCourseId) return null;
     // استخدام layoutedEdges بدلاً من الاعتماد على متغير خارجي
     return getPathForCourse(hoveredCourseId, layoutedEdges);
-  }, [hoveredCourseId]);
+  }, [hoveredCourseId, layoutedEdges]);
 
   useEffect(() => {
     if (isDarkMode) {
@@ -391,14 +370,6 @@ function FlowComponent() {
     return getPathForCourse(pinnedCourseId, layoutedEdges);
   }, [pinnedCourseId]);
 
-  const applyPlan = (plan: Record<string, string>) => {
-    // تحديث الخطة المجدولة
-    setPlannedCourses(plan);
-
-    setIsPlannerOpen(true);
-    setIsPlanningModeOpen(false);
-  };
-
   const handleReset = () => {
     setShowResetConfirm(true);
   };
@@ -406,6 +377,7 @@ function FlowComponent() {
   const localStorageKeys = [
     "completed_courses",
     "planned_courses",
+    "weekly_schedule",
     "prioritized_electives",
     "selected_electives_map",
     "plan_start_semester",
@@ -420,7 +392,6 @@ function FlowComponent() {
   const confirmReset = () => {
     setCompletedCourses(new Set());
     setPlannedCourses({});
-    setCourseRepeats({});
     setFailedCourseIds([]);
     localStorageKeys.forEach(key => window.localStorage.removeItem(key)); // Clear only app-specific keys
     setShowResetConfirm(false);
@@ -454,10 +425,6 @@ function FlowComponent() {
     };
     reader.readAsText(file);
     if (fileInputRef.current) fileInputRef.current.value = "";
-  };
-
-  const handleZoomToFit = () => {
-    fitView({ duration: 800, padding: 0.2 });
   };
 
   const handleExportCsv = () => {
@@ -557,50 +524,6 @@ function FlowComponent() {
   const plannedPercentage =
     Math.round((plannedCredits / TOTAL_CREDITS) * 100) || 0;
 
-  const criticalPath = useMemo(() => {
-    const memo: Record<string, { length: number; path: string[] }> = {};
-
-    function getLongestPathEndingAt(courseId: string): {
-      length: number;
-      path: string[];
-    } {
-      if (memo[courseId]) return memo[courseId];
-
-      const course = courses.find((c) => c.id === courseId);
-      if (!course) return { length: 0, path: [] };
-
-      if (course.prerequisites.length === 0) {
-        return (memo[courseId] = { length: 1, path: [courseId] });
-      }
-
-      let maxLength = 0;
-      let longestPrevPath: string[] = [];
-
-      course.prerequisites.forEach((prereqId) => {
-        const { length, path } = getLongestPathEndingAt(prereqId);
-        if (length > maxLength) {
-          maxLength = length;
-          longestPrevPath = path;
-        }
-      });
-
-      return (memo[courseId] = {
-        length: maxLength + 1,
-        path: [...longestPrevPath, courseId],
-      });
-    }
-
-    let overallMax = { length: 0, path: [] as string[] };
-    courses.forEach((c) => {
-      const p = getLongestPathEndingAt(c.id);
-      if (p.length > overallMax.length) {
-        overallMax = p;
-      }
-    });
-
-    return new Set(overallMax.path);
-  }, []);
-
   const toggleCourseCompletion = useCallback(
     (courseId: string) => {
       setCompletedCourses((prev) => {
@@ -621,101 +544,6 @@ function FlowComponent() {
     },
     [setCompletedCourses],
   );
-
-  const togglePrioritizedElective = useCallback(
-    (courseId: string) => {
-      setPrioritizedElectives((prev) => {
-        const next = new Set(prev);
-        if (next.has(courseId)) {
-          next.delete(courseId);
-        } else {
-          next.add(courseId);
-        }
-        return next;
-      });
-    },
-    [setPrioritizedElectives],
-  );
-
-  const exportToImage = async () => {
-    const element = document.getElementById("study-plan-printable");
-    if (!element) return;
-
-    setIsExportLoading(true);
-    try {
-      // Small delay to ensure styles and fonts are ready
-      await new Promise((resolve) => setTimeout(resolve, 500));
-
-      const dataUrl = await toPng(element, {
-        backgroundColor: "#ffffff",
-        quality: 1,
-        cacheBust: true,
-        pixelRatio: 3, // High resolution for the long image
-        style: {
-          margin: "0",
-          padding: "40px",
-          borderRadius: "0",
-        },
-      });
-
-      const link = document.createElement("a");
-      link.download = `خطة-التخرج-${new Date().toLocaleDateString("ar-EG")}.png`;
-      link.href = dataUrl;
-      link.click();
-    } catch (err) {
-      console.error("Export failed", err);
-    } finally {
-      setIsExportLoading(false);
-    }
-  };
-
-  const exportToPdf = async () => {
-    const element = document.getElementById("study-plan-printable");
-    if (!element) return;
-
-    setIsExportLoading(true);
-    try {
-      // Small delay to ensure styles are fully loaded
-      await new Promise((resolve) => setTimeout(resolve, 500));
-
-      const dataUrl = await toPng(element, {
-        backgroundColor: "#ffffff",
-        quality: 1,
-        cacheBust: true,
-        pixelRatio: 2, // 2 is optimal for sharp results without excessive file size
-        style: {
-          margin: "0",
-          padding: "40px",
-          borderRadius: "0",
-        },
-      });
-
-      const img = new Image();
-      img.src = dataUrl;
-      img.onload = () => {
-        const pdf = new jsPDF("p", "mm", "a4");
-        const imgWidth = 210; // A4 width in mm
-        const pageHeight = 295; // A4 height in mm
-        const imgHeight = (img.height * imgWidth) / img.width;
-        let heightLeft = imgHeight;
-
-        pdf.addImage(dataUrl, "PNG", 0, 0, imgWidth, imgHeight); // Changed position to 0
-        heightLeft -= pageHeight;
-
-        while (heightLeft >= 0) {
-          pdf.addPage();
-          pdf.addImage(dataUrl, "PNG", 0, heightLeft - imgHeight, imgWidth, imgHeight); // Adjusted position
-          heightLeft -= pageHeight;
-        }
-
-        pdf.save(`خطة-التخرج-${new Date().toLocaleDateString("ar-EG")}.pdf`);
-        setIsExportLoading(false);
-      };
-    } catch (err) {
-      console.error("Exporting to PDF failed:", err);
-      setIsExportLoading(false);
-    }
-  };
 
   const onPaneClick = useCallback(() => {
     setSelectedNodeId(null);
@@ -767,17 +595,20 @@ function FlowComponent() {
     const directPrereqs = new Set<string>();
     const directDeps = new Set<string>();
 
-    if (selectedNodeId) {
+    // Use hoveredCourseId for hover effect, or selectedNodeId for click effect
+    const activeNodeId = hoveredCourseId || selectedNodeId;
+
+    if (activeNodeId) {
       // استخراج المنطق لدالة getPathForCourse التي قمنا بتحسينها بالأعلى
-      const { ancestors: anc, descendants: des } = getPathForCourse(selectedNodeId, layoutedEdges);
+      const { ancestors: anc, descendants: des } = getPathForCourse(activeNodeId, layoutedEdges);
       anc.forEach(id => ancestors.add(id));
       des.forEach(id => descendants.add(id));
 
       layoutedEdges.forEach((e) => {
-        if (e.target === selectedNodeId) {
+        if (e.target === activeNodeId) {
           directPrereqs.add(e.source);
         }
-        if (e.source === selectedNodeId) {
+        if (e.source === activeNodeId) {
           directDeps.add(e.target);
         }
       });
@@ -785,11 +616,6 @@ function FlowComponent() {
 
     setNodes((nds) =>
       nds.map((n) => {
-        // const selectedElectiveIds = new Set(Object.values(selectedElectives)); // Not needed as showAllInMap is always true
-        // const cObj = courses.find((c) => c.id === n.id); // Not needed as showAllInMap is always true
-        // const isElective = cObj?.category === 'متطلب جامعة اختياري' || cObj?.category === 'متطلب تخصص اختياري'; // Not needed as showAllInMap is always true
-        // const isActiveElective = isElective && selectedElectiveIds.has(n.id); // Not needed as showAllInMap is always true
-        // const isHidden = !showAllInMap && isElective && !isActiveElective; // Simplified to always false
         const isHidden = false; // Always show all nodes
 
         const isCompleted = completedCourses.has(n.id);
@@ -803,20 +629,19 @@ function FlowComponent() {
         let isDirectPrereq = false;
         let isDirectDep = false;
         let opacity = 1;
-        let isCriticalPath = showCriticalPath && criticalPath.has(n.id);
-
-        if (selectedNodeId) {
-          isSelected = n.id === selectedNodeId;
+        if (activeNodeId) {
+          isSelected = n.id === activeNodeId;
           isAncestor = ancestors.has(n.id);
           isDescendant = descendants.has(n.id);
           isDirectPrereq = directPrereqs.has(n.id);
           isDirectDep = directDeps.has(n.id);
+          // Dim all nodes except the active path
           opacity =
-            n.id === selectedNodeId ||
+            n.id === activeNodeId ||
               ancestors.has(n.id) ||
               descendants.has(n.id)
               ? 1
-              : 0.2;
+              : 0.15;
         }
 
         return {
@@ -834,13 +659,14 @@ function FlowComponent() {
             plannedSemester,
             isAvailable,
             opacity,
-            isCriticalPath,
             toggleCompleted: () => toggleCourseCompletion(n.id),
             showDetails: () => openDetails(n.id),
             onPlan: () => {
               setPlanningCourseId(n.id);
               setIsPlannerOpen(true);
-            }
+            },
+            onHoverStart: () => setHoveredCourseId(n.id),
+            onHoverEnd: () => setHoveredCourseId(null),
           },
         };
       }),
@@ -849,74 +675,58 @@ function FlowComponent() {
     setEdges((eds) => {
       // const selectedElectiveIds = new Set(Object.values(selectedElectives)); // Not needed as showAllInMap is always true
       const processed = eds.map((e) => {
-        const isCriticalPathEdge =
-          showCriticalPath &&
-          criticalPath.has(e.source) &&
-          criticalPath.has(e.target);
+        // Use hoveredCourseId for hover effect, or selectedNodeId for click effect
+        const activeNodeId = hoveredCourseId || selectedNodeId;
 
-        if (!selectedNodeId) {
-          if (isCriticalPathEdge) {
-            return {
-              ...e,
-              animated: true,
-              style: { stroke: "#a855f7", strokeWidth: 4, opacity: 1 },
-              markerEnd: { type: MarkerType.ArrowClosed, color: "#a855f7" },
-            };
-          }
+        if (!activeNodeId) {
+          // Default neutral edge color (#94A3B8)
           return {
             ...e,
             animated: false,
-            style: { stroke: "#94a3b8", strokeWidth: 1.5, opacity: 1 },
-            markerEnd: { type: MarkerType.ArrowClosed, color: "#94a3b8" },
+            style: { stroke: "#94A3B8", strokeWidth: 2, opacity: 1 },
+            markerEnd: { type: MarkerType.ArrowClosed, color: "#94A3B8" },
           };
         }
 
         // Find if this edge is part of the ancestor path
         const isAncestorEdge =
           ancestors.has(e.source) &&
-          (ancestors.has(e.target) || e.target === selectedNodeId);
+          (ancestors.has(e.target) || e.target === activeNodeId);
         // Find if this edge is part of the descendant path
         const isDescendantEdge =
-          (descendants.has(e.source) || e.source === selectedNodeId) &&
+          (descendants.has(e.source) || e.source === activeNodeId) &&
           descendants.has(e.target);
 
-        const isDirectPrereqEdge = e.target === selectedNodeId;
-        const isDirectDepEdge = e.source === selectedNodeId;
+        const isDirectPrereqEdge = e.target === activeNodeId;
+        const isDirectDepEdge = e.source === activeNodeId;
 
         if (isDirectPrereqEdge) {
           return {
             ...e,
             animated: true,
-            style: { stroke: "#059669", strokeWidth: 3, opacity: 1 },
-            markerEnd: { type: MarkerType.ArrowClosed, color: "#059669" },
+            style: { stroke: "#6366F1", strokeWidth: 3, opacity: 1 },
+            markerEnd: { type: MarkerType.ArrowClosed, color: "#6366F1" },
           };
         } else if (isDirectDepEdge) {
           return {
             ...e,
             animated: true,
-            style: { stroke: "#4f46e5", strokeWidth: 3, opacity: 1 },
-            markerEnd: { type: MarkerType.ArrowClosed, color: "#4f46e5" },
+            style: { stroke: "#6366F1", strokeWidth: 3, opacity: 1 },
+            markerEnd: { type: MarkerType.ArrowClosed, color: "#6366F1" },
           };
-        } else if (isCriticalPathEdge) {
-          return {
-            ...e,
-            animated: true,
-            style: { stroke: "#a855f7", strokeWidth: 4, opacity: 1 },
-            markerEnd: { type: MarkerType.ArrowClosed, color: "#a855f7" },
-          };
-        } else if (isAncestorEdge) {
+        } else if (isAncestorEdge || isDescendantEdge) {
           return {
             ...e,
             animated: false,
-            style: { stroke: "#6ee7b7", strokeWidth: 1.5, opacity: 0.7 },
-            markerEnd: { type: MarkerType.ArrowClosed, color: "#6ee7b7" },
+            style: { stroke: "#6366F1", strokeWidth: 2, opacity: 0.8 },
+            markerEnd: { type: MarkerType.ArrowClosed, color: "#6366F1" },
           };
         } else {
           return {
             ...e,
             animated: false,
-            style: { stroke: "#e5e7eb", strokeWidth: 1.5, opacity: 0.3 },
-            markerEnd: { type: MarkerType.ArrowClosed, color: "#e5e7eb" },
+            style: { stroke: "#94A3B8", strokeWidth: 1.5, opacity: 0.2 },
+            markerEnd: { type: MarkerType.ArrowClosed, color: "#94A3B8" },
           };
         }
       });
@@ -940,6 +750,7 @@ function FlowComponent() {
     });
   }, [
     selectedNodeId,
+    hoveredCourseId,
     setNodes,
     setEdges,
     completedCourses,
@@ -947,23 +758,24 @@ function FlowComponent() {
     availableCourses,
     toggleCourseCompletion,
     selectedElectives,
+    layoutedEdges,
     // Removed showAllInMap from dependencies
   ]);
 
   return (
     <div
       className={cn(
-        "w-screen h-screen print:h-auto overflow-hidden print:overflow-visible flex flex-col font-sans sm:p-4 print:p-0 transition-colors duration-300",
+        "w-screen h-dvh print:h-auto overflow-hidden print:overflow-visible flex flex-col font-sans p-0 sm:p-4 print:p-0 transition-colors duration-300",
         isDarkMode ? "dark bg-[#0f172a]" : "bg-[#f3f4f6] print:bg-white"
       )}
       dir="rtl"
     >
       <div className="print:hidden w-full h-full flex flex-col">
         {/* Header Section */}
-        <header className="flex flex-col xl:flex-row justify-between items-start xl:items-center mb-4 bg-white dark:bg-slate-800/95 p-4 sm:p-6 rounded-b-none sm:rounded-xl shadow-sm border-b sm:border border-gray-200 dark:border-slate-700/80 z-10 shrink-0 gap-4 transition-all">
+        <header className="flex flex-col xl:flex-row justify-between items-start xl:items-center mb-2 sm:mb-4 bg-white dark:bg-slate-800/95 p-3 sm:p-6 rounded-b-none sm:rounded-xl shadow-sm border-b sm:border border-gray-200 dark:border-slate-700/80 z-10 shrink-0 gap-3 sm:gap-4 transition-all">
           <div className="flex justify-between items-start w-full xl:w-auto gap-4">
             <div>
-              <h1 className="text-lg sm:text-2xl font-bold text-gray-900 dark:text-slate-100 mb-1 flex flex-wrap items-center gap-3">
+              <h1 className="text-base sm:text-2xl font-bold text-gray-900 dark:text-slate-100 mb-1 flex flex-wrap items-center gap-2 sm:gap-3">
                 {/* Removed the toggle buttons for "خطة التخرج" and "كامل المنهاج" */}
                 <BookOpen className="text-blue-600 dark:text-blue-400 hidden sm:block" size={24} />
                 خريطة المتطلبات الأكاديمية
@@ -975,7 +787,7 @@ function FlowComponent() {
                     setHoveredCourseId(null); // تصفير حالة التمرير
                     setPlanningCourseId(null); // تصفير مادة التخطيط عند الدخول للوضع العام
                   }}
-                  className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg transition-colors cursor-pointer shadow-sm ml-auto sm:ml-0 font-black"
+                  className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1 sm:py-1.5 text-xs sm:text-sm bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg transition-colors cursor-pointer shadow-sm ml-auto sm:ml-0 font-black"
                 >
                   <MapIcon size={16} />
                   وضع التخطيط
@@ -987,7 +799,7 @@ function FlowComponent() {
                     setIsDetailsOpen(false);
                     setHoveredCourseId(null);
                   }}
-                  className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors cursor-pointer shadow-sm font-black"
+                  className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1 sm:py-1.5 text-xs sm:text-sm bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors cursor-pointer shadow-sm font-black"
                 >
                   <LayoutList size={16} />
                   قائمة المواد
@@ -999,34 +811,42 @@ function FlowComponent() {
                     setIsDetailsOpen(false);
                     setHoveredCourseId(null);
                   }}
-                  className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-indigo-500 hover:bg-indigo-600 text-white rounded-lg transition-colors cursor-pointer shadow-sm font-black"
+                  className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1 sm:py-1.5 text-xs sm:text-sm bg-indigo-500 hover:bg-indigo-600 text-white rounded-lg transition-colors cursor-pointer shadow-sm font-black"
                 >
                   <Calculator size={16} />
-                  المعدل والدرجات
+                  <span className="hidden xs:inline sm:inline">المعدل والدرجات</span>
+                  <span className="xs:hidden sm:hidden">المعدل</span>
                 </button>
                 <button
                   onClick={(e) => {
                     e.stopPropagation(); // Prevent event bubbling
                     setIsPlannerOpen(true);
-                    setPlannerSelectedCourse(null); // Ensure no specific course is selected when opening the main planner
                     setSelectedNodeId(null);
                     setIsDetailsOpen(false);
                     setHoveredCourseId(null);
                     setPlanningCourseId(null);
                   }}
-                  className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-orange-100 hover:bg-orange-200 text-orange-700 dark:bg-orange-950/70 dark:text-orange-300 dark:hover:bg-orange-900/50 rounded-lg transition-colors cursor-pointer shadow-sm font-bold"
+                  className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1 sm:py-1.5 text-xs sm:text-sm bg-orange-100 hover:bg-orange-200 text-orange-700 dark:bg-orange-950/70 dark:text-orange-300 dark:hover:bg-orange-900/50 rounded-lg transition-colors cursor-pointer shadow-sm font-bold"
                 >
                   <CalendarDays size={16} />
                   عرض الخطة
                 </button>
+                <button
+                  onClick={() => setIsWeeklyScheduleOpen(true)}
+                  className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1 sm:py-1.5 text-xs sm:text-sm bg-cyan-100 hover:bg-cyan-200 text-cyan-700 dark:bg-cyan-950/70 dark:text-cyan-300 dark:hover:bg-cyan-900/50 rounded-lg transition-colors cursor-pointer shadow-sm font-bold"
+                >
+                  <CalendarDays size={16} />
+                  الجدول الأسبوعي
+                </button>
 
                 <button
                   onClick={() => setIsSupportModalOpen(true)}
-                  className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-emerald-100 hover:bg-emerald-200 text-emerald-700 dark:bg-emerald-950/70 dark:text-emerald-300 dark:hover:bg-emerald-900/50 rounded-lg transition-colors cursor-pointer shadow-sm font-semibold"
+                  className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1 sm:py-1.5 text-xs sm:text-sm bg-emerald-100 hover:bg-emerald-200 text-emerald-700 dark:bg-emerald-950/70 dark:text-emerald-300 dark:hover:bg-emerald-900/50 rounded-lg transition-colors cursor-pointer shadow-sm font-semibold"
                   title="الدعم والاقتراحات"
                 >
                   <MessageCircle size={16} className="text-emerald-600 dark:text-emerald-400" />
-                  <span>الدعم والاقتراحات</span>
+                  <span className="hidden sm:inline">الدعم والاقتراحات</span>
+                  <span className="sm:hidden">الدعم</span>
                 </button>
               </h1>
               <p className="text-[10px] sm:text-sm text-gray-500 dark:text-slate-400 uppercase font-semibold flex items-center gap-2">
@@ -1035,15 +855,15 @@ function FlowComponent() {
                 فلسطين التقنية - خضوري (PTUK)
               </p>
               <div className="mt-2 hidden sm:flex items-center gap-2 text-[10px] font-bold text-amber-600 dark:text-amber-400 bg-amber-50/50 dark:bg-amber-900/10 px-3 py-1 rounded-lg border border-amber-100 dark:border-amber-900/30 w-fit animate-in fade-in slide-in-from-right-2 duration-500">
-                <Pin size={12} className="rotate-[25deg]" />
+                <Pin size={12} className="rotate-25" />
                 <span>ملاحظة: عند تثبيت المادة، يظهر كامل المسار المعتمد عليها والمتطلبات السابقة.</span>
               </div>
             </div>
           </div>
 
           {/* Search & Actions */}
-          <div className="w-full xl:w-auto flex flex-col sm:flex-row items-stretch sm:items-center gap-4">
-            <div className="relative group flex-1 sm:w-64">
+          <div className="w-full xl:w-auto flex flex-col sm:flex-row flex-wrap items-stretch sm:items-center gap-2 sm:gap-4">
+            <div className="relative group flex-1 min-w-45 sm:w-64">
               <Search
                 className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-blue-500 transition-colors"
                 size={16}
@@ -1110,7 +930,7 @@ function FlowComponent() {
             </div>
 
             {/* تبديل عرض الخريطة / القواسم العمودية */}
-            <div className="flex bg-gray-150 dark:bg-slate-850 p-1 rounded-xl border border-gray-200 dark:border-slate-700 h-[38px] shrink-0">
+            <div className="flex bg-gray-150 dark:bg-slate-850 p-1 rounded-xl border border-gray-200 dark:border-slate-700 h-9.5 shrink-0">
               <button
                 onClick={() => setViewMode("map")}
                 className={cn(
@@ -1142,7 +962,7 @@ function FlowComponent() {
             {/* زر المود الليلي */}
             <button
               onClick={() => setIsDarkMode(!isDarkMode)}
-              className="flex items-center justify-center w-[38px] h-[38px] rounded-xl bg-white dark:bg-slate-800 hover:bg-gray-100 dark:hover:bg-slate-700 border border-gray-200 dark:border-slate-700 cursor-pointer shadow-sm transition-colors text-gray-600 dark:text-yellow-400 shrink-0"
+              className="flex items-center justify-center w-9.5 h-9.5 rounded-xl bg-white dark:bg-slate-800 hover:bg-gray-100 dark:hover:bg-slate-700 border border-gray-200 dark:border-slate-700 cursor-pointer shadow-sm transition-colors text-gray-600 dark:text-yellow-400 shrink-0"
               title={isDarkMode ? "الوضع المضيء" : "الوضع المظلم"}
             >
               {isDarkMode ? <Sun size={18} /> : <Moon size={18} />}
@@ -1150,12 +970,12 @@ function FlowComponent() {
 
             <button
               onClick={handleReset}
-              className="hidden sm:flex items-center justify-center gap-2 px-3 py-2 text-sm text-red-600 dark:text-red-500 bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-800 rounded-lg transition-colors h-[38px]"
+              className="hidden sm:flex items-center justify-center gap-2 px-3 py-2 text-sm text-red-600 dark:text-red-500 bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-800 rounded-lg transition-colors h-9.5"
             >
               <Trash2 size={16} /> ممحاة
             </button>
 
-            <div className="flex-col hidden lg:flex bg-gray-50 dark:bg-slate-800/80 border border-gray-100 dark:border-slate-700 rounded-lg px-4 py-1.5 min-w-[200px]">
+            <div className="flex-col hidden lg:flex bg-gray-50 dark:bg-slate-800/80 border border-gray-100 dark:border-slate-700 rounded-lg px-4 py-1.5 min-w-50">
               <div className="flex justify-between items-center mb-1">
                 <span className="text-xs font-bold text-gray-600 dark:text-slate-300">
                   نسبة الإنجاز
@@ -1216,41 +1036,93 @@ function FlowComponent() {
                 <Controls
                   className="bg-white dark:bg-slate-800 dark:border-slate-700 shadow-md rounded-md border border-gray-200 dark:text-white overflow-hidden"
                   showInteractive={false}
-                  showFitView={false}
+                  showFitView={true}
                 />
               </ReactFlow>
 
-              {/* Legend */}
-              <div
-                className="absolute bottom-4 right-4 sm:bottom-6 sm:right-6 bg-white dark:bg-slate-800 p-3 sm:p-4 rounded-xl shadow-xl border border-gray-200 dark:border-slate-700 flex flex-col gap-2 z-10"
-                dir="rtl"
-              >
-                <div className="text-[10px] sm:text-xs font-bold text-gray-400 dark:text-slate-400 mb-1 uppercase tracking-wider">
-                  مؤشر الألوان
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="w-3 h-3 rounded bg-blue-500 shadow-sm"></span>
-                  <span className="text-xs text-gray-700 dark:text-slate-200 font-semibold">محددة</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="w-3 h-3 rounded bg-emerald-400 shadow-sm border border-emerald-500"></span>
-                  <span className="text-xs text-gray-700 dark:text-slate-200 font-semibold">منجزة</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="w-3 h-3 rounded bg-blue-50 dark:bg-blue-950/40 border border-blue-400"></span>
-                  <span className="text-xs text-gray-700 dark:text-slate-200 font-semibold">متاحة</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="w-3 h-3 rounded bg-purple-500 shadow-lg shadow-purple-200 ring-2 ring-purple-300 dark:ring-purple-900"></span>
-                  <span className="text-xs text-purple-700 dark:text-purple-300 font-black">
-                    المسار الحرج
-                  </span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="w-3 h-3 rounded bg-white dark:bg-slate-700 border border-gray-200 dark:border-slate-650"></span>
-                  <span className="text-xs text-gray-500 dark:text-slate-400 font-semibold">مغلقة</span>
-                </div>
-              </div>
+              {/* Selected Course Prereq/Dependent Info Box */}
+              {selectedNodeId && (() => {
+                const selCourse = courses.find((c) => c.id === selectedNodeId);
+                if (!selCourse) return null;
+                const prereqs = selCourse.prerequisites || [];
+                const dependents = courses.filter((c) => c.prerequisites.includes(selectedNodeId)).map((c) => c.id);
+                return (
+                  <div
+                    className="absolute top-2 left-2 sm:top-6 sm:left-6 bg-white dark:bg-slate-800 p-2.5 sm:p-4 rounded-xl shadow-xl border border-gray-200 dark:border-slate-700 flex flex-col gap-2 z-10 w-[calc(100vw-1rem)] max-w-70 sm:w-70 max-h-[60vh] sm:max-h-[70vh] overflow-y-auto"
+                    dir="rtl"
+                  >
+                    <div className="flex items-center justify-between gap-2 pb-2 border-b border-gray-100 dark:border-slate-700">
+                      <div className="text-[11px] font-black text-blue-600 dark:text-blue-400 font-mono">{selCourse.id}</div>
+                      <button
+                        onClick={() => setSelectedNodeId(null)}
+                        className="text-gray-400 hover:text-gray-600 dark:hover:text-slate-200 text-xs"
+                        title="إغلاق"
+                      >✕</button>
+                    </div>
+                    <div className="text-[12px] font-bold text-gray-700 dark:text-slate-200 leading-tight">{selCourse.name}</div>
+
+                    <div className="mt-1">
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-[11px] font-bold text-emerald-700 dark:text-emerald-400">المتطلبات السابقة</span>
+                        <span className="text-[10px] font-black bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300 px-1.5 py-0.5 rounded">{prereqs.length}</span>
+                      </div>
+                      {prereqs.length === 0 ? (
+                        <div className="text-[10px] text-gray-400">لا يوجد</div>
+                      ) : (
+                        <div className="flex flex-wrap gap-1">
+                          {prereqs.map((pid) => {
+                            const p = courses.find((c) => c.id === pid);
+                            return (
+                              <button
+                                key={pid}
+                                onClick={() => { setSelectedNodeId(pid); focusNode(pid); }}
+                                className="flex items-center gap-1.5 text-[10px] font-bold bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 px-2 py-1 rounded hover:bg-emerald-100 max-w-full transition-colors cursor-pointer group relative"
+                                title={`انقر للانتقال إلى ${p?.name || pid}`}
+                              >
+                                <span className="font-mono">{pid}</span>
+                                {p?.name && <span className="font-normal truncate">{p.name}</span>}
+                                <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="shrink-0 ml-0.5">
+                                  <path d="M7 17l9.2-9.2M17 17V7H7"/>
+                                </svg>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="mt-1">
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-[11px] font-bold text-indigo-700 dark:text-indigo-400">المواد التي تفتحها</span>
+                        <span className="text-[10px] font-black bg-indigo-100 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300 px-1.5 py-0.5 rounded">{dependents.length}</span>
+                      </div>
+                      {dependents.length === 0 ? (
+                        <div className="text-[10px] text-gray-400">لا يوجد</div>
+                      ) : (
+                        <div className="flex flex-wrap gap-1">
+                          {dependents.map((did) => {
+                            const p = courses.find((c) => c.id === did);
+                            return (
+                              <button
+                                key={did}
+                                onClick={() => { setSelectedNodeId(did); focusNode(did); }}
+                                className="flex items-center gap-1.5 text-[10px] font-bold bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 px-2 py-1 rounded hover:bg-indigo-100 max-w-full transition-colors cursor-pointer group relative"
+                                title={`انقر للانتقال إلى ${p?.name || did}`}
+                              >
+                                <span className="font-mono">{did}</span>
+                                {p?.name && <span className="font-normal truncate">{p.name}</span>}
+                                <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="shrink-0 ml-0.5">
+                                  <path d="M7 17l9.2-9.2M17 17V7H7"/>
+                                </svg>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })()}
             </>
           ) : (
             <ListView
@@ -1271,22 +1143,20 @@ function FlowComponent() {
               setSelectedElectives={setSelectedElectives}
               completedCreditsPerCategory={completedCreditsPerCategory}
               courses={courses}
-              isDarkMode={isDarkMode}
               hoveredCourseId={hoveredCourseId}
               setHoveredCourseId={setHoveredCourseId}
               hoveredPath={hoveredPath}
-              focusNode={focusNode}
               onOpenDetails={openDetails}
             />
           )}
 
-          {/* Course Details Overlay (Bottom Panel) */}
+          {/* Course Details Sidebar */}
           <div
             className={cn(
-              "absolute bottom-6 left-[4%] sm:left-6 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md rounded-2xl shadow-2xl border border-gray-200 dark:border-slate-800 transition-all duration-300 z-50 w-[92%] sm:w-[450px] overflow-hidden max-h-[85vh] sm:max-h-[75vh] flex flex-col",
+              "absolute top-0 right-0 h-full bg-white/95 dark:bg-slate-900/95 backdrop-blur-md shadow-2xl border-l border-gray-200 dark:border-slate-800 transition-all duration-300 z-50 w-full sm:w-100 overflow-hidden flex flex-col",
               (selectedNodeId && isDetailsOpen)
-                ? "translate-y-0 opacity-100 scale-100"
-                : "translate-y-full opacity-0 scale-95 pointer-events-none",
+                ? "translate-x-0 opacity-100"
+                : "translate-x-full opacity-0 pointer-events-none",
             )}
             dir="rtl"
             onClick={(e) => e.stopPropagation()}
@@ -1311,38 +1181,17 @@ function FlowComponent() {
                   plannedCourses,
                 );
 
-                let stateComponent;
                 let buttonText;
                 let isDisabled = false;
 
                 if (isComp) {
-                  stateComponent = (
-                    <span className="text-xs font-bold text-emerald-600 bg-emerald-100 px-2 py-1 rounded">
-                      منجزة
-                    </span>
-                  );
                   buttonText = "إلغاء المادة كمنجزة";
                 } else if (isGroupCompleted && isElective) {
-                  stateComponent = (
-                    <span className="text-xs font-bold text-gray-500 bg-gray-200 px-2 py-1 rounded">
-                      مجموعة مكتملة
-                    </span>
-                  );
                   buttonText = "المجموعة متكملة";
                   isDisabled = true;
                 } else if (isAvail) {
-                  stateComponent = (
-                    <span className="text-xs font-bold text-blue-600 bg-blue-100 px-2 py-1 rounded">
-                      متاحة للتسجيل
-                    </span>
-                  );
                   buttonText = "تحديد كمادة منجزة";
                 } else {
-                  stateComponent = (
-                    <span className="text-xs font-bold text-gray-500 bg-gray-200 px-2 py-1 rounded flex items-center gap-1">
-                      <Lock size={12} /> مغلقة
-                    </span>
-                  );
                   if (!prerequisitesCompleted) {
                     buttonText = "المتطلبات السابقة غير مكتملة";
                   } else {
@@ -1441,50 +1290,66 @@ function FlowComponent() {
                     </div>
 
                     {/* Footer / Actions */}
-                    <div className="p-5 pt-3 border-t border-gray-100 dark:border-slate-800 bg-gray-50/50 dark:bg-slate-900/50 flex flex-col sm:flex-row gap-2 shrink-0">
-                      <button
-                        onClick={() => {
-                          if (!isDisabled) toggleCourseCompletion(node.id);
-                        }}
-                        className={cn(
-                          "flex-1 py-3 rounded-xl font-bold flex items-center justify-center gap-2 transition-all shadow-sm",
-                          isComp
-                            ? "bg-red-50 text-red-600 border border-red-200 hover:bg-red-100"
-                            : !isDisabled
-                              ? "bg-emerald-500 text-white hover:bg-emerald-600 shadow-emerald-500/20 shadow-md"
-                                : "bg-gray-100 text-gray-400 cursor-not-allowed",
-                        )}
-                        disabled={isDisabled}
-                      >
-                        {isComp ? (
-                          <Trash2 size={16} />
-                        ) : !isDisabled ? (
-                          <CircleCheckBig size={16} />
-                        ) : (
-                          <Lock size={16} />
-                        )}
-                        {buttonText}
-                      </button>
-
-                      {!isComp && !isDisabled && (
+                    <div className="p-5 pt-3 border-t border-gray-100 dark:border-slate-800 bg-gray-50/50 dark:bg-slate-900/50 flex flex-col gap-2 shrink-0">
+                      <div className="flex flex-col sm:flex-row gap-2">
                         <button
                           onClick={() => {
-                            setPlanningCourseId(node.id);
-                            setIsPlannerOpen(true);
+                            if (!isDisabled) toggleCourseCompletion(node.id);
                           }}
                           className={cn(
-                            "w-full sm:w-[150px] shrink-0 py-3 rounded-xl font-bold flex items-center justify-center gap-1.5 transition-all shadow-sm",
-                            plannedCourses[node.id]
-                              ? "bg-orange-100 text-orange-700 border border-orange-300 hover:bg-orange-200"
-                              : "bg-orange-50 text-orange-600 border border-orange-200 hover:bg-orange-100",
+                            "flex-1 py-3 rounded-xl font-bold flex items-center justify-center gap-2 transition-all shadow-sm",
+                            isComp
+                              ? "bg-red-50 text-red-600 border border-red-200 hover:bg-red-100"
+                              : !isDisabled
+                                ? "bg-emerald-500 text-white hover:bg-emerald-600 shadow-emerald-500/20 shadow-md"
+                                  : "bg-gray-100 text-gray-400 cursor-not-allowed",
                           )}
+                          disabled={isDisabled}
                         >
-                          <CalendarDays size={16} />
-                          <span className="text-xs line-clamp-1">
-                            {plannedCourses[node.id] || "حدد فصلاً لجدولتها"}
-                          </span>
+                          {isComp ? (
+                            <Trash2 size={16} />
+                          ) : !isDisabled ? (
+                            <CircleCheckBig size={16} />
+                          ) : (
+                            <Lock size={16} />
+                          )}
+                          {buttonText}
                         </button>
-                      )}
+
+                        {!isComp && !isDisabled && (
+                          <button
+                            onClick={() => {
+                              setPlanningCourseId(node.id);
+                              setIsPlannerOpen(true);
+                            }}
+                            className={cn(
+                              "w-full sm:w-37.5 shrink-0 py-3 rounded-xl font-bold flex items-center justify-center gap-1.5 transition-all shadow-sm",
+                              plannedCourses[node.id]
+                                ? "bg-orange-100 text-orange-700 border border-orange-300 hover:bg-orange-200"
+                                : "bg-orange-50 text-orange-600 border border-orange-200 hover:bg-orange-100",
+                            )}
+                          >
+                            <CalendarDays size={16} />
+                            <span className="text-xs line-clamp-1">
+                              {plannedCourses[node.id] || "حدد فصلاً لجدولتها"}
+                            </span>
+                          </button>
+                        )}
+                      </div>
+
+                      {/* IVR Library Link Button */}
+                      <a
+                        href={node.resourceLink || "https://ivr-team-ptuk.github.io/IVR-Library/"}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="w-full py-3 rounded-xl font-bold flex items-center justify-center gap-2 transition-all shadow-sm bg-blue-50 text-blue-700 border border-blue-200 hover:bg-blue-100 dark:bg-blue-900/20 dark:text-blue-400 dark:border-blue-800 dark:hover:bg-blue-900/30"
+                      >
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/>
+                          <polyline points="14 2 14 8 20 8"/>
+                        </svg>
+                        ملفات وملخصات المادة (IVR)
+                      </a>
                     </div>
                   </>
                 );
@@ -1697,7 +1562,7 @@ function FlowComponent() {
                                         ? "opacity-50 grayscale border-gray-100 dark:border-slate-800"
                                         : "border-gray-200 dark:border-slate-700",
                                     )}
-                                    onClick={(e) => {
+                                    onClick={() => {
                                       focusNode(course.id);
                                       setSelectedNodeId(course.id);
                                     }}
@@ -1837,16 +1702,11 @@ function FlowComponent() {
                     </button>
                     <button
                       onClick={() => setIsExportModalOpen(true)}
-                      disabled={isExportLoading}
-                      className="flex-1 py-2 text-[11px] font-bold text-gray-700 dark:text-slate-200 bg-white dark:bg-slate-800 hover:bg-gray-50 dark:hover:bg-slate-750 border border-gray-200 dark:border-slate-700 rounded-lg transition-colors flex items-center justify-center gap-1.5 shadow-sm px-1 disabled:opacity-50"
+                      className="flex-1 py-2 text-[11px] font-bold text-gray-700 dark:text-slate-200 bg-white dark:bg-slate-800 hover:bg-gray-50 dark:hover:bg-slate-750 border border-gray-200 dark:border-slate-700 rounded-lg transition-colors flex items-center justify-center gap-1.5 shadow-sm px-1"
                       title="تحميل ملف PDF بكامل التفاصيل والمعلومات"
                     >
-                      {isExportLoading ? (
-                        <Loader2 size={14} className="animate-spin" />
-                      ) : (
-                        <Printer size={14} />
-                      )}
-                      {isExportLoading ? "جاري..." : "PDF"}
+                      <Printer size={14} />
+                      PDF
                     </button>
                     <button
                       onClick={handleReset}
@@ -1956,10 +1816,16 @@ function FlowComponent() {
           completedCourses={completedCourses}
           courseGrades={courseGrades}
           setCourseGrades={setCourseGrades}
-          courseRepeats={courseRepeats}
-          setCourseRepeats={setCourseRepeats}
           failedCourseIds={new Set(failedCourseIds)}
           setFailedCourseIds={(ids) => setFailedCourseIds(Array.from(ids))}
+        />
+        <WeeklyScheduleModal
+          isOpen={isWeeklyScheduleOpen}
+          onClose={() => setIsWeeklyScheduleOpen(false)}
+          plannedCourses={plannedCourses}
+          courses={courses}
+          weeklySchedule={weeklySchedule}
+          setWeeklySchedule={setWeeklySchedule}
         />
       </div>
     </div>
