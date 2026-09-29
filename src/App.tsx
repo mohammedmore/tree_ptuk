@@ -446,7 +446,6 @@ function FlowComponent() {
   };
 
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const didAutoLoadSharedScheduleRef = useRef(false);
 
   const handleCreateSharedLink = useCallback(async () => {
     setShareLoading(true);
@@ -608,14 +607,6 @@ function FlowComponent() {
     setSelectedElectives,
     setWeeklySchedule,
   ]);
-
-  useEffect(() => {
-    if (didAutoLoadSharedScheduleRef.current) return;
-    didAutoLoadSharedScheduleRef.current = true;
-    const params = new URLSearchParams(window.location.search);
-    const code = params.get("code") || params.get("s");
-    if (code) void handleLoadSharedSchedule(code);
-  }, [handleLoadSharedSchedule]);
 
   const handleImportCsv = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -1064,29 +1055,24 @@ function FlowComponent() {
                   <span className="hidden sm:inline">الجدول الأسبوعي</span>
                 </button>
                 <button
-                  onClick={() => {
-                    setShareCode(null);
-                    setShareError(null);
-                    setIsShareScheduleOpen(true);
-                  }}
-                  className="flex min-h-10 items-center justify-center gap-1 px-1.5 sm:px-3 sm:py-1.5 text-[11px] sm:text-sm bg-violet-100 hover:bg-violet-200 text-violet-700 dark:bg-violet-950/70 dark:text-violet-300 dark:hover:bg-violet-900/50 rounded-lg transition-colors cursor-pointer shadow-sm font-bold"
-                  title="مشاركة الجدول أو فتحه على الجوال"
+                  disabled
+                  className="flex min-h-10 items-center justify-center gap-1 px-1.5 sm:px-3 sm:py-1.5 text-[11px] sm:text-sm bg-violet-100 text-violet-700 dark:bg-violet-950/70 dark:text-violet-300 rounded-lg opacity-60 cursor-not-allowed shadow-sm font-bold"
+                  title="مشاركة الجدول وفتحه على الجوال: قيد التطوير"
                 >
                   <Link2 size={15} />
                   <span className="sm:hidden">مشاركة</span>
                   <span className="hidden sm:inline">مشاركة / فتح على الجوال</span>
+                  <span className="text-[9px]">قيد التطوير</span>
                 </button>
                 <button
-                  onClick={() => {
-                    setLoadError(null);
-                    setIsLoadScheduleOpen(true);
-                  }}
-                  className="flex min-h-10 items-center justify-center gap-1 px-1.5 sm:px-3 sm:py-1.5 text-[11px] sm:text-sm bg-gray-100 hover:bg-gray-200 text-gray-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700 rounded-lg transition-colors cursor-pointer shadow-sm font-bold"
-                  title="استرجاع جدول باستخدام الرمز"
+                  disabled
+                  className="flex min-h-10 items-center justify-center gap-1 px-1.5 sm:px-3 sm:py-1.5 text-[11px] sm:text-sm bg-gray-100 text-gray-700 dark:bg-slate-800 dark:text-slate-200 rounded-lg opacity-60 cursor-not-allowed shadow-sm font-bold"
+                  title="استرجاع جدول باستخدام الرمز: قيد التطوير"
                 >
                   <Search size={15} />
                   <span className="sm:hidden">استرجاع</span>
                   <span className="hidden sm:inline">استرجاع برمز</span>
+                  <span className="text-[9px]">قيد التطوير</span>
                 </button>
 
                 <button

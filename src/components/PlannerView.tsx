@@ -110,9 +110,6 @@ const PlannerView: React.FC<PlannerViewProps> = ({
     return warnings;
   }, [plannedCourses, completedCourses]);
 
-  // Add console log to check the prop
-  console.log("PlannerView: toggleCourseCompletion prop received:", toggleCourseCompletion);
-
   if (!isPlannerOpen) return null;
 
   const allSemestersEmpty = Object.keys(plannedCourses).length === 0;
@@ -514,4 +511,4 @@ const PlannerView: React.FC<PlannerViewProps> = ({
   );
 };
 
-export default PlannerView;
+export default React.memo(PlannerView);
