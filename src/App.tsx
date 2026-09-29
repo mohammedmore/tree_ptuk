@@ -1026,8 +1026,14 @@ function FlowComponent() {
           className="flex-1 w-full sm:mx-0 relative bg-white dark:bg-slate-900 sm:rounded-xl shadow-sm border-t sm:border border-gray-200 dark:border-slate-800 overflow-hidden flex flex-col"
           dir="ltr"
         >
-          {viewMode === "map" ? (
-            <>
+          <>
+            <div
+              className={cn(
+                "absolute inset-0",
+                viewMode === "map" ? "visible" : "invisible pointer-events-none",
+              )}
+              aria-hidden={viewMode !== "map"}
+            >
               <ReactFlow
                 nodes={nodes}
                 edges={edges}
@@ -1036,8 +1042,6 @@ function FlowComponent() {
                 onNodeClick={onNodeClick}
                 onPaneClick={onPaneClick}
                 nodeTypes={nodeTypes}
-                fitView
-                fitViewOptions={{ padding: 0.05 }}
                 minZoom={0.05}
                 maxZoom={1.5}
                 attributionPosition="bottom-left"
@@ -1133,8 +1137,8 @@ function FlowComponent() {
                   </div>
                 );
               })()}
-            </>
-          ) : (
+            </div>
+            {viewMode === "list" && (
             <ListView
               activeCourses={activeCourses}
               listGroupBy={listGroupBy}
@@ -1158,7 +1162,8 @@ function FlowComponent() {
               hoveredPath={hoveredPath}
               onOpenDetails={openDetails}
             />
-          )}
+            )}
+          </>
 
           {/* Course Details Sidebar */}
           <div
