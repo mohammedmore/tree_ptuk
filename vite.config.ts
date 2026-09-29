@@ -4,6 +4,7 @@ import path from 'path';
 import {defineConfig} from 'vite';
 
 export default defineConfig({
+  envPrefix: ['VITE_', 'NEXT_PUBLIC_', 'SUPABASE_PUBLISHABLE_KEY'],
   plugins: [react(), tailwindcss()],
   resolve: {
     alias: {

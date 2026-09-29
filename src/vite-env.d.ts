@@ -1,0 +1,23 @@
+/// <reference types="vite/client" />
+
+interface ImportMetaEnv {
+  readonly VITE_SUPABASE_URL?: string;
+  readonly VITE_SUPABASE_ANON_KEY?: string;
+  readonly NEXT_PUBLIC_SUPABASE_URL?: string;
+  readonly NEXT_PUBLIC_SUPABASE_ANON_KEY?: string;
+  readonly SUPABASE_PUBLISHABLE_KEY?: string;
+}
+
+interface Window {
+  supabase?: {
+    createClient: (url: string, anonKey: string) => import("./sharedSchedules").SupabaseClient;
+  };
+  QRCode?: new (element: HTMLElement, options: {
+    text: string;
+    width: number;
+    height: number;
+    colorDark: string;
+    colorLight: string;
+    correctLevel: number;
+  }) => unknown;
+}

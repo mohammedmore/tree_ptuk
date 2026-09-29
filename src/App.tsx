@@ -36,6 +36,7 @@ import {
   Moon,
   Sun,
   Calculator,
+  Link2,
 } from "lucide-react";
 import "@xyflow/react/dist/style.css";
 import { courses, Course, ScheduleEntry, categoryRequirements } from "./data";
@@ -58,6 +59,17 @@ import CourseListModal from "./components/CourseListModal"; // Import the new co
 import PlannerView from "./components/PlannerView"; // Import the new component
 import { GPAModal } from "./components/GPAModal";
 import { WeeklyScheduleModal } from "./components/WeeklyScheduleModal";
+import {
+  LoadScheduleModal,
+  ShareScheduleModal,
+  SharedSchedulePreviewModal,
+} from "./components/SharedScheduleModals";
+import {
+  fetchScheduleByCode,
+  normalizeScheduleCode,
+  shareScheduleToCloud,
+  SharedScheduleSnapshot,
+} from "./sharedSchedules";
 
 // تحسين: تمرير الـ edges كمعامل لجعل الدالة نقية (Pure Function) وقابلة للاختبار
 export const getPathForCourse = (nodeId: string, edges: Edge[]) => {
@@ -310,6 +322,17 @@ function FlowComponent() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isPlannerOpen, setIsPlannerOpen] = useState(false);
   const [isWeeklyScheduleOpen, setIsWeeklyScheduleOpen] = useState(false);
+  const [isShareScheduleOpen, setIsShareScheduleOpen] = useState(false);
+  const [isLoadScheduleOpen, setIsLoadScheduleOpen] = useState(false);
+  const [shareCode, setShareCode] = useState<string | null>(null);
+  const [shareLoading, setShareLoading] = useState(false);
+  const [shareError, setShareError] = useState<string | null>(null);
+  const [loadLoading, setLoadLoading] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [loadedSchedule, setLoadedSchedule] = useState<{
+    code: string;
+    schedule: SharedScheduleSnapshot;
+  } | null>(null);
   const [currentPlanningSemester, setCurrentPlanningSemester] = useState<string | null>(null);
   const [isCourseListModalOpen, setIsCourseListModalOpen] = useState(false);
   const [isGPAModalOpen, setIsGPAModalOpen] = useState(false);
@@ -408,6 +431,7 @@ function FlowComponent() {
     "course_grades",
     "course_repeats",
     "failed_course_ids",
+    "last_shared_schedule",
   ];
 
   const confirmReset = () => {
@@ -421,6 +445,129 @@ function FlowComponent() {
   };
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const didAutoLoadSharedScheduleRef = useRef(false);
+
+  const handleCreateSharedLink = useCallback(async () => {
+    setShareLoading(true);
+    setShareError(null);
+    setShareCode(null);
+    try {
+      const snapshot: SharedScheduleSnapshot = {
+        version: 1,
+        name: "خطة الطالب",
+        exportedAt: new Date().toISOString(),
+        plannedCourses: { ...plannedCourses },
+        completedCourses: courses
+          .filter((course) => completedCourses.has(course.id))
+          .map((course) => ({
+            courseCode: course.id,
+            courseName: course.name,
+            credits: course.credits,
+            category: course.category,
+          })),
+        weeklySchedule: Object.fromEntries(
+          Object.entries(weeklySchedule).map(([semester, entries]) => [
+            semester,
+            Object.fromEntries(
+              Object.entries(entries).map(([courseId, entry]) => [
+                courseId,
+                {
+                  courseId,
+                  startTime: entry.startTime,
+                  endTime: entry.endTime,
+                  section: entry.section ?? "",
+                  instructor: entry.instructor ?? "",
+                  room: entry.room ?? "",
+                  days: entry.days ?? (entry.day ? [entry.day] : []),
+                },
+              ]),
+            ),
+          ]),
+        ),
+        courses: Object.entries(plannedCourses).flatMap(([courseId, semester]) => {
+          const course = courses.find((item) => item.id === courseId);
+          if (!course) return [];
+          const entry = weeklySchedule[semester]?.[courseId];
+          return [{
+            courseId,
+            courseCode: course.id,
+            courseName: course.name,
+            credits: course.credits,
+            category: course.category,
+            semester,
+            color: "#3b82f6",
+            section: entry?.section ?? "",
+            startTime: entry?.startTime ?? "",
+            endTime: entry?.endTime ?? "",
+            days: entry?.days ?? (entry?.day ? [entry.day] : []),
+            instructor: entry?.instructor ?? "",
+            room: entry?.room ?? entry?.location ?? "",
+          }];
+        }),
+      };
+      const code = await shareScheduleToCloud(snapshot);
+      setShareCode(code);
+    } catch (error) {
+      setShareError(error instanceof Error ? error.message : "تعذر إنشاء رابط المشاركة.");
+    } finally {
+      setShareLoading(false);
+    }
+  }, [completedCourses, plannedCourses, weeklySchedule]);
+
+  const handleLoadSharedSchedule = useCallback(async (value: string) => {
+    setLoadLoading(true);
+    setLoadError(null);
+    const code = normalizeScheduleCode(value);
+    try {
+      const result = await fetchScheduleByCode(code);
+      const importedPlans: Record<string, string> = {};
+      const importedWeeklySchedule: Record<string, Record<string, ScheduleEntry>> = {};
+
+      result.schedule.courses.forEach((sharedCourse) => {
+        const currentCourse = courses.find(
+          (course) => course.id === sharedCourse.courseCode,
+        );
+        if (!currentCourse) return;
+        importedPlans[currentCourse.id] = sharedCourse.semester;
+        if (!sharedCourse.startTime || !sharedCourse.endTime || !sharedCourse.days.length) return;
+        if (!importedWeeklySchedule[sharedCourse.semester]) {
+          importedWeeklySchedule[sharedCourse.semester] = {};
+        }
+        importedWeeklySchedule[sharedCourse.semester][currentCourse.id] = {
+          startTime: sharedCourse.startTime,
+          endTime: sharedCourse.endTime,
+          section: sharedCourse.section,
+          instructor: sharedCourse.instructor,
+          room: sharedCourse.room,
+          days: sharedCourse.days,
+        };
+      });
+
+      window.localStorage.setItem("last_shared_schedule", JSON.stringify(result));
+      setPlannedCourses(importedPlans);
+      setWeeklySchedule(importedWeeklySchedule);
+      setCompletedCourses(new Set(
+        result.schedule.completedCourses
+          .map((sharedCourse) => courses.find((course) => course.id === sharedCourse.courseCode)?.id)
+          .filter((courseId): courseId is string => !!courseId),
+      ));
+      setLoadedSchedule(result);
+      setIsLoadScheduleOpen(false);
+    } catch (error) {
+      setLoadError(error instanceof Error ? error.message : "تعذر جلب الجدول. تحقق من الاتصال والرمز.");
+      setIsLoadScheduleOpen(true);
+    } finally {
+      setLoadLoading(false);
+    }
+  }, [setCompletedCourses, setPlannedCourses, setWeeklySchedule]);
+
+  useEffect(() => {
+    if (didAutoLoadSharedScheduleRef.current) return;
+    didAutoLoadSharedScheduleRef.current = true;
+    const params = new URLSearchParams(window.location.search);
+    const code = params.get("code") || params.get("s");
+    if (code) void handleLoadSharedSchedule(code);
+  }, [handleLoadSharedSchedule]);
 
   const handleImportCsv = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -867,6 +1014,31 @@ function FlowComponent() {
                   <CalendarDays size={16} className="hidden sm:block" />
                   <span className="sm:hidden">الجدول</span>
                   <span className="hidden sm:inline">الجدول الأسبوعي</span>
+                </button>
+                <button
+                  onClick={() => {
+                    setShareCode(null);
+                    setShareError(null);
+                    setIsShareScheduleOpen(true);
+                  }}
+                  className="flex min-h-10 items-center justify-center gap-1 px-1.5 sm:px-3 sm:py-1.5 text-[11px] sm:text-sm bg-violet-100 hover:bg-violet-200 text-violet-700 dark:bg-violet-950/70 dark:text-violet-300 dark:hover:bg-violet-900/50 rounded-lg transition-colors cursor-pointer shadow-sm font-bold"
+                  title="مشاركة الجدول أو فتحه على الجوال"
+                >
+                  <Link2 size={15} />
+                  <span className="sm:hidden">مشاركة</span>
+                  <span className="hidden sm:inline">مشاركة / فتح على الجوال</span>
+                </button>
+                <button
+                  onClick={() => {
+                    setLoadError(null);
+                    setIsLoadScheduleOpen(true);
+                  }}
+                  className="flex min-h-10 items-center justify-center gap-1 px-1.5 sm:px-3 sm:py-1.5 text-[11px] sm:text-sm bg-gray-100 hover:bg-gray-200 text-gray-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700 rounded-lg transition-colors cursor-pointer shadow-sm font-bold"
+                  title="استرجاع جدول باستخدام الرمز"
+                >
+                  <Search size={15} />
+                  <span className="sm:hidden">استرجاع</span>
+                  <span className="hidden sm:inline">استرجاع برمز</span>
                 </button>
 
                 <button
@@ -1869,6 +2041,26 @@ function FlowComponent() {
           courses={courses}
           weeklySchedule={weeklySchedule}
           setWeeklySchedule={setWeeklySchedule}
+        />
+        <ShareScheduleModal
+          isOpen={isShareScheduleOpen}
+          onClose={() => setIsShareScheduleOpen(false)}
+          code={shareCode}
+          loading={shareLoading}
+          error={shareError}
+          onCreate={() => void handleCreateSharedLink()}
+        />
+        <LoadScheduleModal
+          isOpen={isLoadScheduleOpen}
+          onClose={() => setIsLoadScheduleOpen(false)}
+          loading={loadLoading}
+          error={loadError}
+          onLoad={handleLoadSharedSchedule}
+        />
+        <SharedSchedulePreviewModal
+          schedule={loadedSchedule?.schedule ?? null}
+          code={loadedSchedule?.code ?? null}
+          onClose={() => setLoadedSchedule(null)}
         />
       </div>
     </div>
