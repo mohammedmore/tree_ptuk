@@ -1,20 +1,8 @@
 import React, { useEffect, useRef, useState } from "react";
 import { Copy, Link2, LoaderCircle, QrCode, Search, X } from "lucide-react";
+import * as QRCode from "qrcode";
 import { BaseModal } from "./BaseModal";
 import { normalizeScheduleCode, SharedScheduleSnapshot } from "../sharedSchedules";
-
-interface QRCodeOptions {
-  text: string;
-  width: number;
-  height: number;
-  colorDark: string;
-  colorLight: string;
-  correctLevel: number;
-}
-
-interface QRCodeConstructor {
-  new (element: HTMLElement, options: QRCodeOptions): unknown;
-}
 
 interface ShareScheduleModalProps {
   isOpen: boolean;
@@ -36,6 +24,7 @@ export const ShareScheduleModal: React.FC<ShareScheduleModalProps> = ({
   const qrContainerRef = useRef<HTMLDivElement>(null);
   const [copyError, setCopyError] = useState<string | null>(null);
   const [copySuccess, setCopySuccess] = useState<string | null>(null);
+  const [qrError, setQrError] = useState<string | null>(null);
   const shareUrl = code
     ? `${window.location.origin}${window.location.pathname}?code=${code}`
     : "";
@@ -51,16 +40,23 @@ export const ShareScheduleModal: React.FC<ShareScheduleModalProps> = ({
     const container = qrContainerRef.current;
     if (!container || !shareUrl) return;
     container.replaceChildren();
-    const qrCodeConstructor = (window as Window & { QRCode?: QRCodeConstructor }).QRCode;
-    if (!qrCodeConstructor) return;
-    new qrCodeConstructor(container, {
-      text: shareUrl,
+    let cancelled = false;
+    setQrError(null);
+    void QRCode.toCanvas(shareUrl, {
       width: 192,
-      height: 192,
-      colorDark: "#0f172a",
-      colorLight: "#ffffff",
-      correctLevel: 1,
+      margin: 2,
+      errorCorrectionLevel: "M",
+      color: { dark: "#0f172a", light: "#ffffff" },
+    }).then((canvas) => {
+      if (!cancelled) container.appendChild(canvas);
+    }).catch((error: unknown) => {
+      if (!cancelled) {
+        setQrError(error instanceof Error ? error.message : "تعذر إنشاء رمز QR.");
+      }
     });
+    return () => {
+      cancelled = true;
+    };
   }, [shareUrl]);
 
   const copyWithFallback = (value: string): void => {
@@ -149,10 +145,10 @@ export const ShareScheduleModal: React.FC<ShareScheduleModalProps> = ({
             </div>
             <div className="mx-auto flex min-h-52 w-52 items-center justify-center rounded-xl border border-gray-100 bg-white p-2 dark:border-slate-700">
               <div ref={qrContainerRef} aria-label="رمز QR للرابط" />
-              {!window.QRCode && (
+              {qrError && (
                 <div className="space-y-2 text-center text-xs font-bold text-gray-500">
                   <QrCode className="mx-auto" size={36} />
-                  <p>تعذر تحميل مولّد QR. يمكنك استخدام الرابط أو الرمز أعلاه.</p>
+                  <p>تعذر إنشاء QR: {qrError}</p>
                 </div>
               )}
             </div>
