@@ -93,14 +93,14 @@ export const WeeklyScheduleModal: React.FC<WeeklyScheduleModalProps> = ({
 
   return (
     <BaseModal isOpen={isOpen} onClose={onClose} title="الجدول الدراسي الأسبوعي" maxWidth="max-w-6xl">
-      <div className="flex flex-col h-full max-h-[85vh]">
+      <div className="flex flex-col h-full max-h-[calc(100dvh-7rem)] sm:max-h-[85vh]">
         {/* Header Controls */}
-        <div className="flex flex-col md:flex-row gap-4 mb-6 items-center justify-between">
+        <div className="flex flex-col md:flex-row gap-2 sm:gap-4 mb-3 sm:mb-6 items-center justify-between">
           <div className="flex bg-gray-100 dark:bg-slate-900 p-1 rounded-2xl w-full md:w-auto">
             <button
               onClick={() => setActiveTab("visual")}
               className={cn(
-                "flex-1 md:flex-none flex items-center justify-center gap-2 px-6 py-2 rounded-xl text-sm font-black transition-all",
+                "min-h-10 flex-1 md:flex-none flex items-center justify-center gap-1 sm:gap-2 px-2 sm:px-6 py-2 rounded-xl text-xs sm:text-sm font-black transition-all",
                 activeTab === "visual" 
                   ? "bg-white dark:bg-slate-800 text-blue-600 dark:text-blue-400 shadow-sm" 
                   : "text-gray-500 hover:text-gray-700 dark:text-slate-400"
@@ -112,7 +112,7 @@ export const WeeklyScheduleModal: React.FC<WeeklyScheduleModalProps> = ({
             <button
               onClick={() => setActiveTab("edit")}
               className={cn(
-                "flex-1 md:flex-none flex items-center justify-center gap-2 px-6 py-2 rounded-xl text-sm font-black transition-all",
+                "min-h-10 flex-1 md:flex-none flex items-center justify-center gap-1 sm:gap-2 px-2 sm:px-6 py-2 rounded-xl text-xs sm:text-sm font-black transition-all",
                 activeTab === "edit" 
                   ? "bg-white dark:bg-slate-800 text-blue-600 dark:text-blue-400 shadow-sm" 
                   : "text-gray-500 hover:text-gray-700 dark:text-slate-400"
@@ -123,7 +123,7 @@ export const WeeklyScheduleModal: React.FC<WeeklyScheduleModalProps> = ({
             </button>
           </div>
 
-          <div className="flex items-center gap-3 w-full md:w-auto">
+          <div className="flex items-center gap-2 sm:gap-3 w-full md:w-auto">
              <label className="text-xs font-black text-gray-500 dark:text-slate-400 whitespace-nowrap">الفصل:</label>
              <select
               value={selectedSemester}
@@ -278,8 +278,8 @@ export const WeeklyScheduleModal: React.FC<WeeklyScheduleModalProps> = ({
             </div>
 
             {/* Grid Content */}
-            <div className="flex-1 overflow-y-auto relative custom-scrollbar">
-              <div className="grid grid-cols-[60px_1fr_1fr_1fr_1fr_1fr] min-h-210 relative">
+            <div className="flex-1 overflow-auto relative custom-scrollbar">
+              <div className="grid grid-cols-[60px_1fr_1fr_1fr_1fr_1fr] min-w-150 min-h-210 relative">
                 {/* Hour Labels */}
                 <div className="flex flex-col">
                   {HOURS.map(hour => (

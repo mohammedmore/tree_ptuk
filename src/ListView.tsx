@@ -198,7 +198,7 @@ export default function ListView({
                     <div className="flex gap-1 shrink-0">
                         <button
                             onClick={(e) => { e.stopPropagation(); onOpenDetails(course.id); }}
-                            className="p-1 rounded border transition-colors bg-gray-50 dark:bg-slate-900 text-gray-400 dark:text-slate-400 dark:border-slate-750 hover:bg-gray-100 dark:hover:bg-slate-750 hover:text-blue-600 dark:hover:text-blue-400"
+                            className="min-h-9 min-w-9 sm:min-h-0 sm:min-w-0 p-2 sm:p-1 rounded border transition-colors bg-gray-50 dark:bg-slate-900 text-gray-400 dark:text-slate-400 dark:border-slate-750 hover:bg-gray-100 dark:hover:bg-slate-750 hover:text-blue-600 dark:hover:text-blue-400"
                             title="عرض التفاصيل"
                         >
                             <Info size={10} />
@@ -207,7 +207,7 @@ export default function ListView({
                         <button
                             onClick={(e) => { e.stopPropagation(); setPinnedCourseId(isPinned ? null : course.id); }}
                             className={cn(
-                                "p-1 rounded border transition-colors",
+                                "min-h-9 min-w-9 sm:min-h-0 sm:min-w-0 p-2 sm:p-1 rounded border transition-colors",
                                 isPinned
                                     ? "bg-amber-500 text-white"
                                     : (isHoveredPathNode && !pinnedCourseId) // If hovered path is active and not pinned
@@ -218,10 +218,10 @@ export default function ListView({
                         >
                             <Pin size={10} className={cn("transform rotate-25", isPinned && "rotate-0")} />
                         </button>
-                        <button onClick={(e) => { e.stopPropagation(); toggleCourseCompletion(course.id); }} className={cn("p-1 rounded border transition-colors", isComp ? "bg-red-50 text-red-650 dark:bg-red-950/40 dark:text-red-400 border-red-100" : (isAvail ? "bg-emerald-50 text-emerald-600 border-emerald-100 dark:bg-emerald-950/40 dark:text-emerald-400" : "opacity-30 cursor-not-allowed"))} disabled={!isComp && !isAvail}>
+                        <button onClick={(e) => { e.stopPropagation(); toggleCourseCompletion(course.id); }} className={cn("min-h-9 min-w-9 sm:min-h-0 sm:min-w-0 p-2 sm:p-1 rounded border transition-colors", isComp ? "bg-red-50 text-red-650 dark:bg-red-950/40 dark:text-red-400 border-red-100" : (isAvail ? "bg-emerald-50 text-emerald-600 border-emerald-100 dark:bg-emerald-950/40 dark:text-emerald-400" : "opacity-30 cursor-not-allowed"))} disabled={!isComp && !isAvail}>
                             {isComp ? <Trash2 size={10} /> : <CircleCheckBig size={10} />}
                         </button>
-                        <button onClick={(e) => { e.stopPropagation(); setPlanningCourseId(course.id); setIsPlannerOpen(true); }} className={cn("p-1 rounded border transition-colors", isPlanned ? "bg-orange-50 text-orange-600 dark:bg-orange-900/30 border-orange-200" : "bg-gray-50 dark:bg-slate-900 text-gray-500 dark:border-slate-750 hover:bg-gray-100 dark:hover:bg-slate-750")}>
+                        <button onClick={(e) => { e.stopPropagation(); setPlanningCourseId(course.id); setIsPlannerOpen(true); }} className={cn("min-h-9 min-w-9 sm:min-h-0 sm:min-w-0 p-2 sm:p-1 rounded border transition-colors", isPlanned ? "bg-orange-50 text-orange-600 dark:bg-orange-900/30 border-orange-200" : "bg-gray-50 dark:bg-slate-900 text-gray-500 dark:border-slate-750 hover:bg-gray-100 dark:hover:bg-slate-750")}>
                             <CalendarDays size={10} />
                         </button>
                     </div>

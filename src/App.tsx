@@ -477,7 +477,7 @@ function FlowComponent() {
   }, [completedCourses, completedCreditsPerCategory, courses]);
 
   const groupedCourseList = useMemo(() => {
-    let list: Course[] = [];
+    let list: Course[];
     if (courseListTab === "available") list = availableCourses;
     else if (courseListTab === "completed") list = activeCourses.filter((c) => completedCourses.has(c.id));
     else list = courses; // Show all 123 courses in the "All" tab
@@ -775,10 +775,12 @@ function FlowComponent() {
         <header className="flex flex-col xl:flex-row justify-between items-start xl:items-center mb-2 sm:mb-4 bg-white dark:bg-slate-800/95 p-3 sm:p-6 rounded-b-none sm:rounded-xl shadow-sm border-b sm:border border-gray-200 dark:border-slate-700/80 z-10 shrink-0 gap-3 sm:gap-4 transition-all">
           <div className="flex justify-between items-start w-full xl:w-auto gap-4">
             <div>
-              <h1 className="text-base sm:text-2xl font-bold text-gray-900 dark:text-slate-100 mb-1 flex flex-wrap items-center gap-2 sm:gap-3">
-                {/* Removed the toggle buttons for "خطة التخرج" and "كامل المنهاج" */}
-                <BookOpen className="text-blue-600 dark:text-blue-400 hidden sm:block" size={24} />
-                خريطة المتطلبات الأكاديمية
+              <div className="mb-1">
+                <h1 className="flex items-center gap-2 text-sm sm:text-2xl font-bold text-gray-900 dark:text-slate-100">
+                  <BookOpen className="text-blue-600 dark:text-blue-400 hidden sm:block" size={24} />
+                  خريطة المتطلبات الأكاديمية
+                </h1>
+                <div className="grid w-full grid-cols-3 gap-1.5 sm:flex sm:w-auto sm:flex-wrap sm:gap-2 sm:mt-1">
                 <button
                   onClick={() => {
                     setIsPlanningModeOpen(true);
@@ -787,7 +789,7 @@ function FlowComponent() {
                     setHoveredCourseId(null); // تصفير حالة التمرير
                     setPlanningCourseId(null); // تصفير مادة التخطيط عند الدخول للوضع العام
                   }}
-                  className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1 sm:py-1.5 text-xs sm:text-sm bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg transition-colors cursor-pointer shadow-sm ml-auto sm:ml-0 font-black"
+                  className="flex min-h-10 items-center justify-center gap-1 px-1.5 sm:px-3 sm:py-1.5 text-[11px] sm:text-sm bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg transition-colors cursor-pointer shadow-sm font-black"
                 >
                   <MapIcon size={16} />
                   وضع التخطيط
@@ -799,7 +801,7 @@ function FlowComponent() {
                     setIsDetailsOpen(false);
                     setHoveredCourseId(null);
                   }}
-                  className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1 sm:py-1.5 text-xs sm:text-sm bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors cursor-pointer shadow-sm font-black"
+                  className="flex min-h-10 items-center justify-center gap-1 px-1.5 sm:px-3 sm:py-1.5 text-[11px] sm:text-sm bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors cursor-pointer shadow-sm font-black"
                 >
                   <LayoutList size={16} />
                   قائمة المواد
@@ -811,11 +813,11 @@ function FlowComponent() {
                     setIsDetailsOpen(false);
                     setHoveredCourseId(null);
                   }}
-                  className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1 sm:py-1.5 text-xs sm:text-sm bg-indigo-500 hover:bg-indigo-600 text-white rounded-lg transition-colors cursor-pointer shadow-sm font-black"
+                  className="flex min-h-10 items-center justify-center gap-1 px-1.5 sm:px-3 sm:py-1.5 text-[11px] sm:text-sm bg-indigo-500 hover:bg-indigo-600 text-white rounded-lg transition-colors cursor-pointer shadow-sm font-black"
                 >
                   <Calculator size={16} />
-                  <span className="hidden xs:inline sm:inline">المعدل والدرجات</span>
-                  <span className="xs:hidden sm:hidden">المعدل</span>
+                  <span className="sm:hidden">المعدل</span>
+                  <span className="hidden sm:inline">المعدل والدرجات</span>
                 </button>
                 <button
                   onClick={(e) => {
@@ -826,29 +828,35 @@ function FlowComponent() {
                     setHoveredCourseId(null);
                     setPlanningCourseId(null);
                   }}
-                  className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1 sm:py-1.5 text-xs sm:text-sm bg-orange-100 hover:bg-orange-200 text-orange-700 dark:bg-orange-950/70 dark:text-orange-300 dark:hover:bg-orange-900/50 rounded-lg transition-colors cursor-pointer shadow-sm font-bold"
+                  className="flex min-h-10 items-center justify-center gap-1 px-1.5 sm:px-3 sm:py-1.5 text-[11px] sm:text-sm bg-orange-100 hover:bg-orange-200 text-orange-700 dark:bg-orange-950/70 dark:text-orange-300 dark:hover:bg-orange-900/50 rounded-lg transition-colors cursor-pointer shadow-sm font-bold"
                 >
-                  <CalendarDays size={16} />
-                  عرض الخطة
+                  <CalendarDays size={14} className="sm:hidden" />
+                  <CalendarDays size={16} className="hidden sm:block" />
+                  <span className="sm:hidden">الخطة</span>
+                  <span className="hidden sm:inline">عرض الخطة</span>
                 </button>
                 <button
                   onClick={() => setIsWeeklyScheduleOpen(true)}
-                  className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1 sm:py-1.5 text-xs sm:text-sm bg-cyan-100 hover:bg-cyan-200 text-cyan-700 dark:bg-cyan-950/70 dark:text-cyan-300 dark:hover:bg-cyan-900/50 rounded-lg transition-colors cursor-pointer shadow-sm font-bold"
+                  className="flex min-h-10 items-center justify-center gap-1 px-1.5 sm:px-3 sm:py-1.5 text-[11px] sm:text-sm bg-cyan-100 hover:bg-cyan-200 text-cyan-700 dark:bg-cyan-950/70 dark:text-cyan-300 dark:hover:bg-cyan-900/50 rounded-lg transition-colors cursor-pointer shadow-sm font-bold"
                 >
-                  <CalendarDays size={16} />
-                  الجدول الأسبوعي
+                  <CalendarDays size={14} className="sm:hidden" />
+                  <CalendarDays size={16} className="hidden sm:block" />
+                  <span className="sm:hidden">الجدول</span>
+                  <span className="hidden sm:inline">الجدول الأسبوعي</span>
                 </button>
 
                 <button
                   onClick={() => setIsSupportModalOpen(true)}
-                  className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1 sm:py-1.5 text-xs sm:text-sm bg-emerald-100 hover:bg-emerald-200 text-emerald-700 dark:bg-emerald-950/70 dark:text-emerald-300 dark:hover:bg-emerald-900/50 rounded-lg transition-colors cursor-pointer shadow-sm font-semibold"
+                  className="flex min-h-10 items-center justify-center gap-1 px-1.5 sm:px-3 sm:py-1.5 text-[11px] sm:text-sm bg-emerald-100 hover:bg-emerald-200 text-emerald-700 dark:bg-emerald-950/70 dark:text-emerald-300 dark:hover:bg-emerald-900/50 rounded-lg transition-colors cursor-pointer shadow-sm font-semibold"
                   title="الدعم والاقتراحات"
                 >
-                  <MessageCircle size={16} className="text-emerald-600 dark:text-emerald-400" />
+                  <MessageCircle size={14} className="text-emerald-600 dark:text-emerald-400 sm:hidden" />
+                  <MessageCircle size={16} className="text-emerald-600 dark:text-emerald-400 hidden sm:block" />
                   <span className="hidden sm:inline">الدعم والاقتراحات</span>
                   <span className="sm:hidden">الدعم</span>
                 </button>
-              </h1>
+                </div>
+              </div>
               <p className="text-[10px] sm:text-sm text-gray-500 dark:text-slate-400 uppercase font-semibold flex items-center gap-2">
                 تخصص هندسة أنظمة الحاسوب{" "}
                 <span className="w-1 h-1 rounded-full bg-gray-300 dark:bg-slate-700"></span> جامعة
@@ -862,8 +870,8 @@ function FlowComponent() {
           </div>
 
           {/* Search & Actions */}
-          <div className="w-full xl:w-auto flex flex-col sm:flex-row flex-wrap items-stretch sm:items-center gap-2 sm:gap-4">
-            <div className="relative group flex-1 min-w-45 sm:w-64">
+          <div className="w-full xl:w-auto grid grid-cols-[1fr_auto] items-center gap-2 sm:flex sm:flex-row sm:flex-wrap sm:items-center sm:gap-4">
+            <div className="relative group col-span-2 min-w-0 sm:col-span-1 sm:flex-1 sm:min-w-45 sm:w-64">
               <Search
                 className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-blue-500 transition-colors"
                 size={16}
@@ -873,7 +881,7 @@ function FlowComponent() {
                 placeholder="ابحث عن مادة أو رقم..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full bg-gray-50 dark:bg-slate-900 border border-gray-200 dark:border-slate-700 dark:text-slate-200 rounded-lg pl-3 pr-10 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 focus:bg-white dark:focus:bg-slate-800 transition-all shadow-inner"
+                className="w-full min-h-11 bg-gray-50 dark:bg-slate-900 border border-gray-200 dark:border-slate-700 dark:text-slate-200 rounded-lg pl-3 pr-10 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 focus:bg-white dark:focus:bg-slate-800 transition-all shadow-inner"
               />
               {searchQuery && (
                 <div
@@ -930,11 +938,11 @@ function FlowComponent() {
             </div>
 
             {/* تبديل عرض الخريطة / القواسم العمودية */}
-            <div className="flex bg-gray-150 dark:bg-slate-850 p-1 rounded-xl border border-gray-200 dark:border-slate-700 h-9.5 shrink-0">
+            <div className="flex bg-gray-150 dark:bg-slate-850 p-1 rounded-xl border border-gray-200 dark:border-slate-700 min-h-11 shrink-0">
               <button
                 onClick={() => setViewMode("map")}
                 className={cn(
-                  "flex items-center gap-1.5 px-3 py-1 text-xs font-bold rounded-lg transition-all cursor-pointer",
+                  "flex items-center justify-center gap-1.5 px-2 sm:px-3 py-1 text-[11px] sm:text-xs font-bold rounded-lg transition-all cursor-pointer",
                   viewMode === "map"
                     ? "bg-white dark:bg-slate-700 text-blue-600 dark:text-blue-400 shadow-sm"
                     : "text-gray-500 dark:text-slate-400 hover:text-gray-850 dark:hover:text-slate-200"
@@ -942,12 +950,13 @@ function FlowComponent() {
                 title="عرض الخريطة التفاعلية"
               >
                 <MapIcon size={14} />
-                <span>الخريطة التفاعلية</span>
+                <span className="hidden sm:inline">الخريطة التفاعلية</span>
+                <span className="sm:hidden">خريطة</span>
               </button>
               <button
                 onClick={() => setViewMode("list")}
                 className={cn(
-                  "flex items-center gap-1.5 px-3 py-1 text-xs font-bold rounded-lg transition-all cursor-pointer",
+                  "flex items-center justify-center gap-1.5 px-2 sm:px-3 py-1 text-[11px] sm:text-xs font-bold rounded-lg transition-all cursor-pointer",
                   viewMode === "list"
                     ? "bg-white dark:bg-slate-700 text-blue-600 dark:text-blue-400 shadow-sm"
                     : "text-gray-500 dark:text-slate-400 hover:text-gray-850"
@@ -955,14 +964,15 @@ function FlowComponent() {
                 title="عرض المواد في قوائم عمودية"
               >
                 <LayoutList size={14} />
-                <span>قوائم عمودية</span>
+                <span className="hidden sm:inline">قوائم عمودية</span>
+                <span className="sm:hidden">قائمة</span>
               </button>
             </div>
 
             {/* زر المود الليلي */}
             <button
               onClick={() => setIsDarkMode(!isDarkMode)}
-              className="flex items-center justify-center w-9.5 h-9.5 rounded-xl bg-white dark:bg-slate-800 hover:bg-gray-100 dark:hover:bg-slate-700 border border-gray-200 dark:border-slate-700 cursor-pointer shadow-sm transition-colors text-gray-600 dark:text-yellow-400 shrink-0"
+              className="flex items-center justify-center w-11 h-11 rounded-xl bg-white dark:bg-slate-800 hover:bg-gray-100 dark:hover:bg-slate-700 border border-gray-200 dark:border-slate-700 cursor-pointer shadow-sm transition-colors text-gray-600 dark:text-yellow-400 shrink-0"
               title={isDarkMode ? "الوضع المضيء" : "الوضع المظلم"}
             >
               {isDarkMode ? <Sun size={18} /> : <Moon size={18} />}
