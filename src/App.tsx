@@ -454,7 +454,7 @@ function FlowComponent() {
     setShareCode(null);
     try {
       const snapshot: SharedScheduleSnapshot = {
-        version: 1,
+        version: 2,
         name: "خطة الطالب",
         exportedAt: new Date().toISOString(),
         plannedCourses: { ...plannedCourses },
@@ -465,7 +465,17 @@ function FlowComponent() {
             courseName: course.name,
             credits: course.credits,
             category: course.category,
+            grade: courseGrades[course.id] ?? null,
           })),
+        courseGrades: { ...courseGrades },
+        failedCourseIds: [...failedCourseIds],
+        selectedElectives: { ...selectedElectives },
+        preferences: {
+          planStartSemester,
+          planEndSemester,
+          hidePastSemesters,
+          darkMode: isDarkMode,
+        },
         weeklySchedule: Object.fromEntries(
           Object.entries(weeklySchedule).map(([semester, entries]) => [
             semester,
@@ -485,16 +495,21 @@ function FlowComponent() {
             ),
           ]),
         ),
-        courses: Object.entries(plannedCourses).flatMap(([courseId, semester]) => {
-          const course = courses.find((item) => item.id === courseId);
-          if (!course) return [];
-          const entry = weeklySchedule[semester]?.[courseId];
-          return [{
-            courseId,
+        courses: courses.map((course) => {
+          const semester = plannedCourses[course.id] ?? "";
+          const entry = semester ? weeklySchedule[semester]?.[course.id] : undefined;
+          return {
+            courseId: course.id,
             courseCode: course.id,
             courseName: course.name,
             credits: course.credits,
             category: course.category,
+            prerequisites: [...course.prerequisites],
+            seasonal: course.seasonal,
+            availableSemesters: course.availableSemesters
+              ? [...course.availableSemesters]
+              : undefined,
+            resourceLink: course.resourceLink,
             semester,
             color: "#3b82f6",
             section: entry?.section ?? "",
@@ -503,7 +518,10 @@ function FlowComponent() {
             days: entry?.days ?? (entry?.day ? [entry.day] : []),
             instructor: entry?.instructor ?? "",
             room: entry?.room ?? entry?.location ?? "",
-          }];
+            completed: completedCourses.has(course.id),
+            failed: failedCourseIds.includes(course.id),
+            grade: courseGrades[course.id] ?? null,
+          };
         }),
       };
       const code = await shareScheduleToCloud(snapshot);
@@ -513,7 +531,18 @@ function FlowComponent() {
     } finally {
       setShareLoading(false);
     }
-  }, [completedCourses, plannedCourses, weeklySchedule]);
+  }, [
+    completedCourses,
+    courseGrades,
+    failedCourseIds,
+    hidePastSemesters,
+    isDarkMode,
+    planEndSemester,
+    planStartSemester,
+    plannedCourses,
+    selectedElectives,
+    weeklySchedule,
+  ]);
 
   const handleLoadSharedSchedule = useCallback(async (value: string) => {
     setLoadLoading(true);
@@ -521,28 +550,24 @@ function FlowComponent() {
     const code = normalizeScheduleCode(value);
     try {
       const result = await fetchScheduleByCode(code);
-      const importedPlans: Record<string, string> = {};
-      const importedWeeklySchedule: Record<string, Record<string, ScheduleEntry>> = {};
-
-      result.schedule.courses.forEach((sharedCourse) => {
-        const currentCourse = courses.find(
-          (course) => course.id === sharedCourse.courseCode,
-        );
-        if (!currentCourse) return;
-        importedPlans[currentCourse.id] = sharedCourse.semester;
-        if (!sharedCourse.startTime || !sharedCourse.endTime || !sharedCourse.days.length) return;
-        if (!importedWeeklySchedule[sharedCourse.semester]) {
-          importedWeeklySchedule[sharedCourse.semester] = {};
-        }
-        importedWeeklySchedule[sharedCourse.semester][currentCourse.id] = {
-          startTime: sharedCourse.startTime,
-          endTime: sharedCourse.endTime,
-          section: sharedCourse.section,
-          instructor: sharedCourse.instructor,
-          room: sharedCourse.room,
-          days: sharedCourse.days,
-        };
-      });
+      const knownCourseIds = new Set(courses.map((course) => course.id));
+      const importedPlans = Object.fromEntries(
+        Object.entries(result.schedule.plannedCourses)
+          .filter(([courseId]) => knownCourseIds.has(courseId)),
+      );
+      const importedWeeklySchedule = Object.fromEntries(
+        Object.entries(result.schedule.weeklySchedule).map(([semester, entries]) => [
+          semester,
+          Object.fromEntries(
+            Object.entries(entries)
+              .filter(([courseId]) => knownCourseIds.has(courseId))
+              .map(([courseId, entry]) => [
+                courseId,
+                { ...entry } satisfies ScheduleEntry,
+              ]),
+          ),
+        ]),
+      ) as Record<string, Record<string, ScheduleEntry>>;
 
       window.localStorage.setItem("last_shared_schedule", JSON.stringify(result));
       setPlannedCourses(importedPlans);
@@ -552,6 +577,17 @@ function FlowComponent() {
           .map((sharedCourse) => courses.find((course) => course.id === sharedCourse.courseCode)?.id)
           .filter((courseId): courseId is string => !!courseId),
       ));
+      setCourseGrades(result.schedule.courseGrades ?? {});
+      setFailedCourseIds((result.schedule.failedCourseIds ?? []).filter((id) => knownCourseIds.has(id)));
+      if (result.schedule.selectedElectives) {
+        setSelectedElectives(result.schedule.selectedElectives);
+      }
+      if (result.schedule.preferences) {
+        setPlanStartSemester(result.schedule.preferences.planStartSemester);
+        setPlanEndSemester(result.schedule.preferences.planEndSemester);
+        setHidePastSemesters(result.schedule.preferences.hidePastSemesters);
+        setIsDarkMode(result.schedule.preferences.darkMode);
+      }
       setLoadedSchedule(result);
       setIsLoadScheduleOpen(false);
     } catch (error) {
@@ -560,7 +596,18 @@ function FlowComponent() {
     } finally {
       setLoadLoading(false);
     }
-  }, [setCompletedCourses, setPlannedCourses, setWeeklySchedule]);
+  }, [
+    setCompletedCourses,
+    setCourseGrades,
+    setFailedCourseIds,
+    setHidePastSemesters,
+    setIsDarkMode,
+    setPlanEndSemester,
+    setPlanStartSemester,
+    setPlannedCourses,
+    setSelectedElectives,
+    setWeeklySchedule,
+  ]);
 
   useEffect(() => {
     if (didAutoLoadSharedScheduleRef.current) return;

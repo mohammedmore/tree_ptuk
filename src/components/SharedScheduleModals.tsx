@@ -242,57 +242,128 @@ export const SharedSchedulePreviewModal: React.FC<SharedSchedulePreviewProps> = 
   code,
   warning,
   onClose,
-}) => (
-  <BaseModal
-    isOpen={!!schedule}
-    onClose={onClose}
-    title={schedule?.name ?? "الجدول المشارك"}
-    maxWidth="max-w-3xl"
-  >
-    {schedule && (
-      <div className="space-y-4 p-4 sm:p-6" dir="rtl">
-        <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
-          <span className="font-bold text-emerald-700">تم تحميل الجدول المشارك عبر الرمز: {code}</span>
-          <span className="text-gray-500">{schedule.courses.length} مادة</span>
-        </div>
-        {warning && (
-          <p role="status" className="rounded-lg bg-amber-50 p-3 text-sm font-bold text-amber-800">
-            تم جلب الجدول بنجاح، لكن {warning} نفّذ ملف إصلاح دالة العدّاد في Supabase لتفعيلها.
-          </p>
-        )}
-        {schedule.courses.length === 0 ? (
-          <p className="rounded-xl bg-gray-50 p-5 text-center font-bold text-gray-500 dark:bg-slate-800">لا توجد مواد في هذه اللقطة.</p>
-        ) : (
-          <div className="space-y-3">
-            {schedule.courses.map((course, index) => (
-              <article
-                key={`${course.courseCode}-${course.semester}-${index}`}
-                className="rounded-xl border border-gray-200 p-4 dark:border-slate-700"
-                style={{ borderRightWidth: 5, borderRightColor: course.color || "#3b82f6" }}
-              >
-                <div className="flex flex-wrap items-start justify-between gap-2">
-                  <div>
-                    <h3 className="font-black text-gray-900 dark:text-white">{course.courseName}</h3>
-                    <p className="mt-1 text-xs font-bold text-gray-500">
-                      {course.courseCode} · الشعبة {course.section || "—"} · {course.credits} ساعات
-                    </p>
-                  </div>
-                  <span className="rounded-lg bg-gray-100 px-2 py-1 text-xs font-bold dark:bg-slate-800">{course.semester}</span>
-                </div>
-                <div className="mt-3 grid gap-1 text-sm text-gray-600 dark:text-slate-300 sm:grid-cols-2">
-                  <span>الأيام: {course.days.join("، ") || "غير محدد"}</span>
-                  <span>الوقت: {course.startTime || "—"} - {course.endTime || "—"}</span>
-                  <span>المدرس: {course.instructor || "غير محدد"}</span>
-                  <span>القاعة: {course.room || "غير محددة"}</span>
-                </div>
-              </article>
-            ))}
+}) => {
+  const gradedCourses = schedule?.courses.filter((course) => {
+    const grade = course.grade ?? schedule.courseGrades?.[course.courseCode];
+    return (course.completed || course.failed)
+      && grade !== -1
+      && (typeof grade === "number" || course.failed);
+  }) ?? [];
+  const gradedCredits = gradedCourses.reduce((sum, course) => sum + course.credits, 0);
+  const weightedAverage = gradedCredits
+    ? gradedCourses.reduce((sum, course) => (
+      sum + (course.grade ?? schedule?.courseGrades?.[course.courseCode] ?? 0) * course.credits
+    ), 0) / gradedCredits
+    : null;
+
+  return (
+    <BaseModal
+      isOpen={!!schedule}
+      onClose={onClose}
+      title={schedule?.name ?? "الجدول المشارك"}
+      maxWidth="max-w-3xl"
+    >
+      {schedule && (
+        <div className="space-y-4 p-4 sm:p-6" dir="rtl">
+          <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
+            <span className="font-bold text-emerald-700">تم تحميل الخطة عبر الرمز: {code}</span>
+            <span className="text-gray-500">{schedule.courses.length} مادة في المنهاج</span>
           </div>
-        )}
-        <button onClick={onClose} className="flex w-full items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-3 font-black text-white">
-          <X size={17} /> إغلاق
-        </button>
-      </div>
-    )}
-  </BaseModal>
-);
+          {warning && (
+            <p role="status" className="rounded-lg bg-amber-50 p-3 text-sm font-bold text-amber-800">
+              تم جلب الخطة. {warning} شغّل ملف إصلاح دالة العدّاد في Supabase لتفعيل العداد.
+            </p>
+          )}
+          {schedule.version === 2 && (
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
+              {[
+                ["المواد المنجزة", schedule.completedCourses.length],
+                ["المواد المخفقة", schedule.failedCourseIds?.length ?? 0],
+                ["المواد المخططة", Object.keys(schedule.plannedCourses).length],
+                ["المواد ذات العلامات", Object.keys(schedule.courseGrades ?? {}).length],
+                ["معدل العلامات", weightedAverage === null ? "—" : `${weightedAverage.toFixed(2)}%`],
+              ].map(([label, value]) => (
+                <div key={label} className="rounded-xl bg-gray-50 p-3 text-center dark:bg-slate-800">
+                  <div className="text-xl font-black text-blue-600">{value}</div>
+                  <div className="text-xs font-bold text-gray-500">{label}</div>
+                </div>
+              ))}
+            </div>
+          )}
+          {schedule.courses.length === 0 ? (
+            <p className="rounded-xl bg-gray-50 p-5 text-center font-bold text-gray-500 dark:bg-slate-800">
+              لا توجد مواد في هذه اللقطة.
+            </p>
+          ) : (
+            <div className="max-h-[55vh] space-y-3 overflow-y-auto">
+              {schedule.courses.map((course, index) => (
+                <article
+                  key={`${course.courseCode}-${course.semester}-${index}`}
+                  className="rounded-xl border border-gray-200 p-4 dark:border-slate-700"
+                  style={{ borderRightWidth: 5, borderRightColor: course.color || "#3b82f6" }}
+                >
+                  <div className="flex flex-wrap items-start justify-between gap-2">
+                    <div>
+                      <h3 className="font-black text-gray-900 dark:text-white">{course.courseName}</h3>
+                      <p className="mt-1 text-xs font-bold text-gray-500">
+                        {course.courseCode} · {course.credits} ساعات · {course.category}
+                      </p>
+                    </div>
+                    <div className="flex flex-wrap gap-1">
+                      {course.semester && (
+                        <span className="rounded-lg bg-gray-100 px-2 py-1 text-xs font-bold dark:bg-slate-800">
+                          {course.semester}
+                        </span>
+                      )}
+                      {course.completed && (
+                        <span className="rounded-lg bg-emerald-50 px-2 py-1 text-xs font-bold text-emerald-700">
+                          منجزة
+                        </span>
+                      )}
+                      {course.failed && (
+                        <span className="rounded-lg bg-red-50 px-2 py-1 text-xs font-bold text-red-700">
+                          إعادة
+                        </span>
+                      )}
+                      {course.grade !== null && course.grade !== undefined && (
+                        <span className="rounded-lg bg-indigo-50 px-2 py-1 text-xs font-bold text-indigo-700">
+                          {course.grade === -1 ? "ناجح/راسب" : `العلامة: ${course.grade}`}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  <div className="mt-3 grid gap-1 text-sm text-gray-600 dark:text-slate-300 sm:grid-cols-2">
+                    <span>الفصل: {course.semester || "غير مخططة"}</span>
+                    <span>الشعبة: {course.section || "—"}</span>
+                    <span>الأيام: {course.days.join("، ") || "غير محدد"}</span>
+                    <span>الوقت: {course.startTime || "—"} - {course.endTime || "—"}</span>
+                    <span>المدرس: {course.instructor || "غير محدد"}</span>
+                    <span>القاعة: {course.room || "غير محددة"}</span>
+                    {(course.prerequisites?.length ?? 0) > 0 && (
+                      <span className="sm:col-span-2">
+                        المتطلبات السابقة: {course.prerequisites?.join("، ")}
+                      </span>
+                    )}
+                  </div>
+                </article>
+              ))}
+            </div>
+          )}
+          {schedule.preferences && (
+            <div className="rounded-xl bg-gray-50 p-3 text-xs font-bold text-gray-600 dark:bg-slate-800 dark:text-slate-300">
+              إعدادات الخطة: من {schedule.preferences.planStartSemester} إلى {schedule.preferences.planEndSemester}
+              {" · "}إخفاء الفصول السابقة: {schedule.preferences.hidePastSemesters ? "نعم" : "لا"}
+              {" · "}المظهر: {schedule.preferences.darkMode ? "داكن" : "فاتح"}
+            </div>
+          )}
+          <button
+            onClick={onClose}
+            className="flex w-full items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-3 font-black text-white"
+          >
+            <X size={17} /> إغلاق
+          </button>
+        </div>
+      )}
+    </BaseModal>
+  );
+};
