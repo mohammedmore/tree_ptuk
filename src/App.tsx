@@ -254,6 +254,21 @@ const { nodes: layoutedNodes, edges: layoutedEdges } = getLayoutedElements(
   "RL", // Right to left
 );
 
+const graphExtent = layoutedNodes.reduce(
+  (bounds, node) => ({
+    minX: Math.min(bounds.minX, node.position.x),
+    minY: Math.min(bounds.minY, node.position.y),
+    maxX: Math.max(bounds.maxX, node.position.x + 256),
+    maxY: Math.max(bounds.maxY, node.position.y + 280),
+  }),
+  { minX: Infinity, minY: Infinity, maxX: -Infinity, maxY: -Infinity },
+);
+const graphPadding = 300;
+const nodeExtent: [[number, number], [number, number]] = [
+  [graphExtent.minX - graphPadding, graphExtent.minY - graphPadding],
+  [graphExtent.maxX + graphPadding, graphExtent.maxY + graphPadding],
+];
+
 const nodeTypes = {
   courseNode: CourseNode,
 };
@@ -359,6 +374,14 @@ function FlowComponent() {
   useEffect(() => {
     fitView({ padding: 0.05, duration: 800 });
   }, [fitView]);
+
+  useEffect(() => {
+    if (viewMode !== "map") return;
+    const frame = window.requestAnimationFrame(() => {
+      window.dispatchEvent(new Event("resize"));
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [viewMode]);
 
   const activeCourses = useMemo(() => {
     // Since we are always in "كامل المنهاج", all courses are active regardless of elective selection
@@ -590,6 +613,8 @@ function FlowComponent() {
   }, []);
 
   useEffect(() => {
+    if (viewMode !== "map") return;
+
     const ancestors = new Set<string>();
     const descendants = new Set<string>();
     const directPrereqs = new Set<string>();
@@ -751,6 +776,7 @@ function FlowComponent() {
   }, [
     selectedNodeId,
     hoveredCourseId,
+    viewMode,
     setNodes,
     setEdges,
     completedCourses,
@@ -1042,6 +1068,10 @@ function FlowComponent() {
                 onNodeClick={onNodeClick}
                 onPaneClick={onPaneClick}
                 nodeTypes={nodeTypes}
+                onlyRenderVisibleElements
+                nodeExtent={nodeExtent}
+                translateExtent={nodeExtent}
+                elevateNodesOnSelect={false}
                 minZoom={0.05}
                 maxZoom={1.5}
                 attributionPosition="bottom-left"

@@ -137,4 +137,24 @@ const CourseNode = ({ data, isConnectable }: any) => {
     );
 };
 
-export default memo(CourseNode);
+const areCourseNodePropsEqual = (previous: any, next: any) => {
+    const previousData = previous.data;
+    const nextData = next.data;
+    return previous.id === next.id
+        && previous.selected === next.selected
+        && previous.isConnectable === next.isConnectable
+        && previousData.id === nextData.id
+        && previousData.label === nextData.label
+        && previousData.credits === nextData.credits
+        && previousData.seasonal === nextData.seasonal
+        && previousData.availableSemesters === nextData.availableSemesters
+        && previousData.isSelected === nextData.isSelected
+        && previousData.isDirectPrereq === nextData.isDirectPrereq
+        && previousData.isDirectDep === nextData.isDirectDep
+        && previousData.isCompleted === nextData.isCompleted
+        && previousData.isAvailable === nextData.isAvailable
+        && previousData.isPlanned === nextData.isPlanned
+        && previousData.opacity === nextData.opacity;
+};
+
+export default memo(CourseNode, areCourseNodePropsEqual);

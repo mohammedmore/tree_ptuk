@@ -56,6 +56,15 @@ body {
   button {
     touch-action: manipulation;
   }
+
+  .react-flow__node-courseNode > div {
+    box-shadow: none !important;
+    transition-duration: 0ms !important;
+  }
+
+  .react-flow__edge.animated path {
+    animation: none !important;
+  }
 }
 
 @media print {
