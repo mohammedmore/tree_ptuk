@@ -67,7 +67,7 @@ const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY
   ?? import.meta.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
   ?? import.meta.env.SUPABASE_PUBLISHABLE_KEY
   ?? "YOUR_SUPABASE_ANON_KEY";
-const CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+const CODE_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
 
 let client: SupabaseClient | null = null;
 
@@ -126,7 +126,24 @@ function isSharedScheduleSnapshot(value: unknown): value is SharedScheduleSnapsh
 }
 
 export function normalizeScheduleCode(value: string): string {
-  return value.trim().toUpperCase().replace(/[\s-]/g, "");
+  const input = value.trim();
+  let code = input;
+
+  try {
+    const url = new URL(input);
+    code = url.searchParams.get("code") ?? url.searchParams.get("s") ?? input;
+  } catch {
+    const match = input.match(/[?&](?:code|s)=([^&#]+)/i);
+    if (match) {
+      try {
+        code = decodeURIComponent(match[1]);
+      } catch {
+        code = match[1];
+      }
+    }
+  }
+
+  return code.trim().toUpperCase().replace(/[\s-]/g, "");
 }
 
 export function generate8Charcode(): string {
@@ -168,7 +185,7 @@ export async function shareScheduleToCloud(
 
 export async function fetchScheduleByCode(
   value: string,
-): Promise<{ code: string; schedule: SharedScheduleSnapshot }> {
+): Promise<{ code: string; schedule: SharedScheduleSnapshot; viewCountWarning?: string }> {
   const code = normalizeScheduleCode(value);
   if (!/^[A-HJ-KM-NP-Z2-9]{8}$/.test(code)) {
     throw new Error("أدخل رمزاً صحيحاً من 8 أحرف أو أرقام.");
@@ -192,12 +209,11 @@ export async function fetchScheduleByCode(
     "increment_shared_schedule_views",
     { p_code: code },
   );
-  if (counterError) {
-    throw new Error(`تم العثور على الجدول، لكن تعذر تحديث عداد المشاهدات: ${counterError.message}`);
-  }
-  if (updatedCount === null) {
-    throw new Error("انتهت صلاحية الجدول أثناء تحميله. اطلب رابطاً أحدث.");
-  }
+  const viewCountWarning = counterError
+    ? `تعذر تحديث عداد المشاهدات: ${counterError.message}`
+    : updatedCount === null
+      ? "تعذر تحديث عداد المشاهدات؛ ربما انتهت صلاحية الجدول."
+      : undefined;
 
-  return { code, schedule };
+  return { code, schedule, viewCountWarning };
 }

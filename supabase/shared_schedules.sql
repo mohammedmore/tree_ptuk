@@ -31,7 +31,7 @@ create policy "Anyone can insert shared schedules"
 grant select, insert on public.shared_schedules to anon, authenticated;
 revoke update, delete on public.shared_schedules from anon, authenticated;
 
-create or replace function public.increment_shared_schedule_views(p_code varchar)
+create or replace function public.increment_shared_schedule_views(p_code text)
 returns integer
 language plpgsql
 security definer
@@ -50,8 +50,8 @@ begin
 end;
 $$;
 
-revoke all on function public.increment_shared_schedule_views(varchar) from public;
-grant execute on function public.increment_shared_schedule_views(varchar)
+revoke all on function public.increment_shared_schedule_views(text) from public;
+grant execute on function public.increment_shared_schedule_views(text)
   to anon, authenticated;
 
 notify pgrst, 'reload schema';

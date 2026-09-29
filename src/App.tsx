@@ -332,6 +332,7 @@ function FlowComponent() {
   const [loadedSchedule, setLoadedSchedule] = useState<{
     code: string;
     schedule: SharedScheduleSnapshot;
+    viewCountWarning?: string;
   } | null>(null);
   const [currentPlanningSemester, setCurrentPlanningSemester] = useState<string | null>(null);
   const [isCourseListModalOpen, setIsCourseListModalOpen] = useState(false);
@@ -2060,6 +2061,7 @@ function FlowComponent() {
         <SharedSchedulePreviewModal
           schedule={loadedSchedule?.schedule ?? null}
           code={loadedSchedule?.code ?? null}
+          warning={loadedSchedule?.viewCountWarning}
           onClose={() => setLoadedSchedule(null)}
         />
       </div>

@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { Copy, Link2, LoaderCircle, QrCode, Search, X } from "lucide-react";
 import { BaseModal } from "./BaseModal";
-import { SharedScheduleSnapshot } from "../sharedSchedules";
+import { normalizeScheduleCode, SharedScheduleSnapshot } from "../sharedSchedules";
 
 interface QRCodeOptions {
   text: string;
@@ -204,13 +204,13 @@ export const LoadScheduleModal: React.FC<LoadScheduleModalProps> = ({
           ref={inputRef}
           id="shared-schedule-code"
           value={code}
-          maxLength={11}
+          maxLength={512}
           autoComplete="off"
           spellCheck={false}
           onChange={(event) => setCode(event.target.value.toUpperCase())}
           onPaste={(event) => {
             event.preventDefault();
-            setCode(event.clipboardData.getData("text").toUpperCase().trim());
+            setCode(normalizeScheduleCode(event.clipboardData.getData("text")));
           }}
           placeholder="A7X9-2P4K"
           dir="ltr"
@@ -219,7 +219,7 @@ export const LoadScheduleModal: React.FC<LoadScheduleModalProps> = ({
         {error && <p role="alert" className="rounded-lg bg-red-50 p-3 text-sm font-bold text-red-700">{error}</p>}
         <button
           type="submit"
-          disabled={loading || code.replace(/[\s-]/g, "").length !== 8}
+          disabled={loading || normalizeScheduleCode(code).length !== 8}
           className="flex w-full items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-3 font-black text-white transition-colors hover:bg-blue-700 disabled:opacity-50"
         >
           {loading ? <LoaderCircle className="animate-spin" size={18} /> : <Search size={18} />}
@@ -233,12 +233,14 @@ export const LoadScheduleModal: React.FC<LoadScheduleModalProps> = ({
 interface SharedSchedulePreviewProps {
   schedule: SharedScheduleSnapshot | null;
   code: string | null;
+  warning?: string;
   onClose: () => void;
 }
 
 export const SharedSchedulePreviewModal: React.FC<SharedSchedulePreviewProps> = ({
   schedule,
   code,
+  warning,
   onClose,
 }) => (
   <BaseModal
@@ -253,6 +255,11 @@ export const SharedSchedulePreviewModal: React.FC<SharedSchedulePreviewProps> = 
           <span className="font-bold text-emerald-700">تم تحميل الجدول المشارك عبر الرمز: {code}</span>
           <span className="text-gray-500">{schedule.courses.length} مادة</span>
         </div>
+        {warning && (
+          <p role="status" className="rounded-lg bg-amber-50 p-3 text-sm font-bold text-amber-800">
+            تم جلب الجدول بنجاح، لكن {warning} نفّذ ملف إصلاح دالة العدّاد في Supabase لتفعيلها.
+          </p>
+        )}
         {schedule.courses.length === 0 ? (
           <p className="rounded-xl bg-gray-50 p-5 text-center font-bold text-gray-500 dark:bg-slate-800">لا توجد مواد في هذه اللقطة.</p>
         ) : (
