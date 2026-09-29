@@ -1,7 +1,7 @@
 import React from "react";
-import { X, CalendarDays, Trash2, CircleCheckBig, Download, Printer, Loader2, Image as ImageIcon, Sparkles, PieChart, ChevronDown, ChevronUp, AlertTriangle } from "lucide-react";
+import { X, CalendarDays, Trash2, CircleCheckBig, Download, Sparkles, PieChart, ChevronDown, ChevronUp, AlertTriangle } from "lucide-react";
 import { cn } from "../utils";
-import { Course, courses, categoryRequirements } from "../data";
+import { Course, courses } from "../data";
 import { SEMESTERS, TOTAL_CREDITS } from "../constants";
 import DynamicCourseDetailsModal from "./DynamicCourseDetailsModal";
 import StatsDashboard from "./StatsDashboard";
@@ -115,52 +115,48 @@ const PlannerView: React.FC<PlannerViewProps> = ({
 
   if (!isPlannerOpen) return null;
 
-  const progressPercentage =
-    Math.round((completedCredits / TOTAL_CREDITS) * 100) || 0;
-  const plannedPercentage =
-    Math.round((plannedCredits / TOTAL_CREDITS) * 100) || 0;
-
   const allSemestersEmpty = Object.keys(plannedCourses).length === 0;
 
   return (
     <div
-      className="fixed inset-0 bg-gray-900/50 backdrop-blur-sm z-[100] flex items-center justify-center p-4"
+      className="fixed inset-0 bg-gray-900/50 backdrop-blur-sm z-[100] flex items-center justify-center p-1.5 sm:p-4"
       onClick={onClose}
     >
       <div
-        className="bg-white dark:bg-slate-900 rounded-2xl p-6 w-full max-w-6xl h-[85vh] flex flex-col shadow-2xl animate-in zoom-in-95 duration-200"
+        className="bg-white dark:bg-slate-900 rounded-xl sm:rounded-2xl p-3 sm:p-6 w-full max-w-6xl h-[97dvh] sm:h-[85vh] flex flex-col shadow-2xl animate-in zoom-in-95 duration-200"
         dir="rtl"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex justify-between items-center mb-6 shrink-0">
-          <h2 className="text-2xl font-black text-gray-800 dark:text-slate-100 flex items-center gap-2">
+        <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2 sm:gap-4 mb-3 sm:mb-6 shrink-0">
+          <h2 className="text-lg sm:text-2xl font-black text-gray-800 dark:text-slate-100 flex items-center gap-2">
             <CalendarDays className="text-orange-500" />
             الخطة الفصلية
           </h2>
-          <div className="flex items-center gap-2">
+          <div className="grid grid-cols-2 sm:flex items-center gap-1.5 sm:gap-2">
             <button
               onClick={() => setShowStats(!showStats)}
               className={cn(
-                "flex items-center gap-2 px-4 py-2 border rounded-xl transition-all font-bold text-sm shadow-sm",
+                "min-h-10 flex items-center justify-center gap-1 sm:gap-2 px-2 sm:px-4 py-1.5 sm:py-2 border rounded-xl transition-all font-bold text-[11px] sm:text-sm shadow-sm",
                 showStats 
                   ? "bg-indigo-50 text-indigo-700 border-indigo-200 dark:bg-indigo-950/40 dark:text-indigo-300 dark:border-indigo-900/50"
                   : "bg-white text-gray-700 border-gray-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700 hover:bg-gray-50"
               )}
             >
-              <PieChart size={18} className={showStats ? "text-indigo-600" : "text-gray-500"} />
+              <PieChart size={16} className={showStats ? "text-indigo-600" : "text-gray-500"} />
               {showStats ? "إخفاء الإحصائيات" : "عرض الإحصائيات الذكية"}
               {showStats ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
             </button>
             <button
               onClick={() => setIsExportModalOpen(true)}
-              className="flex items-center gap-2 px-4 py-2 bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-900/50 rounded-xl hover:bg-emerald-100 dark:hover:bg-emerald-900/30 transition-all font-bold text-sm shadow-sm"
+              className="min-h-10 flex items-center justify-center gap-1 sm:gap-2 px-2 sm:px-4 py-1.5 sm:py-2 bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-900/50 rounded-xl hover:bg-emerald-100 dark:hover:bg-emerald-900/30 transition-all font-bold text-[11px] sm:text-sm shadow-sm"
             >
-              <Download size={18} className="text-emerald-600 dark:text-emerald-400" />
-              تنزيل الخطة (PDF / صورة)
+              <Download size={16} className="text-emerald-600 dark:text-emerald-400" />
+              <span className="sm:hidden">تصدير</span>
+              <span className="hidden sm:inline">تنزيل الخطة (PDF / صورة)</span>
             </button>
             <button
               onClick={onClose}
-              className="p-2 text-gray-400 dark:text-slate-500 hover:bg-gray-100 dark:hover:bg-slate-800 rounded-full transition-colors"
+              className="min-h-10 min-w-10 flex items-center justify-center p-2 text-gray-400 dark:text-slate-500 hover:bg-gray-100 dark:hover:bg-slate-800 rounded-full transition-colors"
             >
               <X />
             </button>
@@ -185,7 +181,7 @@ const PlannerView: React.FC<PlannerViewProps> = ({
           )}
 
           {/* Controls Bar for Planning Boundaries */}
-          <div className="bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 p-3.5 rounded-2xl mb-4 flex flex-col md:flex-row justify-between items-start md:items-center gap-3 text-right">
+          <div className="bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 p-2.5 sm:p-3.5 rounded-2xl mb-3 sm:mb-4 flex flex-col md:flex-row justify-between items-start md:items-center gap-2 sm:gap-3 text-right">
             <div className="flex items-center gap-2.5 flex-wrap">
               <span className="text-xs font-black text-indigo-600 bg-indigo-55 px-2 py-0.5 rounded-md border border-indigo-100">
                 تحجيم التخطيط الأكاديمي
@@ -230,7 +226,7 @@ const PlannerView: React.FC<PlannerViewProps> = ({
           </div>
 
           {planningCourseId && (
-            <div className="bg-orange-50 border border-orange-200 text-orange-800 p-4 rounded-xl mb-4 flex items-center justify-between">
+            <div className="bg-orange-50 border border-orange-200 text-orange-800 p-3 sm:p-4 rounded-xl mb-3 sm:mb-4 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
               <div>
                 <span className="font-bold">
                   قم بتحديد الفصل الدراسي لإضافة مادة:{" "}
@@ -282,7 +278,7 @@ const PlannerView: React.FC<PlannerViewProps> = ({
                     SEMESTERS.indexOf(sem) <
                     SEMESTERS.indexOf(planStartSemester);
                   const semCourses = Object.entries(plannedCourses)
-                    .filter(([id, semester]) => semester === sem)
+                    .filter(([, semester]) => semester === sem)
                     .map(([id]) => courses.find((c) => c.id === id)!)
                     .filter(Boolean);
                   return (
@@ -354,7 +350,7 @@ const PlannerView: React.FC<PlannerViewProps> = ({
                                   return next;
                                 });
                               }}
-                              className="opacity-0 group-hover/header:opacity-100 p-1 bg-red-50 text-red-500 hover:bg-red-100 hover:text-red-700 rounded-md transition-all shadow-sm border border-red-200"
+                              className="min-h-9 min-w-9 sm:min-h-0 sm:min-w-0 opacity-100 sm:opacity-0 sm:group-hover/header:opacity-100 p-2 sm:p-1 bg-red-50 text-red-500 hover:bg-red-100 hover:text-red-700 rounded-md transition-all shadow-sm border border-red-200"
                               title="حذف كل مواد الفصل من الخطة"
                             >
                               <Trash2 size={14} />
@@ -379,7 +375,7 @@ const PlannerView: React.FC<PlannerViewProps> = ({
                                       return next;
                                     });
                                   }}
-                                  className="opacity-0 group-hover/header:opacity-100 p-1 bg-emerald-50 text-emerald-600 hover:bg-emerald-100 hover:text-emerald-700 rounded-md transition-all shadow-sm border border-emerald-200"
+                                  className="min-h-9 min-w-9 sm:min-h-0 sm:min-w-0 opacity-100 sm:opacity-0 sm:group-hover/header:opacity-100 p-2 sm:p-1 bg-emerald-50 text-emerald-600 hover:bg-emerald-100 hover:text-emerald-700 rounded-md transition-all shadow-sm border border-emerald-200"
                                   title="إنجاز كل مواد الفصل"
                                 >
                                   <CircleCheckBig size={14} />
@@ -434,7 +430,7 @@ const PlannerView: React.FC<PlannerViewProps> = ({
                                       return next;
                                     });
                                   }}
-                                  className="p-1 text-gray-400 dark:text-slate-600 hover:text-red-500 hover:bg-red-50 rounded opacity-0 group-hover/card:opacity-100 transition-all"
+                                  className="min-h-9 min-w-9 sm:min-h-0 sm:min-w-0 p-2 sm:p-1 text-gray-400 dark:text-slate-600 hover:text-red-500 hover:bg-red-50 rounded opacity-100 sm:opacity-0 sm:group-hover/card:opacity-100 transition-all"
                                   title="حذف من الخطة"
                                 >
                                   <Trash2 size={12} />
@@ -468,7 +464,7 @@ const PlannerView: React.FC<PlannerViewProps> = ({
                               }));
                               setPlanningCourseId(null);
                             }}
-                            className="w-full mt-2 py-3 border-2 border-dashed border-orange-200 text-orange-500 hover:border-orange-400 hover:bg-orange-50 rounded-lg text-sm font-bold transition-colors opacity-0 group-hover:opacity-100"
+                            className="w-full mt-2 py-3 border-2 border-dashed border-orange-200 text-orange-500 hover:border-orange-400 hover:bg-orange-50 rounded-lg text-sm font-bold transition-colors opacity-100 sm:opacity-0 sm:group-hover:opacity-100"
                           >
                             + أضف{" "}
                             {
