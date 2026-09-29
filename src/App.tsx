@@ -278,7 +278,9 @@ function FlowComponent() {
   const [edges, setEdges, onEdgesChange] = useEdgesState(layoutedEdges);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [isDetailsOpen, setIsDetailsOpen] = useState(false);
-  const [viewMode, setViewMode] = useState<"map" | "list">("map");
+  const [viewMode, setViewMode] = useState<"map" | "list">(() =>
+    window.matchMedia("(max-width: 639px)").matches ? "list" : "map"
+  );
   const [listGroupBy, setListGroupBy] = useState<"category" | "semester">("semester");
   const [pinnedCourseId, setPinnedCourseId] = useState<string | null>(null);
   const [completedCourses, setCompletedCourses] = useLocalStorage<Set<string>>(
@@ -370,18 +372,14 @@ function FlowComponent() {
   }, [isDarkMode]);
   const { fitView, setCenter } = useReactFlow();
 
-  // التأكد من احتواء الشجرة داخل الشاشة بشكل مثالي عند التحميل الأول
-  useEffect(() => {
-    fitView({ padding: 0.05, duration: 800 });
-  }, [fitView]);
-
   useEffect(() => {
     if (viewMode !== "map") return;
     const frame = window.requestAnimationFrame(() => {
-      window.dispatchEvent(new Event("resize"));
+      const isMobile = window.matchMedia("(max-width: 639px)").matches;
+      fitView({ padding: isMobile ? 0.12 : 0.05, duration: isMobile ? 0 : 500 });
     });
     return () => window.cancelAnimationFrame(frame);
-  }, [viewMode]);
+  }, [fitView, viewMode]);
 
   const activeCourses = useMemo(() => {
     // Since we are always in "كامل المنهاج", all courses are active regardless of elective selection
@@ -791,12 +789,12 @@ function FlowComponent() {
   return (
     <div
       className={cn(
-        "w-screen h-dvh print:h-auto overflow-hidden print:overflow-visible flex flex-col font-sans p-0 sm:p-4 print:p-0 transition-colors duration-300",
+        "app-shell w-full h-dvh print:h-auto overflow-hidden print:overflow-visible flex flex-col font-sans p-0 sm:p-4 print:p-0 transition-colors duration-300",
         isDarkMode ? "dark bg-[#0f172a]" : "bg-[#f3f4f6] print:bg-white"
       )}
       dir="rtl"
     >
-      <div className="print:hidden w-full h-full flex flex-col">
+      <div className="print:hidden w-full h-full min-h-0 flex flex-col">
         {/* Header Section */}
         <header className="flex flex-col xl:flex-row justify-between items-start xl:items-center mb-2 sm:mb-4 bg-white dark:bg-slate-800/95 p-3 sm:p-6 rounded-b-none sm:rounded-xl shadow-sm border-b sm:border border-gray-200 dark:border-slate-700/80 z-10 shrink-0 gap-3 sm:gap-4 transition-all">
           <div className="flex justify-between items-start w-full xl:w-auto gap-4">
@@ -1049,7 +1047,7 @@ function FlowComponent() {
 
         {/* Main Content Area */}
         <div
-          className="flex-1 w-full sm:mx-0 relative bg-white dark:bg-slate-900 sm:rounded-xl shadow-sm border-t sm:border border-gray-200 dark:border-slate-800 overflow-hidden flex flex-col"
+          className="flex-1 min-h-0 min-w-0 w-full sm:mx-0 relative bg-white dark:bg-slate-900 sm:rounded-xl shadow-sm border-t sm:border border-gray-200 dark:border-slate-800 overflow-hidden flex flex-col"
           dir="ltr"
         >
           <>

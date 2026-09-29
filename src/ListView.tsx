@@ -1,5 +1,4 @@
 import React, { useMemo, useState } from "react";
-import { motion, AnimatePresence } from "motion/react";
 import {
     LayoutList,
     Pin,
@@ -138,16 +137,16 @@ export default function ListView({
         }
 
         return (
-            <motion.div
-                layout
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, scale: 0.95 }}
+            <div
                 key={slotId || course.id}
-                className={cn("bg-white dark:bg-slate-800 p-3 rounded-xl border transition-all duration-300 flex flex-col gap-2 relative group hover:shadow-lg", cardBorder)}
+                className={cn("course-list-card bg-white dark:bg-slate-800 p-3 rounded-xl border transition-all duration-300 flex flex-col gap-2 relative group hover:shadow-lg", cardBorder)}
                 style={{ opacity: cardOpacity }} // Apply opacity
-                onMouseEnter={() => setHoveredCourseId(course.id)} // Set hovered course
-                onMouseLeave={() => setHoveredCourseId(null)} // Clear hovered course
+                onPointerEnter={(event) => {
+                    if (event.pointerType === "mouse") setHoveredCourseId(course.id);
+                }}
+                onPointerLeave={(event) => {
+                    if (event.pointerType === "mouse") setHoveredCourseId(null);
+                }}
             >
                 <div className="flex justify-between items-center text-[10px] font-bold">
                     {slotLabel ? (
@@ -226,12 +225,12 @@ export default function ListView({
                         </button>
                     </div>
                 </div>
-            </motion.div>
+            </div>
         );
     };
 
     return (
-        <div className="flex-1 overflow-x-auto bg-slate-50/40 dark:bg-slate-950/60 p-2 sm:p-5 flex flex-col h-full animate-fade-in" dir="rtl">
+        <div className="flex-1 min-h-0 min-w-0 overflow-hidden bg-slate-50/40 dark:bg-slate-950/60 p-2 sm:p-5 flex flex-col" dir="rtl">
             <div className="mb-3 sm:mb-4 flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-2 sm:gap-4 bg-white dark:bg-slate-800 p-2 sm:p-3 rounded-2xl border border-gray-150 dark:border-slate-700/60 shadow-sm shrink-0">
                 <div className="flex items-center gap-2">
                     <LayoutList size={18} className="text-blue-500" />
@@ -253,7 +252,7 @@ export default function ListView({
             </div>
 
             {/* Mobile: Accordion View / Desktop: Horizontal Scroll View */}
-            <div className="flex-1 flex flex-col sm:flex-row gap-3 sm:gap-5 overflow-y-auto sm:overflow-x-auto pb-4 items-start scrollbar-thin">
+            <div className="flex-1 min-h-0 min-w-0 flex flex-col sm:flex-row gap-3 sm:gap-5 overflow-y-auto sm:overflow-x-auto pb-4 items-start scrollbar-thin">
                 {categories.map((cat) => {
                     let itemsList: any[];
                     let totalCr: number;
@@ -343,32 +342,22 @@ export default function ListView({
                             </div>
 
                             {/* Content - Collapsible on mobile, always visible on desktop */}
-                            <AnimatePresence>
-                                {(isExpanded || window.innerWidth >= 640) && (
-                                    <motion.div
-                                        layout
-                                        initial={{ height: 0, opacity: 0 }}
-                                        animate={{ height: "auto", opacity: 1 }}
-                                        exit={{ height: 0, opacity: 0 }}
-                                        className="flex-1 overflow-y-auto p-3 flex flex-col gap-3 scrollbar-thin"
-                                    >
-                                        <AnimatePresence mode="popLayout">
-                                            {itemsList.map(item => {
-                                                if (item.type === 'course') {
-                                                    return renderCard(item.course);
-                                                } else {
-                                                    const selectedCourseId = selectedElectives[item.slotId];
-                                                    const course = courses.find((c: Course) => c.id === selectedCourseId);
-                                                    if (course && ELECTIVE_SLOTS_DEFS[item.slotId]) {
-                                                        return renderCard(course, ELECTIVE_SLOTS_DEFS[item.slotId].label, item.slotId);
-                                                    }
-                                                    return null;
-                                                }
-                                            })}
-                                        </AnimatePresence>
-                                    </motion.div>
-                                )}
-                            </AnimatePresence>
+                            {(isExpanded || window.innerWidth >= 640) && (
+                                <div className="flex-1 overflow-y-auto p-3 flex flex-col gap-3 scrollbar-thin">
+                                    {itemsList.map(item => {
+                                        if (item.type === 'course') {
+                                            return renderCard(item.course);
+                                        } else {
+                                            const selectedCourseId = selectedElectives[item.slotId];
+                                            const course = courses.find((c: Course) => c.id === selectedCourseId);
+                                            if (course && ELECTIVE_SLOTS_DEFS[item.slotId]) {
+                                                return renderCard(course, ELECTIVE_SLOTS_DEFS[item.slotId].label, item.slotId);
+                                            }
+                                            return null;
+                                        }
+                                    })}
+                                </div>
+                            )}
                         </div>
                     );
                 })}
