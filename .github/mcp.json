@@ -1,0 +1,20 @@
+{
+  "servers": {
+    "com.supabase/mcp": {
+      "type": "http",
+      "url": "https://mcp.supabase.com/mcp",
+      "x-metadata": {
+        "registry": {
+          "api": {
+            "baseUrl": "https://api.mcp.github.com",
+            "version": "v0.1"
+          },
+          "mcpServer": {
+            "name": "com.supabase/mcp",
+            "version": "0.13.0"
+          }
+        }
+      }
+    }
+  }
+}

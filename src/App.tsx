@@ -145,8 +145,8 @@ function useLocalStorage<T>(key: string, initialValue: T) {
       const item = window.localStorage.getItem(key);
       if (item) {
         const parsed = JSON.parse(item);
-        if (Array.isArray(parsed)) {
-          return new Set(parsed) as any;
+        if (initialValue instanceof Set && Array.isArray(parsed)) {
+          return new Set(parsed) as T;
         }
         return parsed;
       }
