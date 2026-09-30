@@ -2,7 +2,10 @@ import React, { useEffect, useRef, useState } from "react";
 import { Copy, Link2, LoaderCircle, QrCode, Search, X } from "lucide-react";
 import * as QRCode from "qrcode";
 import { BaseModal } from "./BaseModal";
-import { normalizeScheduleCode, SharedScheduleSnapshot } from "../sharedSchedules";
+import {
+  normalizeScheduleCode,
+  type SharedScheduleSnapshot,
+} from "../sharedSchedules";
 
 interface ShareScheduleModalProps {
   isOpen: boolean;
@@ -26,13 +29,18 @@ export const ShareScheduleModal: React.FC<ShareScheduleModalProps> = ({
   const [copySuccess, setCopySuccess] = useState<string | null>(null);
   const [qrError, setQrError] = useState<string | null>(null);
   const shareUrl = code
-    ? `${window.location.origin}${window.location.pathname}?code=${code}`
+    ? (() => {
+        const url = new URL(window.location.href);
+        url.searchParams.set("code", code);
+        return url.toString();
+      })()
     : "";
 
   useEffect(() => {
     if (isOpen) {
       setCopyError(null);
       setCopySuccess(null);
+      setQrError(null);
     }
   }, [isOpen]);
 
@@ -51,13 +59,19 @@ export const ShareScheduleModal: React.FC<ShareScheduleModalProps> = ({
       if (!cancelled) container.appendChild(canvas);
     }).catch((error: unknown) => {
       if (!cancelled) {
-        setQrError(error instanceof Error ? error.message : "تعذر إنشاء رمز QR.");
+        console.error("Unable to generate shared schedule QR code", error);
+        setQrError("تعذر إنشاء رمز QR. يمكنك نسخ الرابط واستخدامه مباشرة.");
       }
     });
     return () => {
       cancelled = true;
+      container.replaceChildren();
     };
   }, [shareUrl]);
+
+  useEffect(() => {
+    if (code) setCopyError(null);
+  }, [code]);
 
   const copyWithFallback = (value: string): void => {
     const temporaryInput = document.createElement("textarea");
@@ -109,6 +123,7 @@ export const ShareScheduleModal: React.FC<ShareScheduleModalProps> = ({
         </p>
         {!code && (
           <button
+            type="button"
             onClick={onCreate}
             disabled={loading}
             className="w-full rounded-xl bg-blue-600 px-4 py-3 font-black text-white transition-colors hover:bg-blue-700 disabled:opacity-60"
@@ -127,15 +142,24 @@ export const ShareScheduleModal: React.FC<ShareScheduleModalProps> = ({
                 {code.slice(0, 4)} - {code.slice(4)}
               </div>
               <button
+                type="button"
                 onClick={() => void copyText(code)}
+                aria-label="نسخ رمز الاسترجاع"
                 className="mt-3 inline-flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-bold dark:border-slate-600 dark:bg-slate-700"
               >
                 <Copy size={15} /> نسخ الرمز
               </button>
             </div>
             <div className="flex gap-2">
-              <input readOnly value={shareUrl} dir="ltr" className="min-w-0 flex-1 rounded-lg border border-gray-200 bg-gray-50 px-3 text-left text-xs dark:border-slate-700 dark:bg-slate-800" />
+              <input
+                readOnly
+                aria-label="رابط مشاركة الجدول"
+                value={shareUrl}
+                dir="ltr"
+                className="min-w-0 flex-1 rounded-lg border border-gray-200 bg-gray-50 px-3 text-left text-xs dark:border-slate-700 dark:bg-slate-800"
+              />
               <button
+                type="button"
                 onClick={() => void copyText(shareUrl)}
                 aria-label="نسخ الرابط"
                 className="flex shrink-0 items-center gap-1 rounded-lg bg-blue-600 px-3 text-xs font-bold text-white"
@@ -144,15 +168,15 @@ export const ShareScheduleModal: React.FC<ShareScheduleModalProps> = ({
               </button>
             </div>
             <div className="mx-auto flex min-h-52 w-52 items-center justify-center rounded-xl border border-gray-100 bg-white p-2 dark:border-slate-700">
-              <div ref={qrContainerRef} aria-label="رمز QR للرابط" />
+              <div ref={qrContainerRef} role="img" aria-label="رمز QR للرابط" />
               {qrError && (
-                <div className="space-y-2 text-center text-xs font-bold text-gray-500">
+                <div role="status" className="space-y-2 text-center text-xs font-bold text-gray-500">
                   <QrCode className="mx-auto" size={36} />
-                  <p>تعذر إنشاء QR: {qrError}</p>
+                  <p>{qrError}</p>
                 </div>
               )}
             </div>
-            <button onClick={onCreate} disabled={loading} className="text-xs font-bold text-blue-600 hover:underline">
+            <button type="button" onClick={onCreate} disabled={loading} className="text-xs font-bold text-blue-600 hover:underline">
               إنشاء رمز جديد
             </button>
           </>
@@ -187,12 +211,13 @@ export const LoadScheduleModal: React.FC<LoadScheduleModalProps> = ({
 
   const handleSubmit = (event: React.FormEvent) => {
     event.preventDefault();
-    void onLoad(code);
+    const normalizedCode = normalizeScheduleCode(code);
+    if (/^[A-HJ-KM-NP-Z2-9]{8}$/.test(normalizedCode)) void onLoad(normalizedCode);
   };
 
   return (
     <BaseModal isOpen={isOpen} onClose={onClose} title="استرجاع جدول برمز" maxWidth="max-w-md">
-      <form onSubmit={handleSubmit} className="space-y-4 p-5 text-right" dir="rtl">
+      <form onSubmit={handleSubmit} aria-busy={loading} className="space-y-4 p-5 text-right" dir="rtl">
         <label htmlFor="shared-schedule-code" className="block text-sm font-bold text-gray-700 dark:text-slate-200">
           أدخل الرمز المكون من 8 خانات
         </label>
@@ -200,7 +225,7 @@ export const LoadScheduleModal: React.FC<LoadScheduleModalProps> = ({
           ref={inputRef}
           id="shared-schedule-code"
           value={code}
-          maxLength={512}
+          maxLength={64}
           autoComplete="off"
           spellCheck={false}
           onChange={(event) => setCode(event.target.value.toUpperCase())}
@@ -211,11 +236,15 @@ export const LoadScheduleModal: React.FC<LoadScheduleModalProps> = ({
           placeholder="A7X9-2P4K"
           dir="ltr"
           className="w-full rounded-xl border-2 border-gray-200 bg-gray-50 px-4 py-3 text-center font-mono text-2xl font-black tracking-widest outline-none focus:border-blue-500 dark:border-slate-700 dark:bg-slate-800"
+          aria-describedby="shared-schedule-code-help"
         />
+        <p id="shared-schedule-code-help" className="text-xs text-gray-500 dark:text-slate-400">
+          يقبل الحقل الرمز مع شرطة أو مسافات؛ ستتم إزالة الفواصل تلقائياً.
+        </p>
         {error && <p role="alert" className="rounded-lg bg-red-50 p-3 text-sm font-bold text-red-700">{error}</p>}
         <button
           type="submit"
-          disabled={loading || normalizeScheduleCode(code).length !== 8}
+          disabled={loading || !/^[A-HJ-KM-NP-Z2-9]{8}$/.test(normalizeScheduleCode(code))}
           className="flex w-full items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-3 font-black text-white transition-colors hover:bg-blue-700 disabled:opacity-50"
         >
           {loading ? <LoaderCircle className="animate-spin" size={18} /> : <Search size={18} />}
@@ -356,12 +385,14 @@ export const SharedSchedulePreviewModal: React.FC<SharedSchedulePreviewProps> = 
           )}
           <div className="flex flex-col-reverse gap-2 sm:flex-row">
             <button
+              type="button"
               onClick={onClose}
               className="flex flex-1 items-center justify-center gap-2 rounded-xl border border-gray-300 px-4 py-3 font-black text-gray-700 dark:border-slate-600 dark:text-slate-200"
             >
               <X size={17} /> إغلاق
             </button>
             <button
+              type="button"
               onClick={onApply}
               className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-3 font-black text-white hover:bg-blue-700"
             >

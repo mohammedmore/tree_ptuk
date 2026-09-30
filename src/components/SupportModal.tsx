@@ -1,5 +1,7 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
 import { X, MessageCircle } from "lucide-react";
+import * as QRCode from "qrcode";
+import { BaseModal } from "./BaseModal";
 
 interface SupportModalProps {
   isSupportModalOpen: boolean;
@@ -10,24 +12,50 @@ const SupportModal: React.FC<SupportModalProps> = ({
   isSupportModalOpen,
   onClose,
 }) => {
-  if (!isSupportModalOpen) return null;
+  const [qrImage, setQrImage] = useState<string | null>(null);
+  const [qrError, setQrError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!isSupportModalOpen) return;
+
+    let cancelled = false;
+    setQrError(null);
+    void QRCode.toDataURL("https://wa.me/972568718784", {
+      width: 250,
+      margin: 1,
+      errorCorrectionLevel: "M",
+    }).then((dataUrl) => {
+      if (!cancelled) setQrImage(dataUrl);
+    }).catch((error: unknown) => {
+      if (!cancelled) {
+        console.error("Unable to generate WhatsApp support QR code", error);
+        setQrImage(null);
+        setQrError("تعذر إنشاء الرمز. يمكنك بدء المحادثة من رابط واتساب أعلاه.");
+      }
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isSupportModalOpen]);
 
   return (
-    <div
-      className="fixed inset-0 bg-gray-900/60 backdrop-blur-sm z-[110] flex items-center justify-center p-4"
-      onClick={onClose}
+    <BaseModal
+      isOpen={isSupportModalOpen}
+      onClose={onClose}
+      ariaLabel="الدعم الفني والاقتراحات"
+      maxWidth="max-w-lg"
+      className="rounded-3xl"
     >
-      <div
-        className="bg-white dark:bg-slate-900 rounded-3xl border border-gray-100 dark:border-slate-800 shadow-2xl w-full max-w-lg p-6 sm:p-8 flex flex-col gap-5 relative animate-in zoom-in-95 duration-200 text-right font-sans max-h-[90vh] overflow-y-auto"
-        dir="rtl"
-        onClick={(e) => e.stopPropagation()}
-      >
+      <div className="p-6 sm:p-8 flex flex-col gap-5 text-right font-sans" dir="rtl">
         <button
+          type="button"
           onClick={onClose}
+          aria-label="إغلاق نافذة الدعم"
           className="absolute top-4 left-4 p-2 text-gray-400 hover:text-gray-700 dark:hover:text-slate-200 hover:bg-gray-100 dark:hover:bg-slate-800 rounded-full transition-all"
           title="إغلاق"
         >
-          <X size={20} />
+          <X size={20} aria-hidden="true" />
         </button>
 
         <div>
@@ -35,6 +63,7 @@ const SupportModal: React.FC<SupportModalProps> = ({
             <span className="p-2 bg-emerald-100 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-305 rounded-xl">
               <MessageCircle
                 size={24}
+                aria-hidden="true"
                 className="text-emerald-600 dark:text-emerald-400 animate-pulse"
               />
             </span>
@@ -62,7 +91,7 @@ const SupportModal: React.FC<SupportModalProps> = ({
           <a
             href="https://www.facebook.com/mhmd.hdrb.2025"
             target="_blank"
-            rel="noreferrer"
+            rel="noopener noreferrer"
             className="p-4 rounded-2xl border border-blue-100 dark:border-blue-900/40 bg-blue-50/20 dark:bg-blue-950/10 hover:bg-blue-50/50 dark:hover:bg-blue-950/25 hover:border-blue-300 dark:hover:border-blue-800 transition-all group flex flex-col justify-between h-32 shadow-sm hover:shadow-md cursor-pointer text-right"
           >
             <div>
@@ -71,6 +100,7 @@ const SupportModal: React.FC<SupportModalProps> = ({
                   فيسبوك
                 </span>
                 <svg
+                  aria-hidden="true"
                   className="w-5 h-5 text-blue-600 dark:text-blue-400 group-hover:scale-110 transition-transform"
                   fill="currentColor"
                   viewBox="0 0 24 24"
@@ -93,7 +123,7 @@ const SupportModal: React.FC<SupportModalProps> = ({
           <a
             href="https://wa.me/972568718784"
             target="_blank"
-            rel="noreferrer"
+            rel="noopener noreferrer"
             className="p-4 rounded-2xl border border-emerald-100 dark:border-emerald-900/40 bg-emerald-50/20 dark:bg-emerald-950/10 hover:bg-emerald-50/50 dark:hover:bg-emerald-950/25 hover:border-emerald-300 dark:hover:border-emerald-800 transition-all group flex flex-col justify-between h-32 shadow-sm hover:shadow-md cursor-pointer text-right"
           >
             <div>
@@ -102,6 +132,7 @@ const SupportModal: React.FC<SupportModalProps> = ({
                   واتساب
                 </span>
                 <svg
+                  aria-hidden="true"
                   className="w-5 h-5 text-emerald-600 dark:text-emerald-400 group-hover:scale-110 transition-transform"
                   fill="currentColor"
                   viewBox="0 0 24 24"
@@ -147,16 +178,22 @@ const SupportModal: React.FC<SupportModalProps> = ({
 
               {/* Real QR image generator pointing to decoded WhatsApp url */}
               <div className="bg-white p-2.5 rounded-lg border border-gray-150 mt-4 relative group">
-                <img
-                  src="https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=https://wa.me/972568718784"
-                  alt="WhatsApp QR Code"
-                  referrerPolicy="no-referrer"
-                  className="w-40 h-40 object-contain transition-transform group-hover:scale-105 duration-200"
-                />
+                {qrImage ? (
+                  <img
+                    src={qrImage}
+                    alt="رمز QR لبدء محادثة واتساب مع مطور الموقع"
+                    className="w-40 h-40 object-contain transition-transform group-hover:scale-105 duration-200"
+                  />
+                ) : (
+                  <div role="status" className="w-40 h-40 flex items-center justify-center px-3 text-xs font-bold text-gray-600">
+                    {qrError ?? "جارٍ إنشاء رمز واتساب..."}
+                  </div>
+                )}
 
                 {/* Tiny WhatsApp icon badge right in the center */}
                 <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-8 h-8 bg-white rounded-full flex items-center justify-center shadow">
                   <svg
+                    aria-hidden="true"
                     className="w-6 h-6 text-[#128C7E]"
                     fill="currentColor"
                     viewBox="0 0 24 24"
@@ -186,6 +223,7 @@ const SupportModal: React.FC<SupportModalProps> = ({
 
         <div className="flex gap-2.5 border-t border-gray-150 dark:border-slate-800 pt-4 mt-2">
           <button
+            type="button"
             onClick={onClose}
             className="w-full py-2.5 bg-gray-100 hover:bg-gray-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-gray-750 dark:text-slate-200 text-xs font-extrabold rounded-xl transition-all cursor-pointer text-center"
           >
@@ -193,7 +231,7 @@ const SupportModal: React.FC<SupportModalProps> = ({
           </button>
         </div>
       </div>
-    </div>
+    </BaseModal>
   );
 };
 

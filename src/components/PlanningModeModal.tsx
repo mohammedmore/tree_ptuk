@@ -1,7 +1,8 @@
 import React from "react";
 import { X, CalendarDays, BookOpen, ChevronDown, ChevronUp, CircleCheckBig, Search, AlertTriangle } from "lucide-react";
 import { cn } from "../utils";
-import { Course, courses, categoryRequirements } from "../data"; // Ensure 'courses' is imported
+import type { Course } from "../data";
+import { categoryRequirements } from "../data";
 import { SEMESTERS } from "../constants";
 import { getSemesterType, isCourseAvailableInSemester, formatOfferings } from "../courseOfferings";
 
@@ -18,7 +19,8 @@ interface PlanningModeModalProps {
     course: Course,
     completed: Set<string>,
     categoryCredits: Record<string, number>,
-    allCourses: Course[]
+    allCourses: Course[],
+    currentPlannedCourses?: Set<string>,
   ) => boolean;
   completedCreditsPerCategory: Record<string, number>;
   hasHighGpa: boolean;
@@ -48,28 +50,73 @@ const PlanningModeModal: React.FC<PlanningModeModalProps> = ({
   const [searchQuery, setSearchQuery] = React.useState("");
   const [hourFilter, setHourFilter] = React.useState<number | null>(null);
 
+  const coursesById = React.useMemo(
+    () => new Map(courses.map((course) => [course.id, course])),
+    [courses],
+  );
+  const currentSemesterIndex = currentPlanningSemester
+    ? SEMESTERS.indexOf(currentPlanningSemester)
+    : -1;
+  const selectedSemester = currentSemesterIndex >= 0
+    ? SEMESTERS[currentSemesterIndex]
+    : null;
+
   const allPrev = React.useMemo(() => {
     const prev = new Set(completedCourses);
-    if (currentPlanningSemester) {
-      (Object.entries(plannedCourses) as [string, string][]).forEach(([id, s]) => {
-        if (SEMESTERS.indexOf(s) < SEMESTERS.indexOf(currentPlanningSemester)) {
+    if (currentSemesterIndex >= 0) {
+      Object.entries(plannedCourses).forEach(([id, semester]) => {
+        const plannedSemesterIndex = SEMESTERS.indexOf(semester);
+        if (plannedSemesterIndex >= 0 && plannedSemesterIndex < currentSemesterIndex) {
           prev.add(id);
         }
       });
     }
     return prev;
-  }, [completedCourses, plannedCourses, currentPlanningSemester]);
+  }, [completedCourses, plannedCourses, currentSemesterIndex]);
+
+  const currentSemesterPlannedCourses = React.useMemo(() => (
+    new Set(
+      Object.entries(plannedCourses)
+        .filter(([, semester]) => semester === currentPlanningSemester)
+        .map(([courseId]) => courseId),
+    )
+  ), [plannedCourses, currentPlanningSemester]);
+
+  const creditsThroughCurrentSemester = React.useMemo(() => {
+    const counts = { ...completedCreditsPerCategory };
+    if (currentSemesterIndex < 0) return counts;
+
+    Object.entries(plannedCourses).forEach(([courseId, semester]) => {
+      const plannedSemesterIndex = SEMESTERS.indexOf(semester);
+      if (
+        completedCourses.has(courseId)
+        || plannedSemesterIndex < 0
+        || plannedSemesterIndex > currentSemesterIndex
+      ) return;
+      const course = coursesById.get(courseId);
+      if (course) counts[course.category] = (counts[course.category] || 0) + course.credits;
+    });
+    return counts;
+  }, [completedCreditsPerCategory, completedCourses, plannedCourses, currentSemesterIndex, coursesById]);
 
   const available = React.useMemo(() => {
-    if (!currentPlanningSemester) return [];
+    if (!selectedSemester) return [];
     return courses.filter(c => {
       const isComp = completedCourses.has(c.id);
-      const isPlannedInPrev = (Object.entries(plannedCourses) as [string, string][]).some(([id, s]) => id === c.id && SEMESTERS.indexOf(s) < SEMESTERS.indexOf(currentPlanningSemester));
-      const isPlannedNow = plannedCourses[c.id] === currentPlanningSemester;
+      const plannedSemester = plannedCourses[c.id];
+      const plannedSemesterIndex = plannedSemester ? SEMESTERS.indexOf(plannedSemester) : -1;
+      const isPlannedInPrev = plannedSemesterIndex >= 0 && plannedSemesterIndex < currentSemesterIndex;
+      const isPlannedNow = plannedSemester === selectedSemester;
       if (isComp || isPlannedInPrev || isPlannedNow) return false;
-      return isCourseAvailable(c, allPrev, completedCreditsPerCategory, courses);
+      return isCourseAvailable(
+        c,
+        allPrev,
+        creditsThroughCurrentSemester,
+        courses,
+        currentSemesterPlannedCourses,
+      );
     });
-  }, [currentPlanningSemester, completedCourses, plannedCourses, courses, isCourseAvailable, allPrev, completedCreditsPerCategory]);
+  }, [selectedSemester, currentSemesterIndex, completedCourses, plannedCourses, courses, isCourseAvailable, allPrev, creditsThroughCurrentSemester, currentSemesterPlannedCourses]);
 
   const groupedAvailable = React.useMemo(() => {
     return available
@@ -86,26 +133,15 @@ const PlanningModeModal: React.FC<PlanningModeModalProps> = ({
   }, [available, searchQuery, hourFilter]);
 
   const currentSemesterPlannedCredits = React.useMemo(() => {
-    if (!currentPlanningSemester) return 0;
+    if (!selectedSemester) return 0;
     return Object.entries(plannedCourses)
-      .filter(([id, s]) => s === currentPlanningSemester)
-      .reduce((sum, [id]) => sum + (courses.find(cr => cr.id === id)?.credits || 0), 0);
-  }, [plannedCourses, currentPlanningSemester, courses]);
-
-  const totalPlannedAndCompletedCreditsPerCategory = React.useMemo(() => {
-    const counts: Record<string, number> = { ...completedCreditsPerCategory };
-    Object.keys(plannedCourses).forEach(id => {
-      const course = courses.find(c => c.id === id);
-      if (course) {
-        counts[course.category] = (counts[course.category] || 0) + course.credits;
-      }
-    });
-    return counts;
-  }, [completedCreditsPerCategory, plannedCourses, courses]);
+      .filter(([, s]) => s === selectedSemester)
+      .reduce((sum, [id]) => sum + (coursesById.get(id)?.credits ?? 0), 0);
+  }, [plannedCourses, selectedSemester, coursesById]);
 
   if (!isPlanningModeOpen) return null;
 
-  const isSummer = currentPlanningSemester?.includes("صيفي");
+  const isSummer = selectedSemester?.includes("صيفي") ?? false;
   const creditLimit = isSummer ? (hasHighGpa ? 10 : 9) : (hasHighGpa ? 21 : 18);
   const exceededCreditLimit = currentSemesterPlannedCredits > creditLimit;
 
@@ -115,6 +151,9 @@ const PlanningModeModal: React.FC<PlanningModeModalProps> = ({
       onClick={onClose}
     >
       <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="planning-mode-title"
         className="bg-white dark:bg-slate-900 rounded-3xl p-0 w-full max-w-2xl shadow-2xl animate-in zoom-in-95 duration-300 relative overflow-hidden border border-gray-100 dark:border-slate-700 flex flex-col max-h-[90vh]"
         dir="rtl"
         onClick={(e) => e.stopPropagation()}
@@ -123,17 +162,17 @@ const PlanningModeModal: React.FC<PlanningModeModalProps> = ({
 
         {/* Header */}
         <div className="p-6 border-b border-gray-100 dark:border-slate-700 flex justify-between items-center bg-gray-50/50 dark:bg-slate-950/20 shrink-0">
-          <h2 className="text-xl font-black text-gray-800 dark:text-slate-100 flex items-center gap-3">
+          <h2 id="planning-mode-title" className="text-xl font-black text-gray-800 dark:text-slate-100 flex items-center gap-3">
             <div className="bg-gradient-to-br from-orange-500 to-orange-600 p-2.5 rounded-2xl text-white shadow-lg shadow-orange-200 dark:shadow-none">
               <CalendarDays size={24} />
             </div>
-            <span>{currentPlanningSemester ? `تخطيط ${currentPlanningSemester}` : "بدء التخطيط "}</span>
+            <span>{selectedSemester ? `تخطيط ${selectedSemester}` : "بدء التخطيط "}</span>
           </h2>
-          <button onClick={onClose} className="p-2 text-gray-400 hover:bg-gray-100 dark:hover:bg-slate-800 rounded-full transition-colors"><X /></button>
+          <button type="button" aria-label="إغلاق وضع التخطيط" onClick={onClose} className="p-2 text-gray-400 hover:bg-gray-100 dark:hover:bg-slate-800 rounded-full transition-colors"><X /></button>
         </div>
 
         <div className="p-6 overflow-y-auto">
-          {!currentPlanningSemester ? (
+          {currentSemesterIndex < 0 ? (
             <div className="space-y-6">
               <div className="p-4 bg-orange-50 dark:bg-orange-500/10 rounded-2xl border border-orange-100 dark:border-orange-500/30">
                 <p className="text-sm font-bold text-orange-800 dark:text-orange-300 leading-relaxed">
@@ -143,6 +182,7 @@ const PlanningModeModal: React.FC<PlanningModeModalProps> = ({
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 {SEMESTERS.map(s => (
                   <button
+                    type="button"
                     key={s}
                     onClick={() => setCurrentPlanningSemester(s)}
                     className="text-right p-4 rounded-2xl border border-gray-100 dark:border-slate-700 bg-white dark:bg-slate-800 hover:border-orange-500 transition-all text-xs font-black dark:text-slate-200 shadow-sm"
@@ -161,6 +201,7 @@ const PlanningModeModal: React.FC<PlanningModeModalProps> = ({
                   <div className="relative">
                     <Search className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
                     <input
+                      aria-label="ابحث في المواد المتاحة"
                       type="text"
                       placeholder="ابحث في المواد المتاحة..."
                       value={searchQuery}
@@ -172,6 +213,8 @@ const PlanningModeModal: React.FC<PlanningModeModalProps> = ({
                   {/* Hour Filter */}
                   <div className="flex gap-2 p-1.5 bg-gray-50/50 dark:bg-slate-900/50 rounded-xl border border-gray-100 dark:border-slate-700/50">
                     <button 
+                      type="button"
+                      aria-pressed={hourFilter === null}
                       onClick={() => setHourFilter(null)} 
                       className={cn(
                         "flex-1 py-1.5 text-[10px] font-black rounded-lg transition-all",
@@ -181,6 +224,8 @@ const PlanningModeModal: React.FC<PlanningModeModalProps> = ({
                       الكل
                     </button>
                     <button 
+                      type="button"
+                      aria-pressed={hourFilter === 3}
                       onClick={() => setHourFilter(3)} 
                       className={cn(
                         "flex-1 py-1.5 text-[10px] font-black rounded-lg transition-all",
@@ -190,6 +235,8 @@ const PlanningModeModal: React.FC<PlanningModeModalProps> = ({
                       3 ساعات
                     </button>
                     <button 
+                      type="button"
+                      aria-pressed={hourFilter === 1}
                       onClick={() => setHourFilter(1)} 
                       className={cn(
                         "flex-1 py-1.5 text-[10px] font-black rounded-lg transition-all",
@@ -206,6 +253,8 @@ const PlanningModeModal: React.FC<PlanningModeModalProps> = ({
                     </h3>
                     {Object.keys(groupedAvailable).length > 0 && (
                       <button
+                        type="button"
+                        aria-expanded={Object.values(expandedPlanningCategories).some(v => v === true)}
                         onClick={() => {
                           const isAnyOpen = Object.values(expandedPlanningCategories).some(v => v === true);
                           const newState: Record<string, boolean> = {};
@@ -220,17 +269,25 @@ const PlanningModeModal: React.FC<PlanningModeModalProps> = ({
                   </div>
                   <div className="space-y-3 max-h-[500px] overflow-y-auto pr-1 scrollbar-thin">
                     {Object.keys(groupedAvailable).length === 0 ? (
+                      available.length > 0 && (searchQuery || hourFilter !== null) ? (
+                        <div className="text-center py-10 text-xs font-bold text-gray-400">لا توجد مواد تطابق معايير البحث</div>
+                      ) : (
                       <div className="text-center py-10 text-xs font-bold text-gray-400">لا توجد مواد متاحة حالياً للجدولة</div>
+                      )
                     ) : (
                       (Object.entries(groupedAvailable) as [string, Course[]][]).map(([category, items]) => {
                         const isExpanded = expandedPlanningCategories[category] === true; // Default to closed
-                        const currentCatCredits = totalPlannedAndCompletedCreditsPerCategory[category] || 0;
+                        const categoryPanelId = `planning-category-${encodeURIComponent(category)}`;
+                        const currentCatCredits = creditsThroughCurrentSemester[category] || 0;
                         const requiredCatCredits = categoryRequirements[category] || 0;
                         const isExceeded = currentCatCredits > requiredCatCredits;
 
                         return (
                           <div key={category} className={cn("border rounded-2xl overflow-hidden shadow-sm transition-all", isExceeded ? "border-red-300 bg-red-50/20" : "border-gray-100 dark:border-slate-700")}>
                             <button
+                              type="button"
+                              aria-expanded={isExpanded}
+                              aria-controls={categoryPanelId}
                               onClick={() => setExpandedPlanningCategories(prev => ({ ...prev, [category]: !isExpanded }))}
                               className="w-full flex items-center justify-between p-3 bg-gray-50 dark:bg-slate-800/80 hover:bg-gray-100 transition-colors"
                             >
@@ -252,23 +309,29 @@ const PlanningModeModal: React.FC<PlanningModeModalProps> = ({
                             </button>
 
                             {isExpanded && (
-                              <div className="p-2 bg-white dark:bg-slate-900/50 space-y-1.5 animate-in slide-in-from-top-1 duration-200">
+                              <div id={categoryPanelId} className="p-2 bg-white dark:bg-slate-900/50 space-y-1.5 animate-in slide-in-from-top-1 duration-200">
                                 {items.map(c => {
                                   const alreadyPlannedSomewhere = !!plannedCourses[c.id];
-                                  const semesterType = getSemesterType(currentPlanningSemester!);
-                                  const isNotAvailableInSemester = c.availableSemesters && !isCourseAvailableInSemester(c.id, semesterType);
+                                  const semesterType = getSemesterType(selectedSemester ?? "");
+                                  const isNotAvailableInSemester = c.availableSemesters
+                                    && (semesterType === null || !isCourseAvailableInSemester(c.id, semesterType));
                                    
                                   return (
                                     <button
+                                      type="button"
                                       key={c.id}
-                                      disabled={alreadyPlannedSomewhere}
-                                      onClick={() => setPlannedCourses(prev => ({ ...prev, [c.id]: currentPlanningSemester! }))}
+                                      disabled={alreadyPlannedSomewhere || Boolean(isNotAvailableInSemester)}
+                                      onClick={() => {
+                                        if (selectedSemester) {
+                                          setPlannedCourses(prev => ({ ...prev, [c.id]: selectedSemester }));
+                                        }
+                                      }}
                                       className={cn(
                                         "w-full text-right p-2.5 bg-white dark:bg-slate-800 border rounded-xl hover:border-blue-400 hover:shadow-sm transition-all flex justify-between items-center group",
-                                        alreadyPlannedSomewhere && "opacity-40 cursor-not-allowed grayscale",
+                                        (alreadyPlannedSomewhere || isNotAvailableInSemester) && "opacity-40 cursor-not-allowed grayscale",
                                         isNotAvailableInSemester && "border-red-300 dark:border-red-700/50 bg-red-50/30 dark:bg-red-950/20 opacity-60"
                                       )}
-                                      title={isNotAvailableInSemester ? `⚠️ هذه المادة غير متاحة في ${currentPlanningSemester}` : ""}
+                                      title={isNotAvailableInSemester ? `⚠️ هذه المادة غير متاحة في ${selectedSemester}` : ""}
                                     >
                                       <div className="flex flex-col items-start gap-0.5">
                                         <div className="flex items-center gap-1.5">
@@ -284,7 +347,7 @@ const PlanningModeModal: React.FC<PlanningModeModalProps> = ({
                                         </div>
                                         {c.coPrerequisites && c.coPrerequisites.length > 0 && (
                                           <span className="text-[8px] font-semibold text-purple-600 dark:text-purple-400 bg-purple-50 dark:bg-purple-900/30 px-1.5 py-0.5 rounded-md">
-                                            {c.coPrerequisites.map(cpId => courses.find(course => course.id === cpId)?.name || cpId).join(', ')}
+                                            {c.coPrerequisites.map(cpId => coursesById.get(cpId)?.name || cpId).join(', ')}
                                           </span>
                                         )}
                                         {c.availableSemesters && (
@@ -317,12 +380,12 @@ const PlanningModeModal: React.FC<PlanningModeModalProps> = ({
                 <div className="bg-gray-50 dark:bg-slate-800/40 rounded-3xl p-5 flex flex-col gap-4 border border-gray-100 dark:border-slate-700">
                   <h3 className="text-sm font-black text-gray-800 dark:text-slate-100">المواد المجدولة في هذا الفصل:</h3>
                   <div className="flex-1 space-y-2 min-h-[100px]">
-                    {Object.entries(plannedCourses).filter(([id, s]) => s === currentPlanningSemester).map(([id]) => {
-                      const c = courses.find(cr => cr.id === id);
+                    {Object.entries(plannedCourses).filter(([, semester]) => semester === selectedSemester).map(([id]) => {
+                      const c = coursesById.get(id);
                       return (
                         <div key={id} className="bg-white dark:bg-slate-900 p-2.5 rounded-xl border border-gray-100 dark:border-slate-700 flex justify-between items-center shadow-sm">
-                          <span className="text-xs font-bold text-gray-700 dark:text-slate-300 truncate pl-2">{c?.name}</span>
-                          <button onClick={() => setPlannedCourses(prev => { const n = { ...prev }; delete n[id]; return n; })} className="text-red-400 hover:text-red-600 p-1"><X size={14} /></button>
+                          <span className="text-xs font-bold text-gray-700 dark:text-slate-300 truncate pl-2">{c?.name ?? id}</span>
+                          <button type="button" aria-label={`إزالة ${c?.name ?? id} من الفصل`} onClick={() => setPlannedCourses(prev => { const n = { ...prev }; delete n[id]; return n; })} className="text-red-400 hover:text-red-600 p-1"><X size={14} /></button>
                         </div>
                       );
                     })}
@@ -340,15 +403,16 @@ const PlanningModeModal: React.FC<PlanningModeModalProps> = ({
                           ⚠️ تنبيه: لقد تجاوزت الحد المسموح به لهذا الفصل.
                         </p>
                         <label className="flex items-center gap-2 cursor-pointer">
-                          <input type="checkbox" checked={hasHighGpa} onChange={e => setHasHighGpa(e.target.checked)} className="w-3.5 h-3.5 rounded" />
+                          <input aria-label="معدلي التراكمي عالٍ ويسمح بزيادة الحمولة" type="checkbox" checked={hasHighGpa} onChange={e => setHasHighGpa(e.target.checked)} className="w-3.5 h-3.5 rounded" />
                           <span className="text-[10px] font-black text-gray-700 dark:text-slate-300">معدلي التراكمي عالٍ (يسمح بزيادة الحمولة)</span>
                         </label>
                       </div>
                     )}
 
                     <button
+                      type="button"
                       onClick={() => {
-                        const nextIdx = SEMESTERS.indexOf(currentPlanningSemester!) + 1;
+                        const nextIdx = currentSemesterIndex + 1;
                         if (nextIdx < SEMESTERS.length) {
                           const nextSem = SEMESTERS[nextIdx];
                           setCurrentPlanningSemester(nextSem);

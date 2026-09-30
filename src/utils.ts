@@ -1,28 +1,51 @@
 import dagre from 'dagre';
-import { Node, Edge } from '@xyflow/react';
+import { Position, type Node, type Edge } from '@xyflow/react';
 import { type ClassValue, clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 
-export function cn(...inputs: ClassValue[]) {
+export function cn(...inputs: ClassValue[]): string {
   return twMerge(clsx(inputs));
 }
 
-export const getLayoutedElements = (nodes: Node[], edges: Edge[], direction = 'RL') => {
-  // Always create a new graph instance on each call to prevent accumulation of nodes/edges
+type LayoutDirection = 'LR' | 'RL' | 'TB' | 'BT';
+
+interface LayoutedElements {
+  nodes: Node[];
+  edges: Edge[];
+}
+
+export const getLayoutedElements = (
+  nodes: Node[],
+  edges: Edge[],
+  direction: LayoutDirection = 'RL',
+): LayoutedElements => {
+  const nodeIds = new Set<string>();
+  for (const node of nodes) {
+    if (nodeIds.has(node.id)) {
+      throw new Error(`Cannot layout duplicate node id "${node.id}".`);
+    }
+    nodeIds.add(node.id);
+  }
+
+  for (const edge of edges) {
+    if (!nodeIds.has(edge.source) || !nodeIds.has(edge.target)) {
+      throw new Error(`Cannot layout edge "${edge.id}" because its source or target node is missing.`);
+    }
+  }
+
   const dagreGraph = new dagre.graphlib.Graph();
   dagreGraph.setDefaultEdgeLabel(() => ({}));
 
-  // Configure layout configuration logic with wider visual separation to avoid overlapping
-  dagreGraph.setGraph({ 
+  dagreGraph.setGraph({
     rankdir: direction,
-    nodesep: 120, // Space between nodes in the same rank (Y-axis separation) - زيادة من 80
-    ranksep: 150, // Space between ranks/semesters (X-axis separation) - زيادة من 120
-    marginx: 50,  // زيادة من 40
-    marginy: 50,  // زيادة من 40
+    nodesep: 120,
+    ranksep: 150,
+    marginx: 50,
+    marginy: 50,
   });
 
-  const nodeWidth = 256;  // تحديث ليعكس البطاقة الجديدة (w-64 = 256px تقريبا)
-  const nodeHeight = 280; // زيادة للارتفاع المتغير
+  const nodeWidth = 256;
+  const nodeHeight = 280;
 
   nodes.forEach((node) => {
     dagreGraph.setNode(node.id, { width: nodeWidth, height: nodeHeight });
@@ -32,23 +55,36 @@ export const getLayoutedElements = (nodes: Node[], edges: Edge[], direction = 'R
     dagreGraph.setEdge(edge.source, edge.target);
   });
 
-  // Calculate layout
   dagre.layout(dagreGraph);
 
-  const newNodes = nodes.map((node) => {
-    const nodeWithPosition = dagreGraph.node(node.id);
-    const newNode = {
+  const isHorizontal = direction === 'LR' || direction === 'RL';
+  const targetPosition = direction === 'LR'
+    ? Position.Left
+    : direction === 'RL'
+      ? Position.Right
+      : direction === 'TB'
+        ? Position.Top
+        : Position.Bottom;
+  const sourcePosition = direction === 'LR'
+    ? Position.Right
+    : direction === 'RL'
+      ? Position.Left
+      : direction === 'TB'
+        ? Position.Bottom
+        : Position.Top;
+
+  const newNodes = nodes.map((node): Node => {
+    const { x, y } = dagreGraph.node(node.id) as { x: number; y: number };
+    return {
       ...node,
-      targetPosition: direction === 'LR' ? 'left' : direction === 'RL' ? 'right' : 'top',
-      sourcePosition: direction === 'LR' ? 'right' : direction === 'RL' ? 'left' : 'bottom',
+      targetPosition,
+      sourcePosition,
       position: {
-        x: nodeWithPosition.x - nodeWidth / 2,
-        y: nodeWithPosition.y - nodeHeight / 2,
+        x: x - nodeWidth / 2,
+        y: y - nodeHeight / 2,
       },
     };
-
-    return newNode;
   });
 
-  return { nodes: newNodes as Node[], edges };
+  return { nodes: newNodes, edges };
 };

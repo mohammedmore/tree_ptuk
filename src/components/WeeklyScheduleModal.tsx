@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from "react";
 import { Calendar, Clock, User, MapPin, Hash, Layout, Edit3 } from "lucide-react";
 import { BaseModal } from "./BaseModal";
-import { Course, ScheduleEntry } from "../data";
+import type { Course, ScheduleEntry } from "../data";
 import { cn } from "../utils";
 import { SEMESTERS } from "../constants";
 
@@ -16,6 +16,8 @@ interface WeeklyScheduleModalProps {
 
 const DAYS = ["الأحد", "الاثنين", "الثلاثاء", "الأربعاء", "الخميس", "الجمعة", "السبت"];
 const HOURS = Array.from({ length: 14 }, (_, i) => i + 8); // من 8 صباحاً لـ 9 مساءً
+const GRID_START_MINUTES = 8 * 60;
+const GRID_END_MINUTES = 22 * 60;
 
 export const WeeklyScheduleModal: React.FC<WeeklyScheduleModalProps> = ({
   isOpen,
@@ -26,25 +28,32 @@ export const WeeklyScheduleModal: React.FC<WeeklyScheduleModalProps> = ({
   setWeeklySchedule,
 }) => {
   const [selectedSemester, setSelectedSemester] = useState<string>(
-    SEMESTERS.find(s => Object.values(plannedCourses).includes(s)) || SEMESTERS[0]
+    () => SEMESTERS.find((semester) => Object.values(plannedCourses).includes(semester)) || SEMESTERS[0]
   );
   const [activeTab, setActiveTab] = useState<"edit" | "visual">("visual");
 
+  const coursesById = useMemo(
+    () => new Map(courses.map((course) => [course.id, course])),
+    [courses],
+  );
+
   const semesterCourses = useMemo(() => {
     return Object.entries(plannedCourses)
-      .filter(([_, sem]) => sem === selectedSemester)
-      .map(([id, _]) => courses.find(c => c.id === id))
-      .filter((c): c is Course => !!c);
-  }, [plannedCourses, selectedSemester, courses]);
+      .filter(([, semester]) => semester === selectedSemester)
+      .flatMap(([id]) => {
+        const course = coursesById.get(id);
+        return course ? [course] : [];
+      });
+  }, [plannedCourses, selectedSemester, coursesById]);
 
-  const handleUpdateEntry = (courseId: string, field: keyof ScheduleEntry, value: any) => {
+  const handleUpdateEntry = <K extends keyof ScheduleEntry>(
+    courseId: string,
+    field: K,
+    value: ScheduleEntry[K],
+  ) => {
     setWeeklySchedule(prev => {
-      const newSchedule = { ...prev };
-      if (!newSchedule[selectedSemester]) {
-        newSchedule[selectedSemester] = {};
-      }
-      const existing = newSchedule[selectedSemester][courseId] || {
-        courseId,
+      const semesterSchedule = prev[selectedSemester] ?? {};
+      const existing = semesterSchedule[courseId] ?? {
         startTime: "08:00",
         endTime: "09:00",
         section: "",
@@ -52,43 +61,46 @@ export const WeeklyScheduleModal: React.FC<WeeklyScheduleModalProps> = ({
         room: "",
         days: [],
       };
-      newSchedule[selectedSemester][courseId] = {
-        ...existing,
-        [field]: value,
+      return {
+        ...prev,
+        [selectedSemester]: {
+          ...semesterSchedule,
+          [courseId]: { ...existing, [field]: value },
+        },
       };
-      return newSchedule;
     });
   };
 
   const toggleDay = (courseId: string, day: string) => {
-    const entry = weeklySchedule[selectedSemester]?.[courseId] || {
-      courseId,
+    const entry = weeklySchedule[selectedSemester]?.[courseId] ?? {
       startTime: "08:00",
       endTime: "09:00",
       days: [],
     };
-    const days = entry.days || [];
+    const days = entry.days ?? (entry.day ? [entry.day] : []);
     const newDays = days.includes(day)
       ? days.filter(d => d !== day)
       : [...days, day];
     handleUpdateEntry(courseId, "days", newDays);
   };
 
-  const timeToMinutes = (time: string | undefined, fallback: number) => {
+  const timeToMinutes = (time: string | undefined): number | null => {
     const match = /^([01]\d|2[0-3]):([0-5]\d)$/.exec(time ?? "");
-    if (!match) return fallback;
+    if (!match) return null;
     return Number(match[1]) * 60 + Number(match[2]);
   };
 
   const getPosition = (startTime: string | undefined, endTime: string | undefined) => {
-    const start = timeToMinutes(startTime, 8 * 60);
-    const end = timeToMinutes(endTime, start + 60);
-    const gridStart = 8 * 60; // 8:00 AM
-    const totalMinutes = 14 * 60; // 14 hours total
+    const rawStart = timeToMinutes(startTime);
+    const rawEnd = timeToMinutes(endTime);
+    if (rawStart === null || rawEnd === null || rawEnd <= rawStart) return null;
 
+    const start = Math.max(rawStart, GRID_START_MINUTES);
+    const end = Math.min(rawEnd, GRID_END_MINUTES);
+    if (end <= start) return null;
     return {
-      top: `${((start - gridStart) / totalMinutes) * 100}%`,
-      height: `${((end - start) / totalMinutes) * 100}%`,
+      top: `${((start - GRID_START_MINUTES) / (GRID_END_MINUTES - GRID_START_MINUTES)) * 100}%`,
+      height: `${((end - start) / (GRID_END_MINUTES - GRID_START_MINUTES)) * 100}%`,
     };
   };
 
@@ -99,6 +111,8 @@ export const WeeklyScheduleModal: React.FC<WeeklyScheduleModalProps> = ({
         <div className="flex flex-col md:flex-row gap-2 sm:gap-4 mb-3 sm:mb-6 items-center justify-between">
           <div className="flex bg-gray-100 dark:bg-slate-900 p-1 rounded-2xl w-full md:w-auto">
             <button
+              type="button"
+              aria-pressed={activeTab === "visual"}
               onClick={() => setActiveTab("visual")}
               className={cn(
                 "min-h-10 flex-1 md:flex-none flex items-center justify-center gap-1 sm:gap-2 px-2 sm:px-6 py-2 rounded-xl text-xs sm:text-sm font-black transition-all",
@@ -111,6 +125,8 @@ export const WeeklyScheduleModal: React.FC<WeeklyScheduleModalProps> = ({
               الجدول البصري
             </button>
             <button
+              type="button"
+              aria-pressed={activeTab === "edit"}
               onClick={() => setActiveTab("edit")}
               className={cn(
                 "min-h-10 flex-1 md:flex-none flex items-center justify-center gap-1 sm:gap-2 px-2 sm:px-6 py-2 rounded-xl text-xs sm:text-sm font-black transition-all",
@@ -125,8 +141,9 @@ export const WeeklyScheduleModal: React.FC<WeeklyScheduleModalProps> = ({
           </div>
 
           <div className="flex items-center gap-2 sm:gap-3 w-full md:w-auto">
-             <label className="text-xs font-black text-gray-500 dark:text-slate-400 whitespace-nowrap">الفصل:</label>
+             <label htmlFor="weekly-schedule-semester" className="text-xs font-black text-gray-500 dark:text-slate-400 whitespace-nowrap">الفصل:</label>
              <select
+              id="weekly-schedule-semester"
               value={selectedSemester}
               onChange={(e) => setSelectedSemester(e.target.value)}
               className="flex-1 md:w-48 p-2 bg-gray-50 dark:bg-slate-900 border-2 border-gray-100 dark:border-slate-800 rounded-xl font-bold text-sm focus:border-blue-500 outline-none transition-all"
@@ -175,16 +192,19 @@ export const WeeklyScheduleModal: React.FC<WeeklyScheduleModalProps> = ({
                         <div className="flex flex-wrap gap-1.5">
                           {DAYS.slice(0, 5).map(day => (
                             <button
+                              type="button"
+                              aria-label={`محاضرة ${course.name} يوم ${day}`}
+                              aria-pressed={entry.days?.includes(day) ?? false}
                               key={day}
                               onClick={() => toggleDay(course.id, day)}
                               className={cn(
-                                "w-10 h-10 rounded-xl text-xs font-black transition-all border-2",
+                                "min-h-10 px-2.5 rounded-xl text-[11px] font-black whitespace-nowrap transition-all border-2",
                                 entry.days?.includes(day)
                                   ? "bg-blue-600 border-blue-600 text-white shadow-lg shadow-blue-200 dark:shadow-none"
                                   : "bg-gray-50 dark:bg-slate-900 text-gray-400 border-gray-100 dark:border-slate-800 hover:border-blue-200"
                               )}
                             >
-                              {day.charAt(0)}
+                              {day}
                             </button>
                           ))}
                         </div>
@@ -198,9 +218,13 @@ export const WeeklyScheduleModal: React.FC<WeeklyScheduleModalProps> = ({
                           <div className="relative">
                             <Clock size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-300" />
                             <input
+                              aria-label={`وقت بدء ${course.name}`}
+                              required
                               type="time"
-                              value={entry.startTime}
-                              onChange={(e) => handleUpdateEntry(course.id, "startTime", e.target.value)}
+                              value={entry.startTime ?? ""}
+                              onChange={(e) => {
+                                if (e.target.value) handleUpdateEntry(course.id, "startTime", e.target.value);
+                              }}
                               className="w-full pr-10 pl-3 py-2.5 bg-gray-50 dark:bg-slate-900 border-2 border-gray-100 dark:border-slate-800 rounded-xl text-sm font-bold focus:border-blue-500 outline-none transition-all"
                             />
                           </div>
@@ -210,9 +234,13 @@ export const WeeklyScheduleModal: React.FC<WeeklyScheduleModalProps> = ({
                           <div className="relative">
                             <Clock size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-300" />
                             <input
+                              aria-label={`وقت انتهاء ${course.name}`}
+                              required
                               type="time"
-                              value={entry.endTime}
-                              onChange={(e) => handleUpdateEntry(course.id, "endTime", e.target.value)}
+                              value={entry.endTime ?? ""}
+                              onChange={(e) => {
+                                if (e.target.value) handleUpdateEntry(course.id, "endTime", e.target.value);
+                              }}
                               className="w-full pr-10 pl-3 py-2.5 bg-gray-50 dark:bg-slate-900 border-2 border-gray-100 dark:border-slate-800 rounded-xl text-sm font-bold focus:border-blue-500 outline-none transition-all"
                             />
                           </div>
@@ -226,9 +254,10 @@ export const WeeklyScheduleModal: React.FC<WeeklyScheduleModalProps> = ({
                             <div className="relative">
                               <User size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-300" />
                               <input
+                                aria-label={`مدرس ${course.name}`}
                                 type="text"
                                 placeholder="الدكتور"
-                                value={entry.instructor}
+                                value={entry.instructor ?? ""}
                                 onChange={(e) => handleUpdateEntry(course.id, "instructor", e.target.value)}
                                 className="w-full pr-9 pl-3 py-2.5 bg-gray-50 dark:bg-slate-900 border-2 border-gray-100 dark:border-slate-800 rounded-xl text-xs font-bold focus:border-blue-500 outline-none transition-all"
                               />
@@ -236,9 +265,10 @@ export const WeeklyScheduleModal: React.FC<WeeklyScheduleModalProps> = ({
                             <div className="relative">
                               <MapPin size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-300" />
                               <input
+                                aria-label={`قاعة ${course.name}`}
                                 type="text"
                                 placeholder="القاعة"
-                                value={entry.room}
+                                value={entry.room ?? ""}
                                 onChange={(e) => handleUpdateEntry(course.id, "room", e.target.value)}
                                 className="w-full pr-9 pl-3 py-2.5 bg-gray-50 dark:bg-slate-900 border-2 border-gray-100 dark:border-slate-800 rounded-xl text-xs font-bold focus:border-blue-500 outline-none transition-all"
                               />
@@ -250,9 +280,10 @@ export const WeeklyScheduleModal: React.FC<WeeklyScheduleModalProps> = ({
                           <div className="relative">
                             <Hash size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-300" />
                             <input
+                              aria-label={`رقم شعبة ${course.name}`}
                               type="text"
                               placeholder="مثلاً: 101"
-                              value={entry.section}
+                              value={entry.section ?? ""}
                               onChange={(e) => handleUpdateEntry(course.id, "section", e.target.value)}
                               className="w-full pr-10 pl-3 py-2.5 bg-gray-50 dark:bg-slate-900 border-2 border-gray-100 dark:border-slate-800 rounded-xl text-sm font-bold focus:border-blue-500 outline-none transition-all"
                             />
@@ -303,7 +334,9 @@ export const WeeklyScheduleModal: React.FC<WeeklyScheduleModalProps> = ({
                       const entry = weeklySchedule[selectedSemester]?.[course.id];
                       if (!entry || !entry.days?.includes(day)) return null;
 
-                      const { top, height } = getPosition(entry.startTime, entry.endTime);
+                      const position = getPosition(entry.startTime, entry.endTime);
+                      if (!position) return null;
+                      const { top, height } = position;
                       
                       return (
                         <div

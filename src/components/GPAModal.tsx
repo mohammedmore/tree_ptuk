@@ -1,8 +1,42 @@
 import React from "react";
 import { Calculator, TrendingUp, Search, Info, Trash2, PlusCircle, Sparkles, Target } from "lucide-react";
 import { BaseModal } from "./BaseModal";
-import { Course } from "../data";
+import type { Course } from "../data";
 import { cn } from "../utils";
+import { TOTAL_CREDITS } from "../constants";
+
+function groupCoursesByCategory(courses: Course[]): Map<string, Course[]> {
+  const grouped = new Map<string, Course[]>();
+  courses.forEach((course) => {
+    const categoryCourses = grouped.get(course.category);
+    if (categoryCourses) {
+      categoryCourses.push(course);
+    } else {
+      grouped.set(course.category, [course]);
+    }
+  });
+  return grouped;
+}
+
+function updateGrade(
+  setGrades: React.Dispatch<React.SetStateAction<Record<string, number>>>,
+  courseId: string,
+  value: string,
+) {
+  if (value === "") {
+    setGrades((previous) => {
+      const next = { ...previous };
+      delete next[courseId];
+      return next;
+    });
+    return;
+  }
+
+  const parsedGrade = Number(value);
+  if (!Number.isFinite(parsedGrade)) return;
+  const grade = Math.min(100, Math.max(0, parsedGrade));
+  setGrades((previous) => ({ ...previous, [courseId]: grade }));
+}
 
 interface GPAModalProps {
   isOpen: boolean;
@@ -32,29 +66,30 @@ export const GPAModal: React.FC<GPAModalProps> = ({
   const [isWhatIfListOpen, setIsWhatIfListOpen] = React.useState(false);
   const [whatIfGrades, setWhatIfGrades] = React.useState<Record<string, number>>({});
   const [targetGPA, setTargetGPA] = React.useState<number | "">("");
+  const coursesById = React.useMemo(
+    () => new Map(courses.map((course) => [course.id, course])),
+    [courses],
+  );
 
   const remainingCredits = React.useMemo(() => {
     const earnedCredits = courses
       .filter(c => completedCourses.has(c.id) && (courseGrades[c.id] || 0) !== -1)
       .reduce((sum, c) => sum + c.credits, 0);
-    return 164 - earnedCredits; // assuming 164 is total credits
+    return TOTAL_CREDITS - earnedCredits;
   }, [courses, completedCourses, courseGrades]);
 
   const requiredAverage = React.useMemo(() => {
     if (targetGPA === "" || targetGPA <= 0 || remainingCredits <= 0) return null;
     
     let currentTotalPoints = 0;
-    let currentCountedCredits = 0;
 
     courses.forEach(c => {
       if (completedCourses.has(c.id) && courseGrades[c.id] > 0 && courseGrades[c.id] !== -1) {
         currentTotalPoints += courseGrades[c.id] * c.credits;
-        currentCountedCredits += c.credits;
       }
     });
 
-    const totalCreditsNeeded = 164; // Can be made dynamic later
-    const neededPoints = (targetGPA * totalCreditsNeeded) - currentTotalPoints;
+    const neededPoints = (targetGPA * TOTAL_CREDITS) - currentTotalPoints;
     
     if (neededPoints <= 0) return 0;
     
@@ -68,14 +103,7 @@ export const GPAModal: React.FC<GPAModalProps> = ({
       !failedCourseIds.has(c.id) &&
       (c.name.toLowerCase().includes(query) || c.id.toLowerCase().includes(query))
     );
-    const grouped: Record<string, Course[]> = {};
-    available.forEach(course => {
-      if (!grouped[course.category]) {
-        grouped[course.category] = [];
-      }
-      grouped[course.category].push(course);
-    });
-    return grouped;
+    return groupCoursesByCategory(available);
   }, [courses, completedCourses, failedCourseIds, failedSearchQuery]);
 
   const whatIfAvailableCourses = React.useMemo(() => {
@@ -83,17 +111,10 @@ export const GPAModal: React.FC<GPAModalProps> = ({
     const available = courses.filter(c =>
       !completedCourses.has(c.id) &&
       !failedCourseIds.has(c.id) &&
-      !whatIfGrades.hasOwnProperty(c.id) &&
+      !Object.prototype.hasOwnProperty.call(whatIfGrades, c.id) &&
       (c.name.toLowerCase().includes(query) || c.id.toLowerCase().includes(query))
     );
-    const grouped: Record<string, Course[]> = {};
-    available.forEach(course => {
-      if (!grouped[course.category]) {
-        grouped[course.category] = [];
-      }
-      grouped[course.category].push(course);
-    });
-    return grouped;
+    return groupCoursesByCategory(available);
   }, [courses, completedCourses, failedCourseIds, whatIfSearchQuery, whatIfGrades]);
 
   const combinedCourseList = React.useMemo(() => {
@@ -109,12 +130,12 @@ export const GPAModal: React.FC<GPAModalProps> = ({
     );
   }, [combinedCourseList, searchQuery]);
 
-  const calculateGPA = (grades: Record<string, number>, includeHypothetical: boolean = false) => {
+  const calculateGPA = (grades: Record<string, number>, includeHypothetical = false) => {
     let totalPoints = 0;
     let totalCredits = 0;
     
     combinedCourseList.forEach(course => {
-      let grade = grades[course.id] || 0;
+      let grade = grades[course.id] ?? 0;
 
       // "What-if" logic for courses already in the list: 
       // Condition: course grade must be <= 75 to allow what-if logic
@@ -125,7 +146,8 @@ export const GPAModal: React.FC<GPAModalProps> = ({
       // We count the course if it has a grade > 0 OR if it's explicitly in the failed list
       // Note: grade 0 is also a grade that should be counted in credits.
       // But we need to distinguish between "no grade entered" and "grade is 0".
-      const hasGradeEntry = grades.hasOwnProperty(course.id) || (includeHypothetical && whatIfGrades.hasOwnProperty(course.id));
+      const hasGradeEntry = Object.prototype.hasOwnProperty.call(grades, course.id)
+        || (includeHypothetical && Object.prototype.hasOwnProperty.call(whatIfGrades, course.id));
       
       if (hasGradeEntry || failedCourseIds.has(course.id)) {
         // Exclude "Pass/Fail" (-1) from numeric GPA calculation
@@ -139,9 +161,9 @@ export const GPAModal: React.FC<GPAModalProps> = ({
     });
 
     if (includeHypothetical) {
-      (Object.entries(whatIfGrades) as [string, number][]).forEach(([id, grade]) => {
+      Object.entries(whatIfGrades).forEach(([id, grade]) => {
         if (!completedCourses.has(id) && !failedCourseIds.has(id) && grade > 0) {
-          const course = courses.find(c => c.id === id);
+          const course = coursesById.get(id);
           if (course) {
             totalPoints += grade * course.credits;
             totalCredits += course.credits;
@@ -153,12 +175,26 @@ export const GPAModal: React.FC<GPAModalProps> = ({
     return totalCredits === 0 ? 0 : totalPoints / totalCredits;
   };
 
-  const currentGPA = React.useMemo(() => calculateGPA(courseGrades), [combinedCourseList, courseGrades]);
+  const currentGPA = React.useMemo(() => calculateGPA(courseGrades), [
+    combinedCourseList,
+    courseGrades,
+    whatIfGrades,
+    failedCourseIds,
+    completedCourses,
+    coursesById,
+  ]);
 
   const whatIfGPA = React.useMemo(() => {
     const combinedGrades = { ...courseGrades, ...whatIfGrades };
     return calculateGPA(combinedGrades, true);
-  }, [combinedCourseList, courseGrades, whatIfGrades]);
+  }, [
+    combinedCourseList,
+    courseGrades,
+    whatIfGrades,
+    failedCourseIds,
+    completedCourses,
+    coursesById,
+  ]);
 
   const totalCompletedCredits = combinedCourseList.reduce((sum, c) => sum + (completedCourses.has(c.id) ? c.credits : 0), 0);
   const creditsWithGrades = combinedCourseList.filter(c => {
@@ -234,7 +270,18 @@ export const GPAModal: React.FC<GPAModalProps> = ({
                     min="0"
                     max="100"
                     value={targetGPA}
-                    onChange={(e) => setTargetGPA(e.target.value === "" ? "" : parseFloat(e.target.value))}
+                    aria-label="المعدل المستهدف"
+                    onChange={(event) => {
+                      const value = event.target.value;
+                      if (value === "") {
+                        setTargetGPA("");
+                        return;
+                      }
+                      const parsedValue = Number(value);
+                      if (Number.isFinite(parsedValue)) {
+                        setTargetGPA(Math.min(100, Math.max(0, parsedValue)));
+                      }
+                    }}
                     className="w-20 bg-white/20 border border-white/30 rounded-lg py-1 px-2 text-white font-black outline-none focus:ring-2 focus:ring-white/50 text-center"
                     placeholder="80.0"
                   />
@@ -269,6 +316,9 @@ export const GPAModal: React.FC<GPAModalProps> = ({
                  <div className="relative">
                    <input 
                      type="text"
+                     aria-label="البحث عن مواد لإضافتها إلى قائمة الرسوب"
+                     aria-expanded={isFailedListOpen}
+                     aria-controls="failed-course-options"
                      placeholder="بحث في المواد المتاحة..."
                      value={failedSearchQuery}
                      onChange={(e) => {
@@ -282,18 +332,19 @@ export const GPAModal: React.FC<GPAModalProps> = ({
                  </div>
 
                  {isFailedListOpen && (
-                   <div className="absolute z-100 w-full mt-1 bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl shadow-xl max-h-60 overflow-y-auto custom-scrollbar">
-                     {Object.entries(failedAvailableCourses).length === 0 ? (
+                   <div id="failed-course-options" className="absolute z-100 w-full mt-1 bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl shadow-xl max-h-60 overflow-y-auto custom-scrollbar">
+                     {failedAvailableCourses.size === 0 ? (
                        <div className="p-4 text-center text-xs text-gray-400 font-bold">لا توجد مواد مطابقة للبحث</div>
                      ) : (
-                       Object.entries(failedAvailableCourses).map(([category, categoryCourses]) => (
+                       Array.from(failedAvailableCourses).map(([category, categoryCourses]) => (
                          <div key={category}>
                            <div className="px-3 py-1 bg-gray-50 dark:bg-slate-900/50 text-[10px] font-black text-gray-400 uppercase tracking-widest border-y border-gray-100 dark:border-slate-700/50">
                              {category}
                            </div>
-                           {(categoryCourses as Course[]).map(c => (
+                           {categoryCourses.map(c => (
                              <button
                                key={c.id}
+                               type="button"
                                className="w-full text-right px-4 py-2 text-xs font-bold text-gray-700 dark:text-gray-200 hover:bg-red-50 dark:hover:bg-red-900/20 hover:text-red-600 dark:hover:text-red-400 transition-colors flex items-center justify-between"
                                onClick={() => {
                                  const next = new Set(failedCourseIds);
@@ -314,14 +365,21 @@ export const GPAModal: React.FC<GPAModalProps> = ({
                  )}
                  
                  {/* Click outside backdrop for failed list */}
-                 {isFailedListOpen && <div className="fixed inset-0 z-90" onClick={() => setIsFailedListOpen(false)} />}
+                 {isFailedListOpen && (
+                   <button
+                     type="button"
+                     aria-label="إغلاق قائمة مواد الرسوب"
+                     className="fixed inset-0 z-90 border-0 bg-transparent p-0"
+                     onClick={() => setIsFailedListOpen(false)}
+                   />
+                 )}
                </div>
 
                {failedCourseIds.size > 0 && (
                  <div className="space-y-2 mt-4">
                    {Array.from(failedCourseIds).map(id => {
-                     const courseId = id as string;
-                     const course = courses.find(c => c.id === courseId);
+                     const courseId = id;
+                     const course = coursesById.get(courseId);
                      if (!course) return null;
                      return (
                        <div key={courseId} className="flex items-center justify-between p-2 bg-white dark:bg-slate-800 rounded-xl border border-red-100 dark:border-red-900/30">
@@ -335,14 +393,14 @@ export const GPAModal: React.FC<GPAModalProps> = ({
                              min="0"
                              max="100"
                              placeholder="درجة"
-                             value={courseGrades[courseId] || ""}
-                             onChange={(e) => {
-                               const val = Math.min(100, Math.max(0, parseFloat(e.target.value) || 0));
-                               setCourseGrades(prev => ({ ...prev, [courseId]: val }));
-                             }}
+                             aria-label={`درجة الرسوب في ${course.name}`}
+                             value={courseGrades[courseId] ?? ""}
+                             onChange={(event) => updateGrade(setCourseGrades, courseId, event.target.value)}
                              className="w-12 text-center py-1 bg-red-50 dark:bg-red-500/10 border border-red-200 dark:border-red-500/30 rounded-lg text-[10px] font-black text-red-600 dark:text-red-400 outline-none focus:ring-1 focus:ring-red-500"
                            />
                            <button
+                             type="button"
+                             aria-label={`إزالة ${course.name} من قائمة الرسوب`}
                              onClick={() => {
                                const next = new Set(failedCourseIds);
                                next.delete(id);
@@ -385,6 +443,9 @@ export const GPAModal: React.FC<GPAModalProps> = ({
                  <div className="relative">
                    <input 
                      type="text"
+                     aria-label="البحث عن مواد لإضافة علامة افتراضية"
+                     aria-expanded={isWhatIfListOpen}
+                     aria-controls="what-if-course-options"
                      placeholder="بحث في المواد المتاحة..."
                      value={whatIfSearchQuery}
                      onChange={(e) => {
@@ -398,18 +459,19 @@ export const GPAModal: React.FC<GPAModalProps> = ({
                  </div>
 
                  {isWhatIfListOpen && (
-                   <div className="absolute z-100 w-full mt-1 bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl shadow-xl max-h-60 overflow-y-auto custom-scrollbar">
-                     {Object.entries(whatIfAvailableCourses).length === 0 ? (
+                   <div id="what-if-course-options" className="absolute z-100 w-full mt-1 bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl shadow-xl max-h-60 overflow-y-auto custom-scrollbar">
+                     {whatIfAvailableCourses.size === 0 ? (
                        <div className="p-4 text-center text-xs text-gray-400 font-bold">لا توجد مواد مطابقة للبحث</div>
                      ) : (
-                       Object.entries(whatIfAvailableCourses).map(([category, categoryCourses]) => (
+                       Array.from(whatIfAvailableCourses).map(([category, categoryCourses]) => (
                          <div key={category}>
                            <div className="px-3 py-1 bg-gray-50 dark:bg-slate-900/50 text-[10px] font-black text-gray-400 uppercase tracking-widest border-y border-gray-100 dark:border-slate-700/50">
                              {category}
                            </div>
-                           {(categoryCourses as Course[]).map(c => (
+                           {categoryCourses.map(c => (
                              <button
                                key={c.id}
+                               type="button"
                                className="w-full text-right px-4 py-2 text-xs font-bold text-gray-700 dark:text-gray-200 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors flex items-center justify-between"
                                onClick={() => {
                                  setWhatIfGrades(prev => ({ ...prev, [c.id]: 0 }));
@@ -428,16 +490,23 @@ export const GPAModal: React.FC<GPAModalProps> = ({
                  )}
                  
                  {/* Click outside backdrop for what-if list */}
-                 {isWhatIfListOpen && <div className="fixed inset-0 z-90" onClick={() => setIsWhatIfListOpen(false)} />}
+                 {isWhatIfListOpen && (
+                   <button
+                     type="button"
+                     aria-label="إغلاق قائمة المواد الافتراضية"
+                     className="fixed inset-0 z-90 border-0 bg-transparent p-0"
+                     onClick={() => setIsWhatIfListOpen(false)}
+                   />
+                 )}
                </div>
             </div>
 
             {/* List of what-if for non-completed courses */}
             <div className="mt-4 space-y-2">
-              {(Object.entries(whatIfGrades) as [string, number][])
+              {Object.entries(whatIfGrades)
                 .filter(([id]) => !completedCourses.has(id) && !failedCourseIds.has(id))
                 .map(([id, grade]) => {
-                const course = courses.find(c => c.id === id);
+                const course = coursesById.get(id);
                 if (!course) return null;
                 return (
                   <div key={id} className="flex items-center justify-between p-3 bg-white dark:bg-slate-800 rounded-xl border border-orange-100 dark:border-orange-500/30">
@@ -450,14 +519,14 @@ export const GPAModal: React.FC<GPAModalProps> = ({
                         type="number"
                         min="0"
                         max="100"
-                        value={grade || ""}
-                        onChange={(e) => {
-                          const val = Math.min(100, Math.max(0, parseFloat(e.target.value) || 0));
-                          setWhatIfGrades(prev => ({ ...prev, [id]: val }));
-                        }}
+                        aria-label={`العلامة الافتراضية في ${course.name}`}
+                        value={grade}
+                        onChange={(event) => updateGrade(setWhatIfGrades, id, event.target.value)}
                         className="w-14 text-center py-1 bg-orange-50 dark:bg-orange-500/10 border border-orange-200 dark:border-orange-500/30 rounded-lg text-xs font-black text-orange-600 dark:text-orange-400 outline-none"
                       />
                       <button 
+                        type="button"
+                        aria-label={`إزالة توقع ${course.name}`}
                         onClick={() => {
                           const next = { ...whatIfGrades };
                           delete next[id];
@@ -485,6 +554,7 @@ export const GPAModal: React.FC<GPAModalProps> = ({
             <div className="relative w-64">
               <input
                 type="text"
+                aria-label="البحث عن المواد المسجلة"
                 placeholder="ابحث عن مادة..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
@@ -523,6 +593,7 @@ export const GPAModal: React.FC<GPAModalProps> = ({
                       </span>
                       <input
                         type="checkbox"
+                        aria-label={`تحديد ${course.name} كمادة ناجحة بنظام ناجح أو راسب`}
                         checked={courseGrades[course.id] === -1}
                         disabled={!completedCourses.has(course.id)}
                         onChange={(e) => {
@@ -549,13 +620,11 @@ export const GPAModal: React.FC<GPAModalProps> = ({
                         type="number"
                         min="0"
                         max="100"
+                        aria-label={`الدرجة الحالية في ${course.name}`}
                         placeholder={courseGrades[course.id] === -1 ? "مجتاز" : "--"}
                         disabled={courseGrades[course.id] === -1}
-                        value={courseGrades[course.id] === -1 ? "" : (courseGrades[course.id] || "")}
-                        onChange={(e) => {
-                          const val = Math.min(100, Math.max(0, parseFloat(e.target.value) || 0));
-                          setCourseGrades(prev => ({ ...prev, [course.id]: val }));
-                        }}
+                        value={courseGrades[course.id] === -1 ? "" : (courseGrades[course.id] ?? "")}
+                        onChange={(event) => updateGrade(setCourseGrades, course.id, event.target.value)}
                         className={cn(
                           "w-16 text-center py-1.5 bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-lg text-sm font-black text-indigo-600 dark:text-indigo-400 outline-none focus:ring-2 focus:ring-indigo-500 transition-all",
                           courseGrades[course.id] === -1 && "opacity-50 cursor-not-allowed bg-gray-100 dark:bg-slate-900"
@@ -569,13 +638,11 @@ export const GPAModal: React.FC<GPAModalProps> = ({
                         type="number"
                         min="0"
                         max="100"
+                        aria-label={`العلامة الافتراضية في ${course.name}`}
                         placeholder="--"
-                        value={whatIfGrades[course.id] || ""}
+                        value={whatIfGrades[course.id] ?? ""}
                         disabled={courseGrades[course.id] > 75}
-                        onChange={(e) => {
-                          const val = Math.min(100, Math.max(0, parseFloat(e.target.value) || 0));
-                          setWhatIfGrades(prev => ({ ...prev, [course.id]: val }));
-                        }}
+                        onChange={(event) => updateGrade(setWhatIfGrades, course.id, event.target.value)}
                         className={cn(
                           "w-16 text-center py-1.5 bg-orange-50 dark:bg-orange-500/10 border border-orange-100 dark:border-orange-500/30 rounded-lg text-sm font-black text-orange-600 dark:text-orange-400 outline-none focus:ring-2 focus:ring-orange-500",
                           courseGrades[course.id] > 75 && "opacity-50 cursor-not-allowed bg-gray-100 dark:bg-slate-900"
@@ -592,6 +659,8 @@ export const GPAModal: React.FC<GPAModalProps> = ({
  
         <div className="flex justify-center">
            <button 
+             type="button"
+             aria-label="إعادة تعيين جميع علامات ماذا لو"
              onClick={() => setWhatIfGrades({})}
              className="text-xs font-black text-gray-500 dark:text-slate-400 hover:text-indigo-500 dark:hover:text-indigo-400 transition-colors flex items-center gap-2"
            >

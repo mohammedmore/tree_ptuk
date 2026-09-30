@@ -1,10 +1,17 @@
 import React from "react";
-import { X, CalendarDays, CircleCheckBig, Trash2, AlertCircle } from "lucide-react";
+import { X, CalendarDays, CircleCheckBig, Trash2 } from "lucide-react";
 import { cn } from "../utils";
-import { Course, courses, categoryRequirements } from "../data";
+import type { Course } from "../data";
+import { courses } from "../data";
 import { getCourseDetails } from "../courseExplanations";
 import { SEMESTERS } from "../constants";
-import { formatOfferings, getSemesterType, isCourseAvailableInSemester } from "../courseOfferings";
+import {
+  formatOfferings,
+  getSemesterType,
+  isCourseAvailableInSemester,
+} from "../courseOfferings";
+
+const coursesById = new Map(courses.map((course) => [course.id, course]));
 
 interface DynamicCourseDetailsModalProps {
   isPlannerOpen: boolean;
@@ -33,13 +40,31 @@ const DynamicCourseDetailsModal: React.FC<DynamicCourseDetailsModalProps> = ({
   planEndSemester,
   toggleCourseCompletion,
 }) => {
+  const closeModal = React.useCallback(() => {
+    setPlannerSelectedCourse(null);
+    setIsRescheduling(false);
+  }, [setPlannerSelectedCourse, setIsRescheduling]);
+
+  React.useEffect(() => {
+    if (!isPlannerOpen || !plannerSelectedCourse) return;
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setPlannerSelectedCourse(null);
+        setIsRescheduling(false);
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [isPlannerOpen, plannerSelectedCourse, setPlannerSelectedCourse, setIsRescheduling]);
+
   if (!isPlannerOpen || !plannerSelectedCourse) return null;
 
   const details = getCourseDetails(
     plannerSelectedCourse,
     courses,
     completedCourses,
-    plannedCourses,
   );
   const isComp = completedCourses.has(plannerSelectedCourse.id);
   const prerequisites = plannerSelectedCourse.prerequisites;
@@ -47,8 +72,10 @@ const DynamicCourseDetailsModal: React.FC<DynamicCourseDetailsModalProps> = ({
     c.prerequisites.includes(plannerSelectedCourse.id),
   );
 
-  const planStartIdx = SEMESTERS.indexOf(planStartSemester);
-  const planEndIdx = SEMESTERS.indexOf(planEndSemester);
+  const foundPlanStartIdx = SEMESTERS.indexOf(planStartSemester);
+  const foundPlanEndIdx = SEMESTERS.indexOf(planEndSemester);
+  const planStartIdx = foundPlanStartIdx >= 0 ? foundPlanStartIdx : 0;
+  const planEndIdx = foundPlanEndIdx >= 0 ? foundPlanEndIdx : SEMESTERS.length - 1;
 
   // Active uncompleted prerequisites sems:
   const activePrereqs = prerequisites.filter(
@@ -57,14 +84,14 @@ const DynamicCourseDetailsModal: React.FC<DynamicCourseDetailsModalProps> = ({
   const prereqsWithSem = activePrereqs
     .map((preId) => ({
       id: preId,
-      name: courses.find((cr) => cr.id === preId)?.name || preId,
+      name: coursesById.get(preId)?.name || preId,
       sem: plannedCourses[preId],
     }))
-    .filter((x) => x.sem);
+    .filter((item) => item.sem && SEMESTERS.includes(item.sem));
 
   const maxPrereqIndex =
     prereqsWithSem.length > 0
-      ? Math.max(...prereqsWithSem.map((x) => SEMESTERS.indexOf(x.sem)))
+      ? Math.max(...prereqsWithSem.map((item) => SEMESTERS.indexOf(item.sem)))
       : -1;
 
   // Dependent courses planned but not completed:
@@ -77,11 +104,11 @@ const DynamicCourseDetailsModal: React.FC<DynamicCourseDetailsModalProps> = ({
       name: dep.name,
       sem: plannedCourses[dep.id],
     }))
-    .filter((x) => x.sem);
+    .filter((item) => item.sem && SEMESTERS.includes(item.sem));
 
   const minDepIndex =
     depsWithSem.length > 0
-      ? Math.min(...depsWithSem.map((x) => SEMESTERS.indexOf(x.sem)))
+      ? Math.min(...depsWithSem.map((item) => SEMESTERS.indexOf(item.sem)))
       : SEMESTERS.length;
 
   // Filter valid semesters which do not cause delays/conflict
@@ -90,7 +117,11 @@ const DynamicCourseDetailsModal: React.FC<DynamicCourseDetailsModalProps> = ({
       idx >= planStartIdx &&
       idx <= planEndIdx &&
       idx > maxPrereqIndex &&
-      idx < minDepIndex
+      idx < minDepIndex &&
+      isCourseAvailableInSemester(
+        plannerSelectedCourse.id,
+        getSemesterType(semName) ?? "",
+      )
     );
   });
   let critBg = "bg-emerald-50 text-emerald-700 border-emerald-200";
@@ -104,16 +135,22 @@ const DynamicCourseDetailsModal: React.FC<DynamicCourseDetailsModalProps> = ({
   }
 
   return (
-    <div className="fixed inset-0 bg-gray-900/60 backdrop-blur-sm z-[110] flex items-center justify-center p-4">
+    <div
+      className="fixed inset-0 bg-gray-900/60 backdrop-blur-sm z-[110] flex items-center justify-center p-4"
+      onClick={closeModal}
+    >
       <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="planner-course-details-title"
         className="bg-white dark:bg-slate-900 rounded-3xl border border-gray-200 dark:border-slate-800 shadow-2xl w-full max-w-lg p-6 flex flex-col gap-3.5 relative animate-in zoom-in-95 duration-200 text-right font-sans max-h-[90vh] overflow-y-auto"
         dir="rtl"
+        onClick={(event) => event.stopPropagation()}
       >
         <button
-          onClick={() => {
-            setPlannerSelectedCourse(null);
-            setIsRescheduling(false);
-          }}
+          type="button"
+          aria-label="إغلاق تفاصيل المادة"
+          onClick={closeModal}
           className="absolute top-4 left-4 p-2 text-gray-400 hover:bg-gray-100 dark:hover:bg-slate-800 rounded-full transition-colors"
         >
           <X size={18} />
@@ -143,23 +180,27 @@ const DynamicCourseDetailsModal: React.FC<DynamicCourseDetailsModalProps> = ({
               🔥 درجة الصعوبة: {details.difficulty}/10
             </span>
           </div>
-          <h3 className="text-xl font-black text-gray-950 dark:text-slate-100 leading-tight text-right">
+          <h3 id="planner-course-details-title" className="text-xl font-black text-gray-950 dark:text-slate-100 leading-tight text-right">
             {plannerSelectedCourse.name}
           </h3>
-          <div className="mt-2 flex items-center justify-end gap-2">
-            <span className="text-[10px] font-bold text-gray-400">تقييمك للصعوبة:</span>
+          <div
+            className="mt-2 flex items-center justify-end gap-1"
+            aria-label={`درجة صعوبة المادة ${details.difficulty} من 10`}
+          >
+            <span className="text-[10px] font-bold text-gray-400 ml-1">مؤشر الصعوبة:</span>
             {[1, 2, 3, 4, 5].map((star) => (
-              <button
+              <span
                 key={star}
+                aria-hidden="true"
                 className={cn(
-                  "w-6 h-6 rounded-md text-[10px] font-black transition-all",
+                  "w-6 h-6 rounded-md text-[10px] font-black flex items-center justify-center",
                   details.difficulty >= star * 2
                     ? "bg-amber-100 text-amber-600 border border-amber-200"
                     : "bg-gray-50 text-gray-300 border border-gray-100"
                 )}
               >
                 ★
-              </button>
+              </span>
             ))}
           </div>
         </div>
@@ -220,6 +261,7 @@ const DynamicCourseDetailsModal: React.FC<DynamicCourseDetailsModalProps> = ({
           {!isRescheduling ? (
             <button
               type="button"
+              aria-expanded={isRescheduling}
               onClick={() => setIsRescheduling(true)}
               className="w-full py-1.5 px-3 bg-white border border-indigo-200 text-indigo-700 hover:bg-indigo-50 rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 transition-colors shadow-sm"
             >
@@ -341,7 +383,7 @@ const DynamicCourseDetailsModal: React.FC<DynamicCourseDetailsModalProps> = ({
               <div className="flex flex-col gap-0.5">
                 {prerequisites.map((preId) => {
                   const preName =
-                    courses.find((cr) => cr.id === preId)?.name ||
+                    coursesById.get(preId)?.name ||
                     preId;
                   return (
                     <span
@@ -395,6 +437,8 @@ const DynamicCourseDetailsModal: React.FC<DynamicCourseDetailsModalProps> = ({
 
         <div className="border-t border-gray-100 dark:border-slate-800 pt-3 flex gap-2">
           <button
+            type="button"
+            aria-label={isComp ? "إلغاء تحديد المادة كمكتملة" : "تحديد المادة كمكتملة"}
             onClick={() => {
               toggleCourseCompletion(plannerSelectedCourse.id);
             }}

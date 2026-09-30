@@ -3,7 +3,7 @@ import { Download, ImageIcon, X, Sparkles, Loader2, CircleCheckBig } from "lucid
 import { cn } from "../utils";
 import { toPng } from "html-to-image";
 import { jsPDF } from "jspdf";
-import { Course, ScheduleEntry } from "../data";
+import type { Course, ScheduleEntry } from "../data";
 import { SEMESTERS, TOTAL_CREDITS } from "../constants";
 
 interface ExportModalProps {
@@ -41,15 +41,28 @@ const ExportModal: React.FC<ExportModalProps> = ({
 }) => {
   const [isExportLoading, setIsExportLoading] = React.useState(false);
   const [importError, setImportError] = React.useState<string | null>(null);
+  const [exportError, setExportError] = React.useState<string | null>(null);
   const fileInputRef = React.useRef<HTMLInputElement>(null);
+  const courseIds = React.useMemo(
+    () => new Set(courses.map((course) => course.id)),
+    [courses],
+  );
+  const coursesById = React.useMemo(
+    () => new Map(courses.map((course) => [course.id, course])),
+    [courses],
+  );
+  const validPlannedCourses = Object.entries(plannedCourses).filter(
+    ([courseId, semester]) =>
+      coursesById.has(courseId) && SEMESTERS.includes(semester),
+  );
 
   const gpa = React.useMemo(() => {
     let totalPoints = 0;
     let totalCreditsWithGrades = 0;
     
-    (Object.entries(courseGrades) as [string, number][]).forEach(([courseId, grade]) => {
+    Object.entries(courseGrades).forEach(([courseId, grade]) => {
       if (!completedCourses.has(courseId)) return;
-      const course = courses.find(c => c.id === courseId);
+      const course = coursesById.get(courseId);
       if (course && grade > 0) {
         totalPoints += grade * course.credits;
         totalCreditsWithGrades += course.credits;
@@ -58,59 +71,82 @@ const ExportModal: React.FC<ExportModalProps> = ({
     
     if (totalCreditsWithGrades === 0) return 0;
     return totalPoints / totalCreditsWithGrades;
-  }, [courseGrades, completedCourses, courses]);
+  }, [courseGrades, completedCourses, coursesById]);
+
+  React.useEffect(() => {
+    if (!isExportModalOpen) return;
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && !isExportLoading) onClose();
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [isExportModalOpen, isExportLoading, onClose]);
 
   if (!isExportModalOpen) return null;
 
   const exportToJson = () => {
-    const safeWeeklySchedule = Object.fromEntries(
-      Object.entries(weeklySchedule).map(([semester, entries]) => [
-        semester,
-        Object.fromEntries(
-          Object.entries(entries ?? {}).map(([courseId, entry]) => [
-            courseId,
-            {
+    try {
+      const safeWeeklySchedule = Object.fromEntries(
+        Object.entries(weeklySchedule).map(([semester, entries]) => [
+          semester,
+          Object.fromEntries(
+            Object.entries(entries ?? {}).map(([courseId, entry]) => [
               courseId,
-              startTime: entry?.startTime || "08:00",
-              endTime: entry?.endTime || "09:00",
-              section: entry?.section || "",
-              instructor: entry?.instructor || "",
-              room: entry?.room || entry?.location || "",
-              days: Array.isArray(entry?.days)
-                ? entry.days.filter((day): day is string => typeof day === "string")
-                : entry?.day ? [entry.day] : [],
-            },
-          ]),
-        ),
-      ]),
-    );
-    const data = {
-      completed_courses: Array.from(completedCourses),
-      planned_courses: plannedCourses,
-      version: 2,
-      weekly_schedule: safeWeeklySchedule,
-      selected_electives_map: selectedElectives,
-      course_grades: courseGrades,
-      failed_course_ids: failedCourseIds,
-      plan_start_semester: planStartSemester,
-      plan_end_semester: planEndSemester,
-      hide_past_semesters: hidePastSemesters,
-      dark_mode: darkMode,
-    };
-    
-    const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = `نسخة-احتياطية-خطة-${new Date().toLocaleDateString("ar-EG")}.json`;
-    link.click();
-    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+              {
+                courseId,
+                startTime: entry?.startTime || "08:00",
+                endTime: entry?.endTime || "09:00",
+                section: entry?.section || "",
+                instructor: entry?.instructor || "",
+                room: entry?.room || entry?.location || "",
+                days: Array.isArray(entry?.days)
+                  ? entry.days.filter((day): day is string => typeof day === "string")
+                  : entry?.day ? [entry.day] : [],
+              },
+            ]),
+          ),
+        ]),
+      );
+      const data = {
+        completed_courses: Array.from(completedCourses),
+        planned_courses: plannedCourses,
+        version: 2,
+        weekly_schedule: safeWeeklySchedule,
+        selected_electives_map: selectedElectives,
+        course_grades: courseGrades,
+        failed_course_ids: failedCourseIds,
+        plan_start_semester: planStartSemester,
+        plan_end_semester: planEndSemester,
+        hide_past_semesters: hidePastSemesters,
+        dark_mode: darkMode,
+      };
+
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `نسخة-احتياطية-خطة-${new Date().toLocaleDateString("ar-EG")}.json`;
+      link.click();
+      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+      setExportError(null);
+    } catch (error) {
+      console.error("JSON export failed", error);
+      setExportError("تعذر إنشاء ملف النسخة الاحتياطية.");
+    }
   };
 
   const importFromJson = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     const input = e.currentTarget;
+    setImportError(null);
+    if (file.size > 5 * 1024 * 1024) {
+      setImportError("حجم ملف النسخة الاحتياطية يتجاوز الحد المسموح (5 ميغابايت).");
+      input.value = "";
+      return;
+    }
     const reader = new FileReader();
     reader.onload = (event) => {
       let parsed: unknown;
@@ -175,7 +211,15 @@ const ExportModal: React.FC<ExportModalProps> = ({
         return;
       }
 
-      const snapshots = normalizedUpdates.map(([key]) => [key, localStorage.getItem(key)] as const);
+      let snapshots: Array<readonly [string, string | null]>;
+      try {
+        snapshots = normalizedUpdates.map(([key]) => [key, localStorage.getItem(key)] as const);
+      } catch (error) {
+        const reason = error instanceof Error ? error.message : "خطأ تخزين غير معروف";
+        setImportError(`تعذرت قراءة البيانات الحالية قبل الاستيراد: ${reason}`);
+        input.value = "";
+        return;
+      }
       try {
         normalizedUpdates.forEach(([key, value]) => localStorage.setItem(key, JSON.stringify(value)));
       } catch (error) {
@@ -207,19 +251,21 @@ const ExportModal: React.FC<ExportModalProps> = ({
     reader.readAsText(file);
 
     function isKnownCourseArray(value: unknown): boolean {
-      return Array.isArray(value) && value.every((id) => typeof id === "string");
+      return Array.isArray(value) && value.every((id) => typeof id === "string" && courseIds.has(id));
     }
     function isRecord(value: unknown): value is Record<string, unknown> {
       return typeof value === "object" && value !== null && !Array.isArray(value);
     }
     function isCourseMap(value: unknown): boolean {
       return isRecord(value)
-        && Object.values(value).every((id) => typeof id === "string");
+        && Object.entries(value).every(([slotId, id]) => (
+          typeof slotId === "string" && typeof id === "string" && courseIds.has(id)
+        ));
     }
     function isPlanMap(value: unknown): boolean {
       return isRecord(value)
         && Object.entries(value).every(([id, semester]) => (
-          typeof id === "string" && typeof semester === "string" && SEMESTERS.includes(semester)
+          courseIds.has(id) && typeof semester === "string" && SEMESTERS.includes(semester)
         ));
     }
     function isWeeklySchedule(value: unknown): boolean {
@@ -227,12 +273,20 @@ const ExportModal: React.FC<ExportModalProps> = ({
         SEMESTERS.includes(semester)
         && isRecord(semesterEntries)
         && Object.entries(semesterEntries).every(([id, entry]) => (
-          typeof id === "string"
+          courseIds.has(id)
           && isRecord(entry)
           && typeof entry.startTime === "string"
+          && /^([01]\d|2[0-3]):([0-5]\d)$/.test(entry.startTime)
           && typeof entry.endTime === "string"
-          && (entry.days === undefined || (Array.isArray(entry.days) && entry.days.every((day) => typeof day === "string")))
-          && ["section", "instructor", "room", "location", "day"].every((field) => (
+          && /^([01]\d|2[0-3]):([0-5]\d)$/.test(entry.endTime)
+          && (entry.days === undefined || (Array.isArray(entry.days) && entry.days.every((day) => (
+            typeof day === "string" && ["الأحد", "الاثنين", "الثلاثاء", "الأربعاء", "الخميس", "الجمعة", "السبت"].includes(day)
+          ))))
+          && (entry.day === undefined || (
+            typeof entry.day === "string"
+            && ["الأحد", "الاثنين", "الثلاثاء", "الأربعاء", "الخميس", "الجمعة", "السبت"].includes(entry.day)
+          ))
+          && ["section", "instructor", "room", "location"].every((field) => (
             entry[field] === undefined || typeof entry[field] === "string"
           ))
         ))
@@ -240,7 +294,7 @@ const ExportModal: React.FC<ExportModalProps> = ({
     }
     function isGrades(value: unknown): boolean {
       return isRecord(value) && Object.entries(value).every(([id, grade]) => (
-        typeof id === "string"
+        courseIds.has(id)
         && typeof grade === "number"
         && Number.isFinite(grade)
         && (grade === -1 || (grade >= 0 && grade <= 100))
@@ -256,9 +310,12 @@ const ExportModal: React.FC<ExportModalProps> = ({
 
   const exportToImage = async () => {
     const element = document.getElementById("study-plan-printable");
-    if (!element) return;
-
+    if (!element) {
+      setExportError("تعذر العثور على محتوى الخطة لتصديره.");
+      return;
+    }
     setIsExportLoading(true);
+    setExportError(null);
     try {
       // Small delay to ensure styles and fonts are ready
       await new Promise((resolve) => setTimeout(resolve, 500));
@@ -281,6 +338,7 @@ const ExportModal: React.FC<ExportModalProps> = ({
       link.click();
     } catch (err) {
       console.error("Export failed", err);
+      setExportError("تعذر حفظ الخطة كصورة. حاول مرة أخرى.");
     } finally {
       setIsExportLoading(false);
     }
@@ -288,9 +346,12 @@ const ExportModal: React.FC<ExportModalProps> = ({
 
   const exportToPdf = async () => {
     const element = document.getElementById("study-plan-printable");
-    if (!element) return;
-
+    if (!element) {
+      setExportError("تعذر العثور على محتوى الخطة لتصديره.");
+      return;
+    }
     setIsExportLoading(true);
+    setExportError(null);
     try {
       // Small delay to ensure styles are fully loaded
       await new Promise((resolve) => setTimeout(resolve, 500));
@@ -309,29 +370,30 @@ const ExportModal: React.FC<ExportModalProps> = ({
 
       const img = new Image();
       img.src = dataUrl;
-      img.onload = () => {
-        const pdf = new jsPDF("p", "mm", "a4");
-        const imgWidth = 210; // A4 width in mm
-        const pageHeight = 295; // A4 height in mm
-        const imgHeight = (img.height * imgWidth) / img.width;
-        let heightLeft = imgHeight;
-        let position = 0;
+      await img.decode();
 
+      const pdf = new jsPDF("p", "mm", "a4");
+      const imgWidth = 210;
+      const pageHeight = 295;
+      const imgHeight = (img.height * imgWidth) / img.width;
+      let heightLeft = imgHeight;
+      let position = 0;
+
+      pdf.addImage(dataUrl, "PNG", 0, position, imgWidth, imgHeight);
+      heightLeft -= pageHeight;
+
+      while (heightLeft > 0) {
+        position = heightLeft - imgHeight;
+        pdf.addPage();
         pdf.addImage(dataUrl, "PNG", 0, position, imgWidth, imgHeight);
         heightLeft -= pageHeight;
+      }
 
-        while (heightLeft >= 0) {
-          position = heightLeft - imgHeight;
-          pdf.addPage();
-          pdf.addImage(dataUrl, "PNG", 0, position, imgWidth, imgHeight);
-          heightLeft -= pageHeight;
-        }
-
-        pdf.save(`خطة-التخرج-${new Date().toLocaleDateString("ar-EG")}.pdf`);
-        setIsExportLoading(false);
-      };
+      pdf.save(`خطة-التخرج-${new Date().toLocaleDateString("ar-EG")}.pdf`);
     } catch (err) {
       console.error("Exporting to PDF failed:", err);
+      setExportError("تعذر إنشاء ملف PDF. حاول مرة أخرى.");
+    } finally {
       setIsExportLoading(false);
     }
   };
@@ -347,13 +409,16 @@ const ExportModal: React.FC<ExportModalProps> = ({
       onClick={onClose}
     >
       <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="export-modal-title"
         className="bg-white rounded-3xl p-0 w-full max-w-6xl h-[90vh] shadow-2xl animate-in zoom-in-95 duration-300 flex flex-col overflow-hidden"
         dir="rtl"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="p-6 border-b border-gray-100 flex justify-between items-center bg-gray-50/50">
           <div>
-            <h2 className="text-2xl font-black text-gray-800 flex items-center gap-3">
+            <h2 id="export-modal-title" className="text-2xl font-black text-gray-800 flex items-center gap-3">
               <Download size={28} className="text-emerald-600" />
               تنزيل وتصدير الخطة
             </h2>
@@ -371,6 +436,8 @@ const ExportModal: React.FC<ExportModalProps> = ({
               className="hidden" 
             />
             <button
+              type="button"
+              aria-label="اختيار ملف نسخة احتياطية للاستيراد"
               onClick={() => fileInputRef.current?.click()}
               className="bg-white text-gray-700 border border-gray-200 px-4 py-2.5 rounded-xl font-bold flex items-center gap-2 hover:bg-gray-50 transition-all"
             >
@@ -378,6 +445,7 @@ const ExportModal: React.FC<ExportModalProps> = ({
               استيراد نسخة
             </button>
             <button
+              type="button"
               onClick={exportToJson}
               className="bg-white text-gray-700 border border-gray-200 px-4 py-2.5 rounded-xl font-bold flex items-center gap-2 hover:bg-gray-50 transition-all"
             >
@@ -389,8 +457,14 @@ const ExportModal: React.FC<ExportModalProps> = ({
                 {importError}
               </p>
             )}
+            {exportError && (
+              <p role="alert" className="basis-full text-sm font-bold text-red-600">
+                {exportError}
+              </p>
+            )}
             <div className="h-8 w-px bg-gray-200 mx-1 hidden md:block"></div>
             <button
+              type="button"
               onClick={exportToImage}
               disabled={isExportLoading}
               className="bg-indigo-600 text-white px-6 py-2.5 rounded-xl font-bold flex items-center gap-2 hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-200 disabled:opacity-50"
@@ -403,6 +477,7 @@ const ExportModal: React.FC<ExportModalProps> = ({
               حفظ كصورة (PNG)
             </button>
             <button
+              type="button"
               onClick={exportToPdf}
               disabled={isExportLoading}
               className="bg-emerald-600 text-white px-6 py-2.5 rounded-xl font-bold flex items-center gap-2 hover:bg-emerald-700 transition-all shadow-lg shadow-emerald-250 disabled:opacity-50"
@@ -416,6 +491,8 @@ const ExportModal: React.FC<ExportModalProps> = ({
             </button>
             <div className="hidden sm:block h-8 w-px bg-gray-200 mx-1"></div>
             <button
+              type="button"
+              aria-label="إغلاق نافذة التصدير"
               onClick={onClose}
               className="p-2 text-gray-400 hover:bg-gray-100 rounded-full transition-colors"
             >
@@ -475,7 +552,7 @@ const ExportModal: React.FC<ExportModalProps> = ({
                     إجمالي الخطة
                   </div>
                   <div className="text-xl font-black text-blue-900">
-                    {Object.keys(plannedCourses).length} مساقاً
+                      {validPlannedCourses.length} مساقاً
                   </div>
                 </div>
                 <div className="p-4 bg-emerald-50 border-2 border-emerald-200 rounded-2xl">
@@ -512,14 +589,15 @@ const ExportModal: React.FC<ExportModalProps> = ({
 
               <div className="space-y-8">
                 {SEMESTERS.map((semester) => {
-                  const semCourses = Object.entries(plannedCourses)
-                    .filter(([, s]) => s === semester)
-                    .map(([id]) => courses.find((c) => c.id === id)!)
-                    .filter(Boolean);
+                  const semCourses = validPlannedCourses.flatMap(([courseId, plannedSemester]) => {
+                    if (plannedSemester !== semester) return [];
+                    const course = coursesById.get(courseId);
+                    return course ? [course] : [];
+                  });
                   if (semCourses.length === 0) return null;
 
                   return (
-                    <div key={semester} className="break-inside-avoid">
+                    <div key={semester} className="break-inside-avoid border-b-2 border-gray-300 pb-8 last:border-b-0">
                       <div className="flex items-center gap-4 mb-4">
                         <h3 className="text-lg font-black text-white bg-gray-900 px-6 py-2 rounded-xl shadow-lg">
                           {semester}

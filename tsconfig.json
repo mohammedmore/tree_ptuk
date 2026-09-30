@@ -13,7 +13,13 @@
     "moduleResolution": "bundler",
     "isolatedModules": true,
     "moduleDetection": "force",
-    "allowJs": true,
+    "strict": true,
+    "noImplicitOverride": true,
+    "forceConsistentCasingInFileNames": true,
+    "types": [
+      "vite/client",
+      "node"
+    ],
     "jsx": "react-jsx",
     "paths": {
       "@/*": [

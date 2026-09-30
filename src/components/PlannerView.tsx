@@ -1,10 +1,12 @@
 import React from "react";
 import { X, CalendarDays, Trash2, CircleCheckBig, Download, Sparkles, PieChart, ChevronDown, ChevronUp, AlertTriangle } from "lucide-react";
 import { cn } from "../utils";
-import { Course, courses } from "../data";
+import type { Course } from "../data";
+import { courses } from "../data";
 import { SEMESTERS, TOTAL_CREDITS } from "../constants";
 import DynamicCourseDetailsModal from "./DynamicCourseDetailsModal";
 import StatsDashboard from "./StatsDashboard";
+import { markCoursesCompleted } from "../courseProgress";
 
 interface PlannerViewProps {
   isPlannerOpen: boolean;
@@ -25,7 +27,6 @@ interface PlannerViewProps {
   plannedCredits: number;
   completedCreditsPerCategory: Record<string, number>;
   plannedCreditsPerCategory: Record<string, number>;
-  getAllPrerequisites: (courseId: string) => Set<string>;
   setIsExportModalOpen: React.Dispatch<React.SetStateAction<boolean>>;
   onOpenPlanningMode: () => void;
   toggleCourseCompletion: (courseId: string) => void;
@@ -50,7 +51,6 @@ const PlannerView: React.FC<PlannerViewProps> = ({
   plannedCredits,
   completedCreditsPerCategory,
   plannedCreditsPerCategory,
-  getAllPrerequisites,
   setIsExportModalOpen,
   onOpenPlanningMode,
   toggleCourseCompletion,
@@ -59,13 +59,30 @@ const PlannerView: React.FC<PlannerViewProps> = ({
   const [isRescheduling, setIsRescheduling] = React.useState(false);
   const [showStats, setShowStats] = React.useState(false);
 
+  const coursesById = React.useMemo(
+    () => new Map(courses.map((course) => [course.id, course])),
+    [],
+  );
+  const effectivePlanStartSemester = SEMESTERS.includes(planStartSemester)
+    ? planStartSemester
+    : SEMESTERS[0];
+  const planStartIndex = SEMESTERS.indexOf(effectivePlanStartSemester);
+  const invalidPlannedEntries = Object.entries(plannedCourses).filter(
+    ([courseId, semester]) =>
+      !coursesById.has(courseId) || !SEMESTERS.includes(semester),
+  );
+
   const planWarnings = React.useMemo(() => {
     const warnings: Record<string, string[]> = {};
-    (Object.entries(plannedCourses) as [string, string][]).forEach(([courseId, semester]) => {
-      const course = courses.find((c) => c.id === courseId);
+    Object.entries(plannedCourses).forEach(([courseId, semester]) => {
+      const course = coursesById.get(courseId);
       if (!course) return;
 
       const courseSemesterIdx = SEMESTERS.indexOf(semester);
+      if (courseSemesterIdx < 0) {
+        warnings[courseId] = ["الفصل المخطط له غير صالح"];
+        return;
+      }
 
       // Check prerequisites
       course.prerequisites.forEach((preId) => {
@@ -77,7 +94,7 @@ const PlannerView: React.FC<PlannerViewProps> = ({
 
         if (
           !isCompleted &&
-          (plannedSemesterIdx === -1 || plannedSemesterIdx >= courseSemesterIdx)
+          (plannedSemesterIdx < 0 || plannedSemesterIdx >= courseSemesterIdx)
         ) {
           if (!warnings[courseId]) warnings[courseId] = [];
           warnings[courseId].push(
@@ -97,7 +114,7 @@ const PlannerView: React.FC<PlannerViewProps> = ({
 
           if (
             !isCompleted &&
-            (plannedSemesterIdx === -1 || plannedSemesterIdx > courseSemesterIdx)
+            (plannedSemesterIdx < 0 || plannedSemesterIdx > courseSemesterIdx)
           ) {
             if (!warnings[courseId]) warnings[courseId] = [];
             warnings[courseId].push(
@@ -108,7 +125,7 @@ const PlannerView: React.FC<PlannerViewProps> = ({
       }
     });
     return warnings;
-  }, [plannedCourses, completedCourses]);
+  }, [plannedCourses, completedCourses, coursesById]);
 
   if (!isPlannerOpen) return null;
 
@@ -120,23 +137,28 @@ const PlannerView: React.FC<PlannerViewProps> = ({
       onClick={onClose}
     >
       <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="planner-view-title"
         className="bg-white/95 dark:bg-slate-900/95 backdrop-blur-2xl rounded-2xl sm:rounded-3xl p-4 sm:p-6 w-full max-w-6xl h-[97dvh] sm:h-[85vh] flex flex-col shadow-2xl shadow-gray-900/20 dark:shadow-slate-950/50 animate-in zoom-in-95 duration-300 border border-gray-200/50 dark:border-slate-700/50"
         dir="rtl"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 sm:gap-4 mb-4 sm:mb-6 shrink-0">
-          <h2 className="text-lg sm:text-2xl font-extrabold bg-gradient-to-r from-orange-600 to-amber-600 dark:from-orange-400 dark:to-amber-400 bg-clip-text text-transparent flex items-center gap-2">
-            <CalendarDays className="text-orange-600 dark:text-orange-400" />
+          <h2 id="planner-view-title" className="text-lg sm:text-2xl font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
+            <CalendarDays className="text-blue-700 dark:text-blue-400" />
             الخطة الفصلية
           </h2>
           <div className="grid grid-cols-2 sm:flex items-center gap-1.5 sm:gap-2">
             <button
+              type="button"
+              aria-expanded={showStats}
               onClick={() => setShowStats(!showStats)}
               className={cn(
-                "min-h-10 flex items-center justify-center gap-1 sm:gap-2 px-2 sm:px-4 py-1.5 sm:py-2 border rounded-xl transition-all duration-200 font-extrabold text-[11px] sm:text-sm shadow-lg",
+                "min-h-10 flex items-center justify-center gap-1 sm:gap-2 px-2 sm:px-4 py-1.5 sm:py-2 border rounded-lg transition-colors font-bold text-[11px] sm:text-sm",
                 showStats 
-                  ? "bg-gradient-to-r from-indigo-500 to-indigo-600 text-white border-indigo-500 dark:from-indigo-600 dark:to-indigo-700 dark:border-indigo-600 shadow-indigo-200/50 dark:shadow-indigo-900/30 hover:shadow-xl hover:shadow-indigo-300/60 dark:hover:shadow-indigo-900/50 hover:-translate-y-0.5"
-                  : "bg-gradient-to-r from-white to-gray-50 text-gray-700 border-gray-200 dark:from-slate-800 dark:to-slate-700 dark:text-slate-300 dark:border-slate-600 hover:from-gray-50 hover:to-gray-100 dark:hover:from-slate-700 dark:hover:to-slate-600 shadow-gray-200/30 dark:shadow-slate-900/30"
+                  ? "bg-blue-700 text-white border-blue-700 hover:bg-blue-800"
+                  : "bg-white text-slate-700 border-slate-200 dark:bg-slate-800 dark:text-slate-200 dark:border-slate-600 hover:bg-slate-50 dark:hover:bg-slate-700"
               )}
             >
               <PieChart size={16} className={showStats ? "text-white" : "text-gray-500 dark:text-slate-400"} />
@@ -144,14 +166,17 @@ const PlannerView: React.FC<PlannerViewProps> = ({
               {showStats ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
             </button>
             <button
+              type="button"
               onClick={() => setIsExportModalOpen(true)}
-              className="min-h-10 flex items-center justify-center gap-1 sm:gap-2 px-2 sm:px-4 py-1.5 sm:py-2 bg-gradient-to-r from-emerald-500 to-emerald-600 text-white border-emerald-500 dark:from-emerald-600 dark:to-emerald-700 dark:border-emerald-600 rounded-xl hover:from-emerald-600 hover:to-emerald-700 dark:hover:from-emerald-700 dark:hover:to-emerald-800 transition-all duration-200 font-extrabold text-[11px] sm:text-sm shadow-lg shadow-emerald-200/50 dark:shadow-emerald-900/30 hover:shadow-xl hover:shadow-emerald-300/60 dark:hover:shadow-emerald-900/50 hover:-translate-y-0.5"
+              className="min-h-10 flex items-center justify-center gap-1 sm:gap-2 px-2 sm:px-4 py-1.5 sm:py-2 bg-blue-700 text-white border border-blue-700 rounded-lg hover:bg-blue-800 transition-colors font-bold text-[11px] sm:text-sm"
             >
               <Download size={16} className="text-white" />
               <span className="sm:hidden">تصدير</span>
               <span className="hidden sm:inline">تنزيل الخطة (PDF / صورة)</span>
             </button>
             <button
+              type="button"
+              aria-label="إغلاق الخطة الفصلية"
               onClick={onClose}
               className="min-h-10 min-w-10 flex items-center justify-center p-2 text-gray-400 dark:text-slate-500 hover:bg-gray-100 dark:hover:bg-slate-800 rounded-full transition-all duration-200 hover:scale-110 hover:shadow-md"
             >
@@ -187,8 +212,10 @@ const PlannerView: React.FC<PlannerViewProps> = ({
                 بداية التخطيط الفعلي (الفصل القادم):
               </span>
               <select
-                value={planStartSemester}
+                aria-label="بداية التخطيط الفعلي"
+                value={effectivePlanStartSemester}
                 onChange={(e) => {
+                  if (!SEMESTERS.includes(e.target.value)) return;
                   setPlanStartSemester(e.target.value);
                   if (
                     SEMESTERS.indexOf(e.target.value) >
@@ -210,6 +237,7 @@ const PlannerView: React.FC<PlannerViewProps> = ({
             <div className="flex items-center gap-2">
               <label className="flex items-center gap-2 cursor-pointer select-none">
                 <input
+                  aria-label="إخفاء الفصول القديمة والمجتازة"
                   type="checkbox"
                   checked={hidePastSemesters}
                   onChange={(e) => setHidePastSemesters(e.target.checked)}
@@ -229,10 +257,12 @@ const PlannerView: React.FC<PlannerViewProps> = ({
                   قم بتحديد الفصل الدراسي لإضافة مادة:{" "}
                 </span>
                 <span className="ml-2 font-black">
-                  {courses.find((c) => c.id === planningCourseId)?.name}
+                  {coursesById.get(planningCourseId)?.name ?? planningCourseId}
                 </span>
               </div>
               <button
+                type="button"
+                aria-label="إلغاء اختيار المقرر"
                 onClick={() => setPlanningCourseId(null)}
                 className="text-orange-600 dark:text-orange-400 text-sm font-extrabold hover:underline transition-all"
               >
@@ -249,6 +279,7 @@ const PlannerView: React.FC<PlannerViewProps> = ({
                 ابدأ بإنشاء خطتك الأكاديمية من خلال وضع التخطيط.
               </p>
               <button
+                type="button"
                 onClick={() => {
                   onClose();
                   onOpenPlanningMode();
@@ -261,23 +292,52 @@ const PlannerView: React.FC<PlannerViewProps> = ({
             </div>
           ) : (
             <div className="overflow-x-auto bg-gradient-to-br from-gray-50 to-slate-100 dark:from-slate-950/40 dark:to-slate-900/40 rounded-2xl border border-gray-200 dark:border-slate-800 p-4 min-h-[500px] shadow-xl">
+              {invalidPlannedEntries.length > 0 && (
+                <div
+                  role="alert"
+                  className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-200"
+                >
+                  <span>
+                    تعذر عرض {invalidPlannedEntries.length} من عناصر الخطة؛
+                    لأنها تشير إلى مواد أو فصول غير صالحة.
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setPlannedCourses((previous) =>
+                        Object.fromEntries(
+                          Object.entries(previous).filter(
+                            ([courseId, semester]) =>
+                              coursesById.has(courseId) &&
+                              SEMESTERS.includes(semester),
+                          ),
+                        ),
+                      )
+                    }
+                    className="min-h-9 rounded-lg border border-amber-400 px-3 font-semibold hover:bg-amber-100 dark:border-amber-700 dark:hover:bg-amber-900/50"
+                  >
+                    إزالة العناصر غير الصالحة
+                  </button>
+                </div>
+              )}
               <div className="flex gap-4 min-w-max">
                 {SEMESTERS.filter((sem) => {
                   if (hidePastSemesters) {
                     return (
                       SEMESTERS.indexOf(sem) >=
-                      SEMESTERS.indexOf(planStartSemester)
+                      planStartIndex
                     );
                   }
                   return true;
                 }).map((sem) => {
                   const isPastSem =
-                    SEMESTERS.indexOf(sem) <
-                    SEMESTERS.indexOf(planStartSemester);
+                    SEMESTERS.indexOf(sem) < planStartIndex;
                   const semCourses = Object.entries(plannedCourses)
                     .filter(([, semester]) => semester === sem)
-                    .map(([id]) => courses.find((c) => c.id === id)!)
-                    .filter(Boolean);
+                    .flatMap(([id]) => {
+                      const course = coursesById.get(id);
+                      return course ? [course] : [];
+                    });
                   return (
                     <div
                       key={sem}
@@ -335,6 +395,8 @@ const PlannerView: React.FC<PlannerViewProps> = ({
                         {!planningCourseId && semCourses.length > 0 && (
                           <div className="flex gap-1 items-center shrink-0">
                             <button
+                              type="button"
+                              aria-label={`حذف جميع مواد ${sem}`}
                               onClick={(e) => {
                                 e.stopPropagation();
                                 setPlannedCourses((prev) => {
@@ -355,19 +417,15 @@ const PlannerView: React.FC<PlannerViewProps> = ({
                               (c) => !completedCourses.has(c.id),
                             ) && (
                                 <button
+                                  type="button"
+                                  aria-label={`تحديد جميع مواد ${sem} كمكتملة`}
                                   onClick={(e) => {
                                     e.stopPropagation();
                                     setCompletedCourses((prev) => {
-                                      const next = new Set(prev);
-                                      semCourses.forEach((c) => {
-                                        if (!next.has(c.id)) {
-                                          next.add(c.id);
-                                          getAllPrerequisites(c.id).forEach(
-                                            (pre) => next.add(pre),
-                                          );
-                                        }
-                                      });
-                                      return next;
+                                      return markCoursesCompleted(
+                                        prev,
+                                        semCourses.map((course) => course.id),
+                                      );
                                     });
                                   }}
                                   className="min-h-9 min-w-9 sm:min-h-0 sm:min-w-0 opacity-100 sm:opacity-0 sm:group-hover/header:opacity-100 p-2 sm:p-1 bg-gradient-to-r from-emerald-50 to-emerald-100 text-emerald-600 hover:from-emerald-100 hover:to-emerald-200 hover:text-emerald-700 rounded-xl transition-all duration-200 shadow-md shadow-emerald-200/30 dark:from-emerald-950/30 dark:to-emerald-900/30 dark:text-emerald-400 dark:hover:from-emerald-900/40 dark:hover:to-emerald-800/40 dark:hover:text-emerald-300 border border-emerald-200 dark:border-emerald-800/50"
@@ -386,6 +444,7 @@ const PlannerView: React.FC<PlannerViewProps> = ({
                           return (
                             <div
                               key={c.id}
+                              role="group"
                               onClick={() => setPlannerSelectedCourse(c)}
                               className={cn(
                                 "p-3 border rounded-xl flex flex-col relative group/card shadow-md cursor-pointer transition-all duration-300 hover:shadow-lg hover:-translate-y-1 active:scale-[0.98]",
@@ -417,6 +476,8 @@ const PlannerView: React.FC<PlannerViewProps> = ({
                                   )}
                                 </div>
                                 <button
+                                  type="button"
+                                  aria-label={`حذف ${c.name} من الخطة`}
                                   onClick={(e) => {
                                     e.stopPropagation();
                                     setPlannedCourses((prev) => {
@@ -431,9 +492,14 @@ const PlannerView: React.FC<PlannerViewProps> = ({
                                   <Trash2 size={12} />
                                 </button>
                               </div>
-                              <span
+                              <button
+                                type="button"
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  setPlannerSelectedCourse(c);
+                                }}
                                 className={cn(
-                                  "text-sm font-extrabold leading-tight mt-1",
+                                  "text-right text-sm font-extrabold leading-tight mt-1",
                                   isCompleted
                                     ? "text-emerald-800 dark:text-emerald-300"
                                     : "text-blue-900 dark:text-blue-100",
@@ -446,12 +512,14 @@ const PlannerView: React.FC<PlannerViewProps> = ({
                                     className="inline-block pb-0.5 text-emerald-500 align-middle"
                                   />
                                 )}
-                              </span>
+                              </button>
                             </div>
                           );
                         })}
                         {planningCourseId && !isPastSem && (
                           <button
+                            type="button"
+                            aria-label={`إضافة ${coursesById.get(planningCourseId)?.name ?? planningCourseId} إلى ${sem}`}
                             onClick={() => {
                               setPlannedCourses((prev) => ({
                                 ...prev,
@@ -463,8 +531,7 @@ const PlannerView: React.FC<PlannerViewProps> = ({
                           >
                             + أضف{" "}
                             {
-                              courses.find((c) => c.id === planningCourseId)
-                                ?.name
+                              coursesById.get(planningCourseId)?.name ?? planningCourseId
                             }{" "}
                             هنا
                           </button>

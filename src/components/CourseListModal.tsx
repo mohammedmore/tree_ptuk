@@ -1,7 +1,8 @@
 import React from "react";
 import { X, LayoutList, BookOpen, ChevronDown, ChevronUp, CircleCheckBig, Trash2, CalendarDays, Search } from "lucide-react";
 import { cn } from "../utils";
-import { Course, categoryRequirements } from "../data";
+import type { Course } from "../data";
+import { categoryRequirements } from "../data";
 
 interface CourseListModalProps {
   isCourseListModalOpen: boolean;
@@ -19,7 +20,7 @@ interface CourseListModalProps {
   setPlanningCourseId: (id: string | null) => void;
   setIsPlannerOpen: (isOpen: boolean) => void;
   completedCreditsPerCategory: Record<string, number>;
-  plannedCourses: Record<string, any>;
+  plannedCourses: Record<string, string>;
 }
 
 const CourseListModal: React.FC<CourseListModalProps> = ({
@@ -42,18 +43,30 @@ const CourseListModal: React.FC<CourseListModalProps> = ({
 }) => {
   const [searchQuery, setSearchQuery] = React.useState("");
 
+  React.useEffect(() => {
+    if (!isCourseListModalOpen) return;
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onClose();
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [isCourseListModalOpen, onClose]);
+
+  const normalizedSearchQuery = searchQuery.trim().toLocaleLowerCase();
   if (!isCourseListModalOpen) return null;
 
-  const filteredGroupedCourseList = (Object.entries(groupedCourseList) as [string, Course[]][]).reduce((acc, [category, items]) => {
-    const filteredItems = items.filter(c => 
-      c.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
-      c.id.toLowerCase().includes(searchQuery.toLowerCase())
+  const filteredGroupedCourseList = Object.entries(groupedCourseList).reduce<
+    Record<string, Course[]>
+  >((filteredGroups, [category, items]) => {
+    const filteredItems = items.filter((course) =>
+      course.name.toLocaleLowerCase().includes(normalizedSearchQuery)
+      || course.id.toLocaleLowerCase().includes(normalizedSearchQuery),
     );
-    if (filteredItems.length > 0) {
-      acc[category] = filteredItems;
-    }
-    return acc;
-  }, {} as Record<string, Course[]>);
+    if (filteredItems.length > 0) filteredGroups[category] = filteredItems;
+    return filteredGroups;
+  }, {});
 
   return (
     <div
@@ -61,6 +74,9 @@ const CourseListModal: React.FC<CourseListModalProps> = ({
       onClick={onClose}
     >
       <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="course-list-modal-title"
         className="bg-white dark:bg-slate-900 rounded-3xl p-0 w-full max-w-2xl shadow-2xl animate-in zoom-in-95 duration-300 relative overflow-hidden border border-gray-100 dark:border-slate-700 flex flex-col max-h-[90vh]"
         dir="rtl"
         onClick={(e) => e.stopPropagation()}
@@ -69,18 +85,27 @@ const CourseListModal: React.FC<CourseListModalProps> = ({
 
         {/* Header */}
         <div className="p-6 border-b border-gray-100 dark:border-slate-700 flex justify-between items-center bg-gray-50/50 dark:bg-slate-950/20 shrink-0">
-          <h2 className="text-xl font-black text-gray-800 dark:text-slate-100 flex items-center gap-3">
+          <h2 id="course-list-modal-title" className="text-xl font-black text-gray-800 dark:text-slate-100 flex items-center gap-3">
             <div className="bg-gradient-to-br from-blue-500 to-blue-600 p-2.5 rounded-2xl text-white shadow-lg shadow-blue-200 dark:shadow-none">
               <LayoutList size={24} />
             </div>
             <span>قائمة المواد</span>
           </h2>
-          <button onClick={onClose} className="p-2 text-gray-400 hover:bg-gray-100 dark:hover:bg-slate-800 rounded-full transition-colors"><X /></button>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="إغلاق قائمة المواد"
+            className="p-2 text-gray-400 hover:bg-gray-100 dark:hover:bg-slate-800 rounded-full transition-colors"
+          >
+            <X />
+          </button>
         </div>
 
         {/* Tabs */}
-        <div className="flex border-b border-gray-100 dark:border-slate-700 px-6 pt-2 gap-6 bg-gray-50/30 dark:bg-slate-900/30 shrink-0">
+        <div role="group" aria-label="تصفية قائمة المواد" className="flex border-b border-gray-100 dark:border-slate-700 px-6 pt-2 gap-6 bg-gray-50/30 dark:bg-slate-900/30 shrink-0">
           <button
+            type="button"
+            aria-pressed={courseListTab === "available"}
             className={cn(
               "pb-3 px-1 text-sm font-black border-b-2 transition-colors",
               courseListTab === "available"
@@ -92,6 +117,8 @@ const CourseListModal: React.FC<CourseListModalProps> = ({
             متاح للتسجيل ({availableCourses.length})
           </button>
           <button
+            type="button"
+            aria-pressed={courseListTab === "completed"}
             className={cn(
               "pb-3 px-1 text-sm font-black border-b-2 transition-colors",
               courseListTab === "completed"
@@ -103,6 +130,8 @@ const CourseListModal: React.FC<CourseListModalProps> = ({
             منجز ({completedCourses.size})
           </button>
           <button
+            type="button"
+            aria-pressed={courseListTab === "all"}
             className={cn(
               "pb-3 px-1 text-sm font-black border-b-2 transition-colors",
               courseListTab === "all"
@@ -122,6 +151,7 @@ const CourseListModal: React.FC<CourseListModalProps> = ({
               <Search className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
               <input
                 type="text"
+                aria-label="البحث عن مادة بالاسم أو الرمز"
                 placeholder="ابحث عن مادة باسمها أو رمزها..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
@@ -135,6 +165,10 @@ const CourseListModal: React.FC<CourseListModalProps> = ({
               </h3>
               {Object.keys(groupedCourseList).length > 0 && (
                 <button
+                  type="button"
+                  aria-label={Object.values(expandedCourseListCategories).some((value) => value)
+                    ? "طي جميع التصنيفات"
+                    : "فرد جميع التصنيفات"}
                   onClick={() => {
                     const isAnyOpen = Object.values(expandedCourseListCategories).some(v => v === true);
                     const newState: Record<string, boolean> = {};
@@ -150,13 +184,25 @@ const CourseListModal: React.FC<CourseListModalProps> = ({
 
             <div className="space-y-3">
               {Object.keys(filteredGroupedCourseList).length === 0 ? (
-                <div className="text-center py-10 text-sm font-bold text-gray-400">لا توجد مواد تطابق البحث حالياً</div>
+                <div role="status" className="text-center py-10 text-sm font-bold text-gray-400">
+                  {normalizedSearchQuery
+                    ? "لا توجد مواد تطابق البحث حالياً"
+                    : courseListTab === "available"
+                      ? "لا توجد مواد متاحة للتسجيل حالياً"
+                      : courseListTab === "completed"
+                        ? "لم تُسجل أي مواد كمنجزة بعد"
+                        : "لا توجد مواد لعرضها حالياً"}
+                </div>
               ) : (
-                (Object.entries(filteredGroupedCourseList) as [string, Course[]][]).map(([category, items]) => {
+                Object.entries(filteredGroupedCourseList).map(([category, items], categoryIndex) => {
                   const isExpanded = expandedCourseListCategories[category] === true;
+                  const categoryPanelId = `course-list-category-${categoryIndex}`;
                   return (
                     <div key={category} className="border border-gray-100 dark:border-slate-700 rounded-2xl overflow-hidden shadow-sm">
                       <button
+                        type="button"
+                        aria-expanded={isExpanded}
+                        aria-controls={categoryPanelId}
                         onClick={() => setExpandedCourseListCategories(prev => ({ ...prev, [category]: !isExpanded }))}
                         className="w-full flex items-center justify-between p-3.5 bg-gray-50 dark:bg-slate-800/80 hover:bg-gray-100 transition-colors"
                       >
@@ -164,13 +210,13 @@ const CourseListModal: React.FC<CourseListModalProps> = ({
                         {isExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
                       </button>
 
-                      {isExpanded && (
-                        <div className="p-3 bg-white dark:bg-slate-900/50 space-y-2 animate-in slide-in-from-top-1 duration-200 grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      <div
+                        id={categoryPanelId}
+                        hidden={!isExpanded}
+                        className="p-3 bg-white dark:bg-slate-900/50 space-y-2 animate-in slide-in-from-top-1 duration-200 grid grid-cols-1 sm:grid-cols-2 gap-2"
+                      >
                           {items.map(c => {
                             const isComp = completedCourses.has(c.id);
-                            const isAvail = availableCourses.some(
-                              (course) => course.id === c.id,
-                            );
                             const req = categoryRequirements[c.category] || 999;
                             const comp = completedCreditsPerCategory[c.category] || 0;
                             const isGroupCompleted = comp >= req;
@@ -182,8 +228,10 @@ const CourseListModal: React.FC<CourseListModalProps> = ({
                                 key={c.id}
                                 className="w-full p-3 bg-white dark:bg-slate-800 border border-gray-100 dark:border-slate-700 rounded-xl hover:border-blue-400 hover:shadow-md transition-all flex justify-between items-center group relative overflow-hidden"
                               >
-                                <div
-                                  className="flex flex-col items-start gap-1 cursor-pointer flex-1"
+                                <button
+                                  type="button"
+                                  className="flex flex-col items-start gap-1 cursor-pointer flex-1 text-right"
+                                  aria-label={`عرض ${c.name} في الخريطة`}
                                   onClick={() => {
                                     focusNode(c.id);
                                     onClose();
@@ -191,13 +239,15 @@ const CourseListModal: React.FC<CourseListModalProps> = ({
                                 >
                                   <span className="text-[11px] font-black text-gray-800 dark:text-slate-200 group-hover:text-blue-600 transition-colors line-clamp-1">{c.name}</span>
                                   <span className="text-[9px] font-mono text-gray-400">{c.id}</span>
-                                </div>
+                                </button>
 
                                 <div className="flex items-center gap-2 shrink-0">
                                   <span className="text-[10px] font-black text-blue-600 bg-blue-50 dark:bg-blue-900/30 px-2 py-0.5 rounded-md">{c.credits} س</span>
 
                                   <div className="flex gap-1 border-r border-gray-100 dark:border-slate-700 pr-1 mr-1">
                                     <button
+                                      type="button"
+                                      aria-label={isComp ? `إلغاء إنجاز ${c.name}` : `تحديد ${c.name} كمنجزة`}
                                       onClick={(e) => { e.stopPropagation(); if (!isLocked) toggleCourseCompletion(c.id); }}
                                       className={cn(
                                         "p-1.5 rounded-lg transition-colors",
@@ -210,6 +260,9 @@ const CourseListModal: React.FC<CourseListModalProps> = ({
                                       {isComp ? <Trash2 size={14} /> : <CircleCheckBig size={14} />}
                                     </button>
                                     <button
+                                      type="button"
+                                      aria-label={`${plannedCourses[c.id] ? "تعديل تخطيط" : "تخطيط"} ${c.name}`}
+                                      aria-pressed={Boolean(plannedCourses[c.id])}
                                       onClick={(e) => { e.stopPropagation(); setPlanningCourseId(c.id); setIsPlannerOpen(true); onClose(); }}
                                       className={cn(
                                         "p-1.5 rounded-lg transition-colors",
@@ -224,8 +277,7 @@ const CourseListModal: React.FC<CourseListModalProps> = ({
                               </div>
                             );
                           })}
-                        </div>
-                      )}
+                      </div>
                     </div>
                   );
                 })

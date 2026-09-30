@@ -51,51 +51,75 @@ import {
 } from "./constants";
 import CourseNode from "./CourseNode";
 import ListView from "./ListView";
-import ResetConfirmationModal from "./components/ResetConfirmationModal"; // Import the new component
-import SupportModal from "./components/SupportModal"; // Import the new component
-import ExportModal from "./components/ExportModal"; // Import the new component
-import PlanningModeModal from "./components/PlanningModeModal"; // Import the new component
-import CourseListModal from "./components/CourseListModal"; // Import the new component
-import PlannerView from "./components/PlannerView"; // Import the new component
-import { GPAModal } from "./components/GPAModal";
-import { WeeklyScheduleModal } from "./components/WeeklyScheduleModal";
-import {
-  LoadScheduleModal,
-  ShareScheduleModal,
-  SharedSchedulePreviewModal,
-} from "./components/SharedScheduleModals";
 import {
   fetchScheduleByCode,
   normalizeScheduleCode,
   shareScheduleToCloud,
   SharedScheduleSnapshot,
 } from "./sharedSchedules";
+import { toggleCompletedCourse } from "./courseProgress";
+import { readAppStorageValue, serializeAppStorageValue } from "./appStorage";
+import { escapeCsvValue, parseCsvRows } from "./csv";
+
+const ExportModal = React.lazy(() => import("./components/ExportModal"));
+const ResetConfirmationModal = React.lazy(() => import("./components/ResetConfirmationModal"));
+const SupportModal = React.lazy(() => import("./components/SupportModal"));
+const PlanningModeModal = React.lazy(() => import("./components/PlanningModeModal"));
+const CourseListModal = React.lazy(() => import("./components/CourseListModal"));
+const PlannerView = React.lazy(() => import("./components/PlannerView"));
+const GPAModal = React.lazy(() => import("./components/GPAModal").then((module) => ({ default: module.GPAModal })));
+const WeeklyScheduleModal = React.lazy(() => import("./components/WeeklyScheduleModal").then((module) => ({ default: module.WeeklyScheduleModal })));
+const ShareScheduleModal = React.lazy(() => import("./components/SharedScheduleModals").then((module) => ({ default: module.ShareScheduleModal })));
+const LoadScheduleModal = React.lazy(() => import("./components/SharedScheduleModals").then((module) => ({ default: module.LoadScheduleModal })));
+const SharedSchedulePreviewModal = React.lazy(() => import("./components/SharedScheduleModals").then((module) => ({ default: module.SharedSchedulePreviewModal })));
+const modalLoadingFallback = (
+  <div role="status" className="fixed inset-0 z-[120] flex items-center justify-center bg-white/80 font-bold text-slate-700 dark:bg-slate-950/80 dark:text-slate-200">
+    جارٍ تحميل النافذة...
+  </div>
+);
+const STORAGE_ISSUE_EVENT = "planner:storage-issue";
+let pendingStorageIssue: string | null = null;
+
+function reportStorageIssue(message: string): void {
+  pendingStorageIssue = message;
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new CustomEvent(STORAGE_ISSUE_EVENT, { detail: message }));
+  }
+}
 
 // تحسين: تمرير الـ edges كمعامل لجعل الدالة نقية (Pure Function) وقابلة للاختبار
 export const getPathForCourse = (nodeId: string, edges: Edge[]) => {
   const ancestors = new Set<string>();
   const descendants = new Set<string>();
+  const prerequisites = new Map<string, string[]>();
+  const dependents = new Map<string, string[]>();
 
-  const findAncestors = (currId: string) => {
-    edges.forEach((e) => {
-      if (e.target === currId && !ancestors.has(e.source)) {
-        ancestors.add(e.source);
-        findAncestors(e.source);
-      }
-    });
+  const addAdjacency = (adjacency: Map<string, string[]>, from: string, to: string) => {
+    const neighbors = adjacency.get(from);
+    if (neighbors) neighbors.push(to);
+    else adjacency.set(from, [to]);
   };
 
-  const findDescendants = (currId: string) => {
-    edges.forEach((e) => {
-      if (e.source === currId && !descendants.has(e.target)) {
-        descendants.add(e.target);
-        findDescendants(e.target);
-      }
-    });
+  for (const edge of edges) {
+    addAdjacency(prerequisites, edge.target, edge.source);
+    addAdjacency(dependents, edge.source, edge.target);
+  }
+
+  const collectReachable = (
+    adjacency: Map<string, string[]>,
+    visited: Set<string>,
+  ) => {
+    const pending = [...(adjacency.get(nodeId) ?? [])];
+    while (pending.length > 0) {
+      const currentId = pending.pop()!;
+      if (currentId === nodeId || visited.has(currentId)) continue;
+      visited.add(currentId);
+      pending.push(...(adjacency.get(currentId) ?? []));
+    }
   };
 
-  findAncestors(nodeId);
-  findDescendants(nodeId);
+  collectReachable(prerequisites, ancestors);
+  collectReachable(dependents, descendants);
 
   return {
     ancestors,
@@ -141,78 +165,26 @@ const isCourseAvailable = (
 // Local storage hook
 function useLocalStorage<T>(key: string, initialValue: T) {
   const [storedValue, setStoredValue] = useState<T>(() => {
+    return readAppStorageValue(key, initialValue, reportStorageIssue);
+  });
+  const initialValueRef = useRef(storedValue);
+  const hasChangedRef = useRef(false);
+
+  useEffect(() => {
+    if (!hasChangedRef.current) {
+      if (Object.is(storedValue, initialValueRef.current)) return;
+      hasChangedRef.current = true;
+    }
     try {
-      const item = window.localStorage.getItem(key);
-      if (item) {
-        const parsed = JSON.parse(item);
-        if (initialValue instanceof Set && Array.isArray(parsed)) {
-          return new Set(parsed) as T;
-        }
-        return parsed;
-      }
-      return initialValue;
+      window.localStorage.setItem(key, serializeAppStorageValue(storedValue));
     } catch (error) {
-      return initialValue;
+      reportStorageIssue("تعذر حفظ التغييرات على هذا الجهاز. تحقّق من مساحة التخزين المتاحة في المتصفح.");
+      console.error(`Unable to save localStorage key "${key}"`, error);
     }
-  });
+  }, [key, storedValue]);
 
-  const setValue = useCallback(
-    (value: T | ((val: T) => T)) => {
-      setStoredValue((prev) => {
-        try {
-          const valueToStore =
-            value instanceof Function ? (value as any)(prev) : value;
-          if (valueToStore instanceof Set) {
-            window.localStorage.setItem(
-              key,
-              JSON.stringify(Array.from(valueToStore)),
-            );
-          } else {
-            window.localStorage.setItem(key, JSON.stringify(valueToStore));
-          }
-          return valueToStore;
-        } catch (error) {
-          console.log(error);
-          return prev;
-        }
-      });
-    },
-    [key],
-  );
-
-  return [storedValue, setValue] as const;
+  return [storedValue, setStoredValue] as const;
 }
-
-// Helpers for cascading completion
-const getAllPrerequisites = (
-  courseId: string,
-  acc = new Set<string>(),
-): Set<string> => {
-  const course = courses.find((c) => c.id === courseId);
-  if (!course) return acc;
-  course.prerequisites.forEach((prereqId) => {
-    if (!acc.has(prereqId)) {
-      acc.add(prereqId);
-      getAllPrerequisites(prereqId, acc);
-    }
-  });
-  return acc;
-};
-
-const getAllDependents = (
-  courseId: string,
-  acc = new Set<string>(),
-): Set<string> => {
-  courses.forEach((c) => {
-    if (c.prerequisites.includes(courseId)) {
-      if (!acc.has(c.id)) {
-        acc.add(c.id);
-        getAllDependents(c.id, acc);
-      }
-    }
-  });
-  return acc;
-};
 
 // Generate nodes and edges
 const initialNodes: Node[] = courses.map((course) => ({
@@ -285,7 +257,11 @@ const nodeTypes = {
   courseNode: CourseNode,
 };
 
+const CSV_HEADERS = ["رقم المادة", "اسم المادة", "التصنيف", "الساعات", "الحالة"];
+
 function FlowComponent() {
+  const [storageIssue, setStorageIssue] = useState<string | null>(null);
+  const [csvImportError, setCsvImportError] = useState<string | null>(null);
   const [nodes, setNodes, onNodesChange] = useNodesState(layoutedNodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(layoutedEdges);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
@@ -380,6 +356,19 @@ function FlowComponent() {
     []
   );
 
+  useEffect(() => {
+    const handleStorageIssue = (event: Event) => {
+      const message = (event as CustomEvent<string>).detail;
+      if (message) setStorageIssue(message);
+    };
+    window.addEventListener(STORAGE_ISSUE_EVENT, handleStorageIssue);
+    if (pendingStorageIssue) {
+      setStorageIssue(pendingStorageIssue);
+      pendingStorageIssue = null;
+    }
+    return () => window.removeEventListener(STORAGE_ISSUE_EVENT, handleStorageIssue);
+  }, []);
+
   const [hoveredCourseId, setHoveredCourseId] = useState<string | null>(null);
 
   const hoveredPath = useMemo(() => {
@@ -401,7 +390,8 @@ function FlowComponent() {
     if (viewMode !== "map") return;
     const frame = window.requestAnimationFrame(() => {
       const isMobile = window.matchMedia("(max-width: 639px)").matches;
-      fitView({ padding: isMobile ? 0.12 : 0.05, duration: isMobile ? 0 : 500 });
+      void fitView({ padding: isMobile ? 0.12 : 0.05, duration: isMobile ? 0 : 500 })
+        .catch((error: unknown) => console.error("Unable to fit course map to view", error));
     });
     return () => window.cancelAnimationFrame(frame);
   }, [fitView, viewMode]);
@@ -437,12 +427,14 @@ function FlowComponent() {
   ];
 
   const confirmReset = () => {
-    setCompletedCourses(new Set());
-    setPlannedCourses({});
-    setFailedCourseIds([]);
-    localStorageKeys.forEach(key => window.localStorage.removeItem(key)); // Clear only app-specific keys
-    setShowResetConfirm(false);
-    // Reload to ensure all states are truly reset from scratch
+    try {
+      localStorageKeys.forEach((key) => window.localStorage.removeItem(key));
+    } catch (error) {
+      reportStorageIssue("تعذرت تهيئة الخطة لأن المتصفح منع حذف البيانات المحفوظة.");
+      console.error("Unable to reset local plan storage", error);
+      setShowResetConfirm(false);
+      return;
+    }
     window.location.reload();
   };
 
@@ -637,41 +629,91 @@ function FlowComponent() {
   const handleImportCsv = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    setCsvImportError(null);
+    if (file.size > 5 * 1024 * 1024) {
+      setCsvImportError("حجم الملف يتجاوز الحد المسموح (5 ميغابايت).");
+      e.target.value = "";
+      return;
+    }
+
     const reader = new FileReader();
     reader.onload = (event) => {
-      const text = event.target?.result as string;
-      const lines = text.split("\n");
-      const newCompleted = new Set(completedCourses);
-
-      lines.slice(1).forEach((line) => {
-        // Split by comma ignoring commas inside quotes
-        const parts = line.split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/);
-        if (parts.length >= 5) {
-          const id = parts[0].replace(/"/g, "").trim();
-          const status = parts[parts.length - 1].replace(/"/g, "").trim();
-          if (status.includes("منجز") && !status.includes("غير")) {
-            newCompleted.add(id);
-          }
+      try {
+        const result = event.target?.result;
+        if (typeof result !== "string") {
+          setCsvImportError("تعذرت قراءة محتوى الملف.");
+          return;
         }
-      });
-      setCompletedCourses(newCompleted);
+        let rows: string[][];
+        try {
+          rows = parseCsvRows(result);
+        } catch (error) {
+          setCsvImportError(error instanceof Error ? error.message : "صيغة ملف CSV غير صالحة.");
+          return;
+        }
+        const [header, ...records] = rows;
+        if (
+          header?.length !== CSV_HEADERS.length
+          || header.some((value, index) => value.trim() !== CSV_HEADERS[index])
+        ) {
+          setCsvImportError("صيغة الملف غير مدعومة. استخدم ملف CSV المُصدّر من الموقع.");
+          return;
+        }
+
+        const knownCourseIds = new Set(courses.map((course) => course.id));
+        const importedCourseIds = new Set<string>();
+        for (const row of records) {
+          if (row.every((value) => value.trim() === "")) continue;
+          if (row.length !== 5) {
+            setCsvImportError("أحد صفوف CSV لا يحتوي على الأعمدة الخمسة المطلوبة.");
+            return;
+          }
+          const courseId = row[0].trim();
+          if (!knownCourseIds.has(courseId)) {
+            setCsvImportError(`رقم المادة ${courseId || "(فارغ)"} غير موجود في المنهاج الحالي.`);
+            return;
+          }
+          const status = row[4].trim();
+          if (status !== "منجز" && status !== "غير منجز") {
+            setCsvImportError(`حالة المادة ${courseId} غير صالحة.`);
+            return;
+          }
+          if (status === "منجز") importedCourseIds.add(courseId);
+        }
+
+        setCompletedCourses((previous) => new Set([...previous, ...importedCourseIds]));
+        setCsvImportError(null);
+      } catch (error) {
+        setCsvImportError(error instanceof Error ? error.message : "تعذّر استيراد ملف CSV.");
+        console.error("Unable to import CSV plan", error);
+      }
     };
-    reader.readAsText(file);
+    reader.onerror = () => {
+      setCsvImportError("تعذّرت قراءة الملف. تحقق من الملف ثم حاول مرة أخرى.");
+      console.error("Unable to read CSV file", reader.error);
+    };
+    reader.onabort = () => setCsvImportError("أُلغيت قراءة الملف قبل اكتمالها.");
+    try {
+      reader.readAsText(file);
+    } catch (error) {
+      setCsvImportError(error instanceof Error ? error.message : "تعذّرت قراءة الملف. تحقق من الملف ثم حاول مرة أخرى.");
+      console.error("Unable to start reading CSV file", error);
+    }
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
   const handleExportCsv = () => {
-    const headers = [
-      "رقم المادة",
-      "اسم المادة",
-      "التصنيف",
-      "الساعات",
-      "الحالة",
-    ].join(",");
+    const headers = CSV_HEADERS.map(escapeCsvValue).join(",");
     const rows = courses.map((course) => {
       const isCompleted = completedCourses.has(course.id);
       const status = isCompleted ? "منجز" : "غير منجز";
-      return `"${course.id}","${course.name}","${course.category}","${course.credits}","${status}"`;
+      return [
+        course.id,
+        course.name,
+        course.category,
+        course.credits,
+        status,
+      ].map(escapeCsvValue).join(",");
     });
 
     // Add BOM for UTF-8 correctly opening in Excel
@@ -688,6 +730,7 @@ function FlowComponent() {
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+    window.setTimeout(() => URL.revokeObjectURL(url), 0);
   };
 
   const completedCreditsPerCategory = useMemo(() => {
@@ -702,12 +745,26 @@ function FlowComponent() {
     );
   }, [completedCourses, activeCourses]);
 
+  const matchingSearchCourses = useMemo(() => {
+    const query = searchQuery.trim().toLowerCase();
+    if (!query) return [];
+    return courses.filter((course) => (
+      course.name.toLowerCase().includes(query)
+      || course.id.toLowerCase().includes(query)
+      || (courseCommonNames[course.id] ?? "").toLowerCase().includes(query)
+    ));
+  }, [searchQuery]);
+
   // Compute available courses
   const availableCourses = useMemo(() => {
     return courses.filter((course) =>
       isCourseAvailable(course, completedCourses, completedCreditsPerCategory, courses)
     );
   }, [completedCourses, completedCreditsPerCategory, courses]);
+  const availableCourseIds = useMemo(
+    () => new Set(availableCourses.map((course) => course.id)),
+    [availableCourses],
+  );
 
   const groupedCourseList = useMemo(() => {
     let list: Course[];
@@ -759,21 +816,7 @@ function FlowComponent() {
 
   const toggleCourseCompletion = useCallback(
     (courseId: string) => {
-      setCompletedCourses((prev) => {
-        const next = new Set(prev);
-        if (next.has(courseId)) {
-          next.delete(courseId);
-          // Cascading deletion
-          const dependents = getAllDependents(courseId);
-          dependents.forEach((depId) => next.delete(depId));
-        } else {
-          next.add(courseId);
-          // Cascading addition
-          const prereqs = getAllPrerequisites(courseId);
-          prereqs.forEach((preId) => next.add(preId));
-        }
-        return next;
-      });
+      setCompletedCourses((previous) => toggleCompletedCourse(previous, courseId));
     },
     [setCompletedCourses],
   );
@@ -797,10 +840,10 @@ function FlowComponent() {
     (id: string) => {
       const node = nodes.find((n) => n.id === id);
       if (node) {
-        setCenter(node.position.x + 100, node.position.y + 50, {
+        void setCenter(node.position.x + 100, node.position.y + 50, {
           zoom: 1.5,
           duration: 800,
-        });
+        }).catch((error: unknown) => console.error("Unable to center map on course", error));
         setSelectedNodeId(id);
       }
       // Close sidebar on mobile but maybe not on desktop
@@ -814,6 +857,7 @@ function FlowComponent() {
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
+        if (document.querySelector('[role="dialog"][aria-modal="true"]')) return;
         setIsSidebarOpen(false);
         setSelectedNodeId(null);
       }
@@ -851,10 +895,8 @@ function FlowComponent() {
 
     setNodes((nds) =>
       nds.map((n) => {
-        const isHidden = false; // Always show all nodes
-
         const isCompleted = completedCourses.has(n.id);
-        const isAvailable = availableCourses.some((c) => c.id === n.id);
+        const isAvailable = availableCourseIds.has(n.id);
         const plannedSemester = plannedCourses[n.id];
         const isPlanned = !!plannedSemester && !isCompleted;
 
@@ -881,7 +923,7 @@ function FlowComponent() {
 
         return {
           ...n,
-          hidden: isHidden,
+          hidden: false,
           data: {
             ...n.data,
             isSelected,
@@ -908,13 +950,8 @@ function FlowComponent() {
     );
 
     setEdges((eds) => {
-      // const selectedElectiveIds = new Set(Object.values(selectedElectives)); // Not needed as showAllInMap is always true
-      const processed = eds.map((e) => {
-        // Use hoveredCourseId for hover effect, or selectedNodeId for click effect
-        const activeNodeId = hoveredCourseId || selectedNodeId;
-
+      return eds.map((e) => {
         if (!activeNodeId) {
-          // Default neutral edge color (#94A3B8)
           return {
             ...e,
             animated: false,
@@ -923,11 +960,9 @@ function FlowComponent() {
           };
         }
 
-        // Find if this edge is part of the ancestor path
         const isAncestorEdge =
           ancestors.has(e.source) &&
           (ancestors.has(e.target) || e.target === activeNodeId);
-        // Find if this edge is part of the descendant path
         const isDescendantEdge =
           (descendants.has(e.source) || e.source === activeNodeId) &&
           descendants.has(e.target);
@@ -942,44 +977,28 @@ function FlowComponent() {
             style: { stroke: "#6366F1", strokeWidth: 3, opacity: 1 },
             markerEnd: { type: MarkerType.ArrowClosed, color: "#6366F1" },
           };
-        } else if (isDirectDepEdge) {
+        }
+        if (isDirectDepEdge) {
           return {
             ...e,
             animated: true,
             style: { stroke: "#6366F1", strokeWidth: 3, opacity: 1 },
             markerEnd: { type: MarkerType.ArrowClosed, color: "#6366F1" },
           };
-        } else if (isAncestorEdge || isDescendantEdge) {
+        }
+        if (isAncestorEdge || isDescendantEdge) {
           return {
             ...e,
             animated: false,
             style: { stroke: "#6366F1", strokeWidth: 2, opacity: 0.8 },
             markerEnd: { type: MarkerType.ArrowClosed, color: "#6366F1" },
           };
-        } else {
-          return {
-            ...e,
-            animated: false,
-            style: { stroke: "#94A3B8", strokeWidth: 1.5, opacity: 0.2 },
-            markerEnd: { type: MarkerType.ArrowClosed, color: "#94A3B8" },
-          };
         }
-      });
-
-      return processed.map((e) => {
-        // const sObj = courses.find((c) => c.id === e.source); // Not needed as showAllInMap is always true
-        // const tObj = courses.find((c) => c.id === e.target); // Not needed as showAllInMap is always true
-        // const isSourceElective = sObj?.category === 'متطلب جامعة اختياري' || sObj?.category === 'متطلب تخصص اختياري'; // Not needed as showAllInMap is always true
-        // const isTargetElective = tObj?.category === 'متطلب جامعة اختياري' || tObj?.category === 'متطلب تخصص اختياري'; // Not needed as showAllInMap is always true
-        // const isSourceActive = !isSourceElective || selectedElectiveIds.has(e.source); // Not needed as showAllInMap is always true
-        // const isTargetActive = !isTargetElective || selectedElectiveIds.has(e.target); // Not needed as showAllInMap is always true
-        // return {
-        //   ...e,
-        //   hidden: !showAllInMap && (!isSourceActive || !isTargetActive), // Simplified to always false
-        // };
         return {
           ...e,
-          hidden: false, // Always show all edges
+          animated: false,
+          style: { stroke: "#94A3B8", strokeWidth: 1.5, opacity: 0.2 },
+          markerEnd: { type: MarkerType.ArrowClosed, color: "#94A3B8" },
         };
       });
     });
@@ -991,11 +1010,10 @@ function FlowComponent() {
     setEdges,
     completedCourses,
     plannedCourses,
-    availableCourses,
+    availableCourseIds,
     toggleCourseCompletion,
-    selectedElectives,
+    openDetails,
     layoutedEdges,
-    // Removed showAllInMap from dependencies
   ]);
 
   return (
@@ -1006,6 +1024,38 @@ function FlowComponent() {
       )}
       dir="rtl"
     >
+      {storageIssue && (
+        <div
+          role="alert"
+          className="fixed inset-x-3 top-3 z-[200] mx-auto flex max-w-3xl items-center justify-between gap-3 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm font-bold text-amber-900 shadow-lg"
+        >
+          <span>{storageIssue}</span>
+          <button
+            type="button"
+            onClick={() => setStorageIssue(null)}
+            className="shrink-0 rounded-lg px-2 py-1 text-amber-900 hover:bg-amber-100"
+            aria-label="إغلاق تنبيه التخزين"
+          >
+            إغلاق
+          </button>
+        </div>
+      )}
+      {csvImportError && (
+        <div
+          role="alert"
+          className="fixed inset-x-3 top-20 z-[200] mx-auto flex max-w-3xl items-center justify-between gap-3 rounded-xl border border-red-300 bg-red-50 px-4 py-3 text-sm font-bold text-red-900 shadow-lg"
+        >
+          <span>{csvImportError}</span>
+          <button
+            type="button"
+            onClick={() => setCsvImportError(null)}
+            className="shrink-0 rounded-lg px-2 py-1 text-red-900 hover:bg-red-100"
+            aria-label="إغلاق تنبيه استيراد الملف"
+          >
+            إغلاق
+          </button>
+        </div>
+      )}
       <div className="print:hidden w-full h-full min-h-0 flex flex-col">
         {/* Header Section */}
         <header className="flex flex-col xl:flex-row justify-between items-start xl:items-center mb-2 sm:mb-4 bg-white/90 dark:bg-slate-800/90 backdrop-blur-xl p-3 sm:p-6 rounded-b-none sm:rounded-2xl shadow-xl shadow-gray-200/50 dark:shadow-slate-900/50 border-b sm:border border-gray-200/50 dark:border-slate-700/50 z-10 shrink-0 gap-3 sm:gap-4 transition-all">
@@ -1139,6 +1189,9 @@ function FlowComponent() {
               />
               <input
                 type="text"
+                aria-label="ابحث عن مادة أو رقمها"
+                aria-controls="course-search-results"
+                aria-expanded={searchQuery.length > 0}
                 placeholder="ابحث عن مادة أو رقم..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
@@ -1146,21 +1199,15 @@ function FlowComponent() {
               />
               {searchQuery && (
                 <div
+                  id="course-search-results"
+                  role="region"
+                  aria-label="نتائج البحث عن المواد"
                   className="absolute top-full right-0 left-0 mt-1 bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-lg shadow-xl overflow-hidden z-50 max-h-60 overflow-y-auto"
                   dir="rtl"
                 >
-                  {courses
-                    .filter((c) => {
-                      const q = searchQuery.toLowerCase().trim();
-                      const common = courseCommonNames[c.id] || "";
-                      return (
-                        c.name.toLowerCase().includes(q) ||
-                        c.id.toLowerCase().includes(q) ||
-                        common.toLowerCase().includes(q)
-                      );
-                    })
-                    .map((c) => (
+                  {matchingSearchCourses.map((c) => (
                       <button
+                        type="button"
                         key={c.id}
                         className="w-full text-right px-4 py-3 hover:bg-blue-50 dark:hover:bg-slate-700 text-sm border-b border-gray-50 dark:border-slate-750 last:border-0 transition-colors flex justify-between items-center cursor-pointer"
                         onClick={() => {
@@ -1180,20 +1227,12 @@ function FlowComponent() {
                           {c.id}
                         </span>
                       </button>
-                    ))}
-                  {courses.filter((c) => {
-                    const q = searchQuery.toLowerCase().trim();
-                    const common = courseCommonNames[c.id] || "";
-                    return (
-                      c.name.toLowerCase().includes(q) ||
-                      c.id.toLowerCase().includes(q) ||
-                      common.toLowerCase().includes(q)
-                    );
-                  }).length === 0 && (
-                      <div className="p-4 text-center text-sm text-gray-500">
-                        لا توجد نتائج
-                      </div>
-                    )}
+                  ))}
+                  {matchingSearchCourses.length === 0 && (
+                    <p role="status" className="p-4 text-center text-sm text-gray-500">
+                      لا توجد نتائج
+                    </p>
+                  )}
                 </div>
               )}
             </div>
@@ -1442,7 +1481,7 @@ function FlowComponent() {
                 const node = courses.find((c) => c.id === selectedNodeId);
                 if (!node) return null;
                 const isComp = completedCourses.has(node.id);
-                const isAvail = availableCourses.some((c) => c.id === node.id);
+                const isAvail = availableCourseIds.has(node.id);
                 const req = categoryRequirements[node.category] || 999;
                 const comp = completedCreditsPerCategory[node.category] || 0;
                 const isGroupCompleted = comp >= req;
@@ -1454,7 +1493,6 @@ function FlowComponent() {
                   node,
                   courses,
                   completedCourses,
-                  plannedCourses,
                 );
 
                 let buttonText;
@@ -1826,9 +1864,7 @@ function FlowComponent() {
                             <div className="flex flex-col gap-2">
                               {categoryCourses.map((course) => {
                                 const isComp = completedCourses.has(course.id);
-                                const isAvail = availableCourses.some(
-                                  (c) => c.id === course.id,
-                                );
+                                const isAvail = availableCourseIds.has(course.id);
                                 return (
                                   <div
                                     key={course.id}
@@ -1997,20 +2033,20 @@ function FlowComponent() {
           )}
         </div>
         {/* Reset Confirmation Modal */}
-        <ResetConfirmationModal
+        {showResetConfirm && <React.Suspense fallback={modalLoadingFallback}><ResetConfirmationModal
           showResetConfirm={showResetConfirm}
           onClose={() => setShowResetConfirm(false)}
           onConfirm={confirmReset}
-        />
+        /></React.Suspense>}
 
         {/* Support / Technical Assistance and feedback Modal */}
-        <SupportModal
+        {isSupportModalOpen && <React.Suspense fallback={modalLoadingFallback}><SupportModal
           isSupportModalOpen={isSupportModalOpen}
           onClose={() => setIsSupportModalOpen(false)}
-        />
+        /></React.Suspense>}
 
         {/* Export Modal */}
-        <ExportModal
+        {isExportModalOpen && <React.Suspense fallback={modalLoadingFallback}><ExportModal
           isExportModalOpen={isExportModalOpen}
           onClose={() => setIsExportModalOpen(false)}
           completedCredits={completedCredits}
@@ -2025,10 +2061,10 @@ function FlowComponent() {
           planEndSemester={planEndSemester}
           hidePastSemesters={hidePastSemesters}
           darkMode={isDarkMode}
-        />
+        /></React.Suspense>}
 
         {/* Planning Mode Modal */}
-        <PlanningModeModal
+        {isPlanningModeOpen && <React.Suspense fallback={modalLoadingFallback}><PlanningModeModal
           isPlanningModeOpen={isPlanningModeOpen}
           onClose={() => { setIsPlanningModeOpen(false); setCurrentPlanningSemester(null); setExpandedPlanningCategories({}); }}
           currentPlanningSemester={currentPlanningSemester}
@@ -2044,10 +2080,10 @@ function FlowComponent() {
           expandedPlanningCategories={expandedPlanningCategories}
           setExpandedPlanningCategories={setExpandedPlanningCategories}
           setIsPlannerOpen={setIsPlannerOpen}
-        />
+        /></React.Suspense>}
 
         {/* Course List Modal */}
-        <CourseListModal
+        {isCourseListModalOpen && <React.Suspense fallback={modalLoadingFallback}><CourseListModal
           isCourseListModalOpen={isCourseListModalOpen}
           onClose={() => { setIsCourseListModalOpen(false); setExpandedCourseListCategories({}); }}
           courseListTab={courseListTab}
@@ -2064,10 +2100,10 @@ function FlowComponent() {
           setIsPlannerOpen={setIsPlannerOpen}
           completedCreditsPerCategory={completedCreditsPerCategory}
           plannedCourses={plannedCourses}
-        />
+        /></React.Suspense>}
 
         {/* Planner View Modal */}
-        <PlannerView
+        {isPlannerOpen && <React.Suspense fallback={modalLoadingFallback}><PlannerView
           isPlannerOpen={isPlannerOpen}
           onClose={() => setIsPlannerOpen(false)}
           plannedCourses={plannedCourses}
@@ -2086,13 +2122,12 @@ function FlowComponent() {
           plannedCredits={plannedCredits}
           completedCreditsPerCategory={completedCreditsPerCategory}
           plannedCreditsPerCategory={plannedCreditsPerCategory}
-          getAllPrerequisites={getAllPrerequisites}
           setIsExportModalOpen={setIsExportModalOpen}
           onOpenPlanningMode={() => setIsPlanningModeOpen(true)}
           toggleCourseCompletion={toggleCourseCompletion}
-        />
+        /></React.Suspense>}
         {/* GPAModal */}
-        <GPAModal
+        {isGPAModalOpen && <React.Suspense fallback={modalLoadingFallback}><GPAModal
           isOpen={isGPAModalOpen}
           onClose={() => setIsGPAModalOpen(false)}
           courses={courses}
@@ -2101,37 +2136,37 @@ function FlowComponent() {
           setCourseGrades={setCourseGrades}
           failedCourseIds={new Set(failedCourseIds)}
           setFailedCourseIds={(ids) => setFailedCourseIds(Array.from(ids))}
-        />
-        <WeeklyScheduleModal
+        /></React.Suspense>}
+        {isWeeklyScheduleOpen && <React.Suspense fallback={modalLoadingFallback}><WeeklyScheduleModal
           isOpen={isWeeklyScheduleOpen}
           onClose={() => setIsWeeklyScheduleOpen(false)}
           plannedCourses={plannedCourses}
           courses={courses}
           weeklySchedule={weeklySchedule}
           setWeeklySchedule={setWeeklySchedule}
-        />
-        <ShareScheduleModal
+        /></React.Suspense>}
+        {isShareScheduleOpen && <React.Suspense fallback={modalLoadingFallback}><ShareScheduleModal
           isOpen={isShareScheduleOpen}
           onClose={() => setIsShareScheduleOpen(false)}
           code={shareCode}
           loading={shareLoading}
           error={shareError}
           onCreate={() => void handleCreateSharedLink()}
-        />
-        <LoadScheduleModal
+        /></React.Suspense>}
+        {isLoadScheduleOpen && <React.Suspense fallback={modalLoadingFallback}><LoadScheduleModal
           isOpen={isLoadScheduleOpen}
           onClose={() => setIsLoadScheduleOpen(false)}
           loading={loadLoading}
           error={loadError}
           onLoad={handleLoadSharedSchedule}
-        />
-        <SharedSchedulePreviewModal
+        /></React.Suspense>}
+        {loadedSchedule && <React.Suspense fallback={modalLoadingFallback}><SharedSchedulePreviewModal
           schedule={loadedSchedule?.schedule ?? null}
           code={loadedSchedule?.code ?? null}
           warning={loadedSchedule?.viewCountWarning}
           onClose={() => setLoadedSchedule(null)}
           onApply={applySharedSchedule}
-        />
+        /></React.Suspense>}
       </div>
     </div>
   );

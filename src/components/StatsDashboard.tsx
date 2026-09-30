@@ -1,7 +1,8 @@
 import React from "react";
 import { PieChart, Target, CheckCircle2, AlertCircle, ArrowUpRight } from "lucide-react";
 import { cn } from "../utils";
-import { Course, categoryRequirements } from "../data";
+import type { Course } from "../data";
+import { categoryRequirements } from "../data";
 
 interface StatsDashboardProps {
   completedCredits: number;
@@ -76,14 +77,21 @@ const StatsDashboard: React.FC<StatsDashboardProps> = ({
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 p-1">
-      {categories.map((cat) => {
+      {categories.map((cat, categoryIndex) => {
         const required = categoryRequirements[cat];
-        const completed = completedCreditsPerCategory[cat] || 0;
-        const planned = plannedCreditsPerCategory[cat] || 0;
+        const completed = Math.max(0, completedCreditsPerCategory[cat] || 0);
+        const planned = Math.max(0, plannedCreditsPerCategory[cat] || 0);
         const total = completed + planned;
+        const remainingCourses = courses.filter(
+          (course) => course.category === cat && !completedCourses.has(course.id),
+        );
         
-        const completedPercent = Math.min(100, (completed / required) * 100);
-        const totalPercent = Math.min(100, (total / required) * 100);
+        const completedPercent = required > 0
+          ? Math.min(100, (completed / required) * 100)
+          : 0;
+        const totalPercent = required > 0
+          ? Math.min(100, (total / required) * 100)
+          : 0;
         
         const isCompleted = completed >= required;
         const isFullyPlanned = total >= required;
@@ -123,17 +131,26 @@ const StatsDashboard: React.FC<StatsDashboardProps> = ({
               )}
             </div>
 
-            <div className="relative h-2 bg-gray-100 dark:bg-slate-800 rounded-full overflow-hidden mb-3">
+            <div
+              role="progressbar"
+              aria-label={`تقدم ${cat} منجزاً ومخططاً`}
+              aria-valuemin={0}
+              aria-valuemax={required}
+              aria-valuenow={Math.min(required, total)}
+              className="relative h-2 bg-gray-100 dark:bg-slate-800 rounded-full overflow-hidden mb-3"
+            >
               <div 
-                className="absolute top-0 left-0 h-full bg-blue-400/30 transition-all duration-1000 ease-out"
-                style={{ width: `${totalPercent}%`, right: 0 }}
+                aria-hidden="true"
+                className="absolute top-0 h-full bg-blue-400/30 transition-all duration-1000 ease-out"
+                style={{ width: `${totalPercent}%`, insetInlineStart: 0 }}
               />
               <div 
+                aria-hidden="true"
                 className={cn(
-                  "absolute top-0 left-0 h-full transition-all duration-1000 ease-out rounded-full",
+                  "absolute top-0 h-full transition-all duration-1000 ease-out rounded-full",
                   isCompleted ? "bg-emerald-500" : "bg-blue-500"
                 )}
-                style={{ width: `${completedPercent}%`, right: 0 }}
+                style={{ width: `${completedPercent}%`, insetInlineStart: 0 }}
               />
             </div>
 
@@ -164,7 +181,10 @@ const StatsDashboard: React.FC<StatsDashboardProps> = ({
 
             {/* List missing courses button */}
             {!isCompleted && (
-              <button 
+              <button
+                type="button"
+                aria-expanded={showCategoryCourses === cat}
+                aria-controls={`category-courses-${categoryIndex}`}
                 onClick={() => setShowCategoryCourses(showCategoryCourses === cat ? null : cat)}
                 className="mt-3 w-full py-1.5 border border-dashed border-gray-200 dark:border-slate-700 rounded-xl text-[9px] font-black text-gray-500 hover:bg-gray-50 dark:hover:bg-slate-800 transition-colors flex items-center justify-center gap-2"
               >
@@ -174,20 +194,29 @@ const StatsDashboard: React.FC<StatsDashboardProps> = ({
             )}
 
             {showCategoryCourses === cat && (
-              <div className="mt-2 space-y-1 max-h-40 overflow-y-auto pr-1 scrollbar-thin">
-                {courses
-                  .filter(c => c.category === cat && !completedCourses.has(c.id))
-                  .map(c => (
-                    <div key={c.id} className="flex justify-between items-center p-1.5 bg-white dark:bg-slate-900 rounded-lg text-[9px] border border-gray-50 dark:border-slate-800">
+              <div
+                id={`category-courses-${categoryIndex}`}
+                role="region"
+                aria-label={`المواد المتبقية في ${cat}`}
+                className="mt-2 space-y-1 max-h-40 overflow-y-auto pr-1 scrollbar-thin"
+              >
+                {remainingCourses.length === 0 ? (
+                  <p className="p-2 text-center text-xs font-bold text-gray-500 dark:text-slate-400">
+                    لا توجد مواد متبقية غير مجتازة في هذه الفئة.
+                  </p>
+                ) : (
+                  remainingCourses.map((course) => (
+                    <div key={course.id} className="flex justify-between items-center p-1.5 bg-white dark:bg-slate-900 rounded-lg text-[9px] border border-gray-50 dark:border-slate-800">
                       <div className="flex flex-col">
-                        <span className="font-bold text-gray-700 dark:text-slate-300">{c.name}</span>
-                        {plannedCourses[c.id] && (
-                          <span className="text-[7px] text-blue-500 font-black">مجدولة في {plannedCourses[c.id]}</span>
+                        <span className="font-bold text-gray-700 dark:text-slate-300">{course.name}</span>
+                        {plannedCourses[course.id] && (
+                          <span className="text-[7px] text-blue-500 font-black">مجدولة في {plannedCourses[course.id]}</span>
                         )}
                       </div>
-                      <span className="shrink-0 font-mono text-gray-400">{c.credits} س</span>
+                      <span className="shrink-0 font-mono text-gray-400">{course.credits} س</span>
                     </div>
-                  ))}
+                  ))
+                )}
               </div>
             )}
           </div>

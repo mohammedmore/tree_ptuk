@@ -1,4 +1,4 @@
-import { Course } from './data';
+import type { Course } from "./data";
 
 export interface CourseDetail {
   description: string;
@@ -10,7 +10,11 @@ export interface CourseDetail {
   difficulty: number;
 }
 
-export function getCourseDetails(course: Course, allCourses: Course[], completedCourses: Set<string>, plannedCourses: Record<string, string>): CourseDetail {
+export function getCourseDetails(
+  course: Course,
+  allCourses: Course[],
+  completedCourses: ReadonlySet<string>,
+): CourseDetail {
   let trackName = "تخصص هندسة أنظمة الحاسوب";
   let trackColor = "bg-gray-100 text-gray-700 border-gray-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700";
 
@@ -143,7 +147,7 @@ export function getCourseDetails(course: Course, allCourses: Course[], completed
 
   const nameUpper = name.toLowerCase();
   // Dynamic description fallback generator to ensure absolute uniqueness for every course title!
-  let description = descriptions[id];
+  let description = Object.hasOwn(descriptions, id) ? descriptions[id] : undefined;
   if (!description) {
     if (category.includes('جامعة') && category.includes('اختياري')) {
       if (nameUpper.includes('لغة') || nameUpper.includes('اللغة')) {
@@ -272,7 +276,7 @@ export function getCourseDetails(course: Course, allCourses: Course[], completed
     '12310599': 5.0, // إدارة مشاريع هندسية
   };
 
-  if (difficultyMap[courseId] !== undefined) {
+  if (Object.hasOwn(difficultyMap, courseId)) {
     difficulty = difficultyMap[courseId];
   } else {
     // Generically calculate based on flags or tags

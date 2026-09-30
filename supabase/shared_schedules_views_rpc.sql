@@ -1,3 +1,5 @@
+begin;
+
 drop function if exists public.increment_shared_schedule_views(varchar);
 drop function if exists public.increment_shared_schedule_views(text);
 
@@ -14,6 +16,7 @@ begin
   set views_count = views_count + 1
   where id::text = upper(regexp_replace(trim(p_code), '[[:space:]-]', '', 'g'))
     and expires_at > now()
+    and views_count < 2147483647
   returning views_count into updated_count;
 
   return updated_count;
@@ -34,3 +37,5 @@ from pg_proc p
 join pg_namespace n on n.oid = p.pronamespace
 where n.nspname = 'public'
   and p.proname = 'increment_shared_schedule_views';
+
+commit;

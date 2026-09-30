@@ -1,5 +1,7 @@
 import type { SupabaseClient as SupabaseSdkClient } from "@supabase/supabase-js";
 
+type SupabaseJson = string | number | boolean | null | { [key: string]: SupabaseJson | undefined } | SupabaseJson[];
+
 export interface SharedCourseSnapshot {
   courseId: string;
   courseCode: string;
@@ -80,6 +82,10 @@ interface Database {
     Tables: { shared_schedules: SharedSchedulesTable };
     Views: Record<string, never>;
     Functions: {
+      fetch_shared_schedule: {
+        Args: { p_code: string };
+        Returns: SupabaseJson | null;
+      };
       increment_shared_schedule_views: {
         Args: { p_code: string };
         Returns: number;
@@ -90,14 +96,15 @@ interface Database {
   };
 }
 
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL
-  ?? import.meta.env.NEXT_PUBLIC_SUPABASE_URL
+const SUPABASE_URL = import.meta.env?.VITE_SUPABASE_URL
+  ?? import.meta.env?.NEXT_PUBLIC_SUPABASE_URL
   ?? "https://YOUR_PROJECT.supabase.co";
-const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY
-  ?? import.meta.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-  ?? import.meta.env.SUPABASE_PUBLISHABLE_KEY
+const SUPABASE_ANON_KEY = import.meta.env?.VITE_SUPABASE_ANON_KEY
+  ?? import.meta.env?.NEXT_PUBLIC_SUPABASE_ANON_KEY
+  ?? import.meta.env?.SUPABASE_PUBLISHABLE_KEY
   ?? "YOUR_SUPABASE_ANON_KEY";
 const CODE_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
+const MAX_SHARED_SCHEDULE_BYTES = 262144;
 
 let clientPromise: Promise<SupabaseSdkClient<Database>> | null = null;
 
@@ -119,7 +126,12 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-function normalizeSharedScheduleSnapshot(value: unknown): SharedScheduleSnapshot | null {
+function isStringRecord(value: unknown): value is Record<string, string> {
+  return isRecord(value)
+    && Object.values(value).every((entry) => typeof entry === "string");
+}
+
+export function normalizeSharedScheduleSnapshot(value: unknown): SharedScheduleSnapshot | null {
   if (
     !isRecord(value)
     || (value.version !== 1 && value.version !== 2)
@@ -127,6 +139,8 @@ function normalizeSharedScheduleSnapshot(value: unknown): SharedScheduleSnapshot
     || typeof value.exportedAt !== "string"
     || !Array.isArray(value.completedCourses)
     || !Array.isArray(value.courses)
+    || !isStringRecord(value.plannedCourses)
+    || !isRecord(value.weeklySchedule)
   ) return null;
 
   const completedCourses = value.completedCourses.flatMap((course) => {
@@ -204,33 +218,42 @@ function normalizeSharedScheduleSnapshot(value: unknown): SharedScheduleSnapshot
   });
   if (courses.length !== value.courses.length) return null;
 
-  const plannedCourses = isRecord(value.plannedCourses)
-    ? Object.fromEntries(Object.entries(value.plannedCourses).filter(
-      (entry): entry is [string, string] => typeof entry[1] === "string",
-    ))
-    : {};
   const weeklySchedule: SharedScheduleSnapshot["weeklySchedule"] = {};
-  if (isRecord(value.weeklySchedule)) {
-    Object.entries(value.weeklySchedule).forEach(([semester, entries]) => {
-      if (!isRecord(entries)) return;
-      weeklySchedule[semester] = Object.fromEntries(
-        Object.entries(entries).flatMap(([courseId, entry]) => {
-          if (!isRecord(entry)) return [];
-          const days = Array.isArray(entry.days)
-            ? entry.days.filter((day): day is string => typeof day === "string")
-            : typeof entry.days === "string" ? [entry.days] : [];
-          return [[courseId, {
-            courseId: typeof entry.courseId === "string" ? entry.courseId : courseId,
-            startTime: typeof entry.startTime === "string" ? entry.startTime : "",
-            endTime: typeof entry.endTime === "string" ? entry.endTime : "",
-            section: typeof entry.section === "string" ? entry.section : "",
-            instructor: typeof entry.instructor === "string" ? entry.instructor : "",
-            room: typeof entry.room === "string" ? entry.room : "",
-            days,
-          }]];
-        }),
-      );
-    });
+  for (const [semester, entries] of Object.entries(value.weeklySchedule)) {
+    if (!isRecord(entries)) return null;
+    const normalizedEntries: SharedScheduleSnapshot["weeklySchedule"][string] = {};
+    for (const [courseId, entry] of Object.entries(entries)) {
+      if (
+        !isRecord(entry)
+        || (entry.courseId !== undefined && typeof entry.courseId !== "string")
+        || (entry.startTime !== undefined && typeof entry.startTime !== "string")
+        || (entry.endTime !== undefined && typeof entry.endTime !== "string")
+        || (entry.section !== undefined && typeof entry.section !== "string")
+        || (entry.instructor !== undefined && typeof entry.instructor !== "string")
+        || (entry.room !== undefined && typeof entry.room !== "string")
+        || (entry.days !== undefined
+          && typeof entry.days !== "string"
+          && (!Array.isArray(entry.days)
+            || !entry.days.every((day): day is string => typeof day === "string")))
+        || (entry.day !== undefined && typeof entry.day !== "string")
+      ) return null;
+
+      const days = Array.isArray(entry.days)
+        ? entry.days
+        : typeof entry.days === "string"
+          ? [entry.days]
+          : typeof entry.day === "string" ? [entry.day] : [];
+      normalizedEntries[courseId] = {
+        courseId: typeof entry.courseId === "string" ? entry.courseId : courseId,
+        startTime: typeof entry.startTime === "string" ? entry.startTime : "",
+        endTime: typeof entry.endTime === "string" ? entry.endTime : "",
+        section: typeof entry.section === "string" ? entry.section : "",
+        instructor: typeof entry.instructor === "string" ? entry.instructor : "",
+        room: typeof entry.room === "string" ? entry.room : "",
+        days,
+      };
+    }
+    weeklySchedule[semester] = normalizedEntries;
   }
 
   const preferences = isRecord(value.preferences)
@@ -265,7 +288,7 @@ function normalizeSharedScheduleSnapshot(value: unknown): SharedScheduleSnapshot
     version: value.version,
     name: value.name,
     exportedAt: value.exportedAt,
-    plannedCourses,
+    plannedCourses: value.plannedCourses,
     completedCourses,
     courseGrades,
     failedCourseIds,
@@ -319,6 +342,11 @@ export function generate8Charcode(): string {
 export async function shareScheduleToCloud(
   scheduleObj: SharedScheduleSnapshot,
 ): Promise<string> {
+  const payloadSize = new TextEncoder().encode(JSON.stringify(scheduleObj)).byteLength;
+  if (payloadSize > MAX_SHARED_SCHEDULE_BYTES) {
+    throw new Error("حجم الخطة أكبر من الحد المسموح لمشاركتها (256 كيلوبايت).");
+  }
+
   const supabase = await getSupabaseClient();
   for (let attempt = 0; attempt < 3; attempt += 1) {
     const code = generate8Charcode();
@@ -342,16 +370,13 @@ export async function fetchScheduleByCode(
     throw new Error("أدخل رمزاً صحيحاً من 8 أحرف أو أرقام.");
   }
   const supabase = await getSupabaseClient();
-  const { data, error } = await supabase
-    .from("shared_schedules")
-    .select("schedule_data")
-    .eq("id", code)
-    .gt("expires_at", new Date().toISOString())
-    .maybeSingle();
+  const { data, error } = await supabase.rpc("fetch_shared_schedule", {
+    p_code: code,
+  });
 
   if (error) throw new Error(`تعذر جلب الجدول: ${error.message}`);
   if (!data) throw new Error("لم يُعثر على جدول بهذا الرمز، أو انتهت صلاحيته.");
-  const schedule = normalizeSharedScheduleSnapshot(data.schedule_data);
+  const schedule = normalizeSharedScheduleSnapshot(data);
   if (!schedule) {
     throw new Error("تعذر قراءة الخطة: بياناتها الأساسية ناقصة أو غير صالحة. اطلب من المرسل إنشاء رابط مشاركة جديد.");
   }
