@@ -334,6 +334,7 @@ function FlowComponent() {
     schedule: SharedScheduleSnapshot;
     viewCountWarning?: string;
   } | null>(null);
+  const sharedLinkAutoLoadRef = useRef(false);
   const [currentPlanningSemester, setCurrentPlanningSemester] = useState<string | null>(null);
   const [isCourseListModalOpen, setIsCourseListModalOpen] = useState(false);
   const [isGPAModalOpen, setIsGPAModalOpen] = useState(false);
@@ -549,44 +550,6 @@ function FlowComponent() {
     const code = normalizeScheduleCode(value);
     try {
       const result = await fetchScheduleByCode(code);
-      const knownCourseIds = new Set(courses.map((course) => course.id));
-      const importedPlans = Object.fromEntries(
-        Object.entries(result.schedule.plannedCourses)
-          .filter(([courseId]) => knownCourseIds.has(courseId)),
-      );
-      const importedWeeklySchedule = Object.fromEntries(
-        Object.entries(result.schedule.weeklySchedule).map(([semester, entries]) => [
-          semester,
-          Object.fromEntries(
-            Object.entries(entries)
-              .filter(([courseId]) => knownCourseIds.has(courseId))
-              .map(([courseId, entry]) => [
-                courseId,
-                { ...entry } satisfies ScheduleEntry,
-              ]),
-          ),
-        ]),
-      ) as Record<string, Record<string, ScheduleEntry>>;
-
-      window.localStorage.setItem("last_shared_schedule", JSON.stringify(result));
-      setPlannedCourses(importedPlans);
-      setWeeklySchedule(importedWeeklySchedule);
-      setCompletedCourses(new Set(
-        result.schedule.completedCourses
-          .map((sharedCourse) => courses.find((course) => course.id === sharedCourse.courseCode)?.id)
-          .filter((courseId): courseId is string => !!courseId),
-      ));
-      setCourseGrades(result.schedule.courseGrades ?? {});
-      setFailedCourseIds((result.schedule.failedCourseIds ?? []).filter((id) => knownCourseIds.has(id)));
-      if (result.schedule.selectedElectives) {
-        setSelectedElectives(result.schedule.selectedElectives);
-      }
-      if (result.schedule.preferences) {
-        setPlanStartSemester(result.schedule.preferences.planStartSemester);
-        setPlanEndSemester(result.schedule.preferences.planEndSemester);
-        setHidePastSemesters(result.schedule.preferences.hidePastSemesters);
-        setIsDarkMode(result.schedule.preferences.darkMode);
-      }
       setLoadedSchedule(result);
       setIsLoadScheduleOpen(false);
     } catch (error) {
@@ -595,7 +558,52 @@ function FlowComponent() {
     } finally {
       setLoadLoading(false);
     }
+  }, []);
+
+  const applySharedSchedule = useCallback(() => {
+    if (!loadedSchedule) return;
+
+    const { schedule } = loadedSchedule;
+    const knownCourseIds = new Set(courses.map((course) => course.id));
+    const importedPlans = Object.fromEntries(
+      Object.entries(schedule.plannedCourses)
+        .filter(([courseId]) => knownCourseIds.has(courseId)),
+    );
+    const importedWeeklySchedule = Object.fromEntries(
+      Object.entries(schedule.weeklySchedule).map(([semester, entries]) => [
+        semester,
+        Object.fromEntries(
+          Object.entries(entries)
+            .filter(([courseId]) => knownCourseIds.has(courseId))
+            .map(([courseId, entry]) => [
+              courseId,
+              { ...entry } satisfies ScheduleEntry,
+            ]),
+        ),
+      ]),
+    ) as Record<string, Record<string, ScheduleEntry>>;
+
+    setPlannedCourses(importedPlans);
+    setWeeklySchedule(importedWeeklySchedule);
+    setCompletedCourses(new Set(
+      schedule.completedCourses
+        .map((sharedCourse) => courses.find((course) => course.id === sharedCourse.courseCode)?.id)
+        .filter((courseId): courseId is string => !!courseId),
+    ));
+    setCourseGrades(schedule.courseGrades ?? {});
+    setFailedCourseIds((schedule.failedCourseIds ?? []).filter((id) => knownCourseIds.has(id)));
+    if (schedule.selectedElectives) {
+      setSelectedElectives(schedule.selectedElectives);
+    }
+    if (schedule.preferences) {
+      setPlanStartSemester(schedule.preferences.planStartSemester);
+      setPlanEndSemester(schedule.preferences.planEndSemester);
+      setHidePastSemesters(schedule.preferences.hidePastSemesters);
+      setIsDarkMode(schedule.preferences.darkMode);
+    }
+    setLoadedSchedule(null);
   }, [
+    loadedSchedule,
     setCompletedCourses,
     setCourseGrades,
     setFailedCourseIds,
@@ -607,6 +615,24 @@ function FlowComponent() {
     setSelectedElectives,
     setWeeklySchedule,
   ]);
+
+  useEffect(() => {
+    if (sharedLinkAutoLoadRef.current) return;
+    sharedLinkAutoLoadRef.current = true;
+
+    const params = new URLSearchParams(window.location.search);
+    const code = params.get("code") ?? params.get("s");
+    if (!code) return;
+
+    setLoadLoading(true);
+    void fetchScheduleByCode(code)
+      .then(setLoadedSchedule)
+      .catch((error: unknown) => {
+        setLoadError(error instanceof Error ? error.message : "تعذر فتح رابط الجدول.");
+        setIsLoadScheduleOpen(true);
+      })
+      .finally(() => setLoadLoading(false));
+  }, []);
 
   const handleImportCsv = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -982,11 +1008,11 @@ function FlowComponent() {
     >
       <div className="print:hidden w-full h-full min-h-0 flex flex-col">
         {/* Header Section */}
-        <header className="flex flex-col xl:flex-row justify-between items-start xl:items-center mb-2 sm:mb-4 bg-white dark:bg-slate-800/95 p-3 sm:p-6 rounded-b-none sm:rounded-xl shadow-sm border-b sm:border border-gray-200 dark:border-slate-700/80 z-10 shrink-0 gap-3 sm:gap-4 transition-all">
+        <header className="flex flex-col xl:flex-row justify-between items-start xl:items-center mb-2 sm:mb-4 bg-white/90 dark:bg-slate-800/90 backdrop-blur-xl p-3 sm:p-6 rounded-b-none sm:rounded-2xl shadow-xl shadow-gray-200/50 dark:shadow-slate-900/50 border-b sm:border border-gray-200/50 dark:border-slate-700/50 z-10 shrink-0 gap-3 sm:gap-4 transition-all">
           <div className="flex justify-between items-start w-full xl:w-auto gap-4">
             <div>
               <div className="mb-1">
-                <h1 className="flex items-center gap-2 text-sm sm:text-2xl font-bold text-gray-900 dark:text-slate-100">
+                <h1 className="flex items-center gap-2 text-sm sm:text-2xl font-extrabold text-slate-800 dark:text-slate-100">
                   <BookOpen className="text-blue-600 dark:text-blue-400 hidden sm:block" size={24} />
                   خريطة المتطلبات الأكاديمية
                 </h1>
@@ -994,12 +1020,12 @@ function FlowComponent() {
                 <button
                   onClick={() => {
                     setIsPlanningModeOpen(true);
-                    setSelectedNodeId(null); // تصفير المادة المحددة لمنع ظهور مسارات قديمة
-                    setIsDetailsOpen(false); // إغلاق نافذة التفاصيل
-                    setHoveredCourseId(null); // تصفير حالة التمرير
-                    setPlanningCourseId(null); // تصفير مادة التخطيط عند الدخول للوضع العام
+                    setSelectedNodeId(null);
+                    setIsDetailsOpen(false);
+                    setHoveredCourseId(null);
+                    setPlanningCourseId(null);
                   }}
-                  className="flex min-h-10 items-center justify-center gap-1 px-1.5 sm:px-3 sm:py-1.5 text-[11px] sm:text-sm bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg transition-colors cursor-pointer shadow-sm font-black"
+                  className="flex min-h-10 items-center justify-center gap-1.5 px-1.5 sm:px-3 sm:py-1.5 text-[11px] sm:text-sm bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-700 hover:to-indigo-800 text-white rounded-xl transition-all duration-200 cursor-pointer shadow-lg shadow-indigo-200/50 dark:shadow-indigo-900/30 hover:shadow-xl hover:shadow-indigo-300/60 dark:hover:shadow-indigo-900/50 hover:-translate-y-0.5 font-extrabold"
                 >
                   <MapIcon size={16} />
                   وضع التخطيط
@@ -1011,7 +1037,7 @@ function FlowComponent() {
                     setIsDetailsOpen(false);
                     setHoveredCourseId(null);
                   }}
-                  className="flex min-h-10 items-center justify-center gap-1 px-1.5 sm:px-3 sm:py-1.5 text-[11px] sm:text-sm bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors cursor-pointer shadow-sm font-black"
+                  className="flex min-h-10 items-center justify-center gap-1.5 px-1.5 sm:px-3 sm:py-1.5 text-[11px] sm:text-sm bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white rounded-xl transition-all duration-200 cursor-pointer shadow-lg shadow-blue-200/50 dark:shadow-blue-900/30 hover:shadow-xl hover:shadow-blue-300/60 dark:hover:shadow-blue-900/50 hover:-translate-y-0.5 font-extrabold"
                 >
                   <LayoutList size={16} />
                   قائمة المواد
@@ -1023,7 +1049,7 @@ function FlowComponent() {
                     setIsDetailsOpen(false);
                     setHoveredCourseId(null);
                   }}
-                  className="flex min-h-10 items-center justify-center gap-1 px-1.5 sm:px-3 sm:py-1.5 text-[11px] sm:text-sm bg-indigo-500 hover:bg-indigo-600 text-white rounded-lg transition-colors cursor-pointer shadow-sm font-black"
+                  className="flex min-h-10 items-center justify-center gap-1.5 px-1.5 sm:px-3 sm:py-1.5 text-[11px] sm:text-sm bg-gradient-to-r from-violet-600 to-violet-700 hover:from-violet-700 hover:to-violet-800 text-white rounded-xl transition-all duration-200 cursor-pointer shadow-lg shadow-violet-200/50 dark:shadow-violet-900/30 hover:shadow-xl hover:shadow-violet-300/60 dark:hover:shadow-violet-900/50 hover:-translate-y-0.5 font-extrabold"
                 >
                   <Calculator size={16} />
                   <span className="sm:hidden">المعدل</span>
@@ -1031,14 +1057,14 @@ function FlowComponent() {
                 </button>
                 <button
                   onClick={(e) => {
-                    e.stopPropagation(); // Prevent event bubbling
+                    e.stopPropagation();
                     setIsPlannerOpen(true);
                     setSelectedNodeId(null);
                     setIsDetailsOpen(false);
                     setHoveredCourseId(null);
                     setPlanningCourseId(null);
                   }}
-                  className="flex min-h-10 items-center justify-center gap-1 px-1.5 sm:px-3 sm:py-1.5 text-[11px] sm:text-sm bg-orange-100 hover:bg-orange-200 text-orange-700 dark:bg-orange-950/70 dark:text-orange-300 dark:hover:bg-orange-900/50 rounded-lg transition-colors cursor-pointer shadow-sm font-bold"
+                  className="flex min-h-10 items-center justify-center gap-1.5 px-1.5 sm:px-3 sm:py-1.5 text-[11px] sm:text-sm bg-gradient-to-r from-orange-400 to-orange-500 hover:from-orange-500 hover:to-orange-600 text-white dark:from-orange-500 dark:to-orange-600 dark:hover:from-orange-600 dark:hover:to-orange-700 rounded-xl transition-all duration-200 cursor-pointer shadow-lg shadow-orange-200/50 dark:shadow-orange-900/30 hover:shadow-xl hover:shadow-orange-300/60 dark:hover:shadow-orange-900/50 hover:-translate-y-0.5 font-extrabold"
                 >
                   <CalendarDays size={14} className="sm:hidden" />
                   <CalendarDays size={16} className="hidden sm:block" />
@@ -1047,7 +1073,7 @@ function FlowComponent() {
                 </button>
                 <button
                   onClick={() => setIsWeeklyScheduleOpen(true)}
-                  className="flex min-h-10 items-center justify-center gap-1 px-1.5 sm:px-3 sm:py-1.5 text-[11px] sm:text-sm bg-cyan-100 hover:bg-cyan-200 text-cyan-700 dark:bg-cyan-950/70 dark:text-cyan-300 dark:hover:bg-cyan-900/50 rounded-lg transition-colors cursor-pointer shadow-sm font-bold"
+                  className="flex min-h-10 items-center justify-center gap-1.5 px-1.5 sm:px-3 sm:py-1.5 text-[11px] sm:text-sm bg-gradient-to-r from-cyan-500 to-cyan-600 hover:from-cyan-600 hover:to-cyan-700 text-white dark:from-cyan-600 dark:to-cyan-700 dark:hover:from-cyan-700 dark:hover:to-cyan-800 rounded-xl transition-all duration-200 cursor-pointer shadow-lg shadow-cyan-200/50 dark:shadow-cyan-900/30 hover:shadow-xl hover:shadow-cyan-300/60 dark:hover:shadow-cyan-900/50 hover:-translate-y-0.5 font-extrabold"
                 >
                   <CalendarDays size={14} className="sm:hidden" />
                   <CalendarDays size={16} className="hidden sm:block" />
@@ -1055,29 +1081,34 @@ function FlowComponent() {
                   <span className="hidden sm:inline">الجدول الأسبوعي</span>
                 </button>
                 <button
-                  disabled
-                  className="flex min-h-10 items-center justify-center gap-1 px-1.5 sm:px-3 sm:py-1.5 text-[11px] sm:text-sm bg-violet-100 text-violet-700 dark:bg-violet-950/70 dark:text-violet-300 rounded-lg opacity-60 cursor-not-allowed shadow-sm font-bold"
-                  title="مشاركة الجدول وفتحه على الجوال: قيد التطوير"
+                  onClick={() => {
+                    setShareCode(null);
+                    setShareError(null);
+                    setIsShareScheduleOpen(true);
+                  }}
+                  className="flex min-h-10 items-center justify-center gap-1.5 px-1.5 sm:px-3 sm:py-1.5 text-[11px] sm:text-sm bg-violet-100 hover:bg-violet-200 text-violet-800 dark:bg-violet-900/50 dark:text-violet-300 dark:hover:bg-violet-800/60 rounded-xl transition-colors cursor-pointer shadow-sm font-bold"
+                  title="إنشاء رابط أو رمز QR لفتح الخطة على جهاز آخر"
                 >
                   <Link2 size={15} />
                   <span className="sm:hidden">مشاركة</span>
                   <span className="hidden sm:inline">مشاركة / فتح على الجوال</span>
-                  <span className="text-[9px]">قيد التطوير</span>
                 </button>
                 <button
-                  disabled
-                  className="flex min-h-10 items-center justify-center gap-1 px-1.5 sm:px-3 sm:py-1.5 text-[11px] sm:text-sm bg-gray-100 text-gray-700 dark:bg-slate-800 dark:text-slate-200 rounded-lg opacity-60 cursor-not-allowed shadow-sm font-bold"
-                  title="استرجاع جدول باستخدام الرمز: قيد التطوير"
+                  onClick={() => {
+                    setLoadError(null);
+                    setIsLoadScheduleOpen(true);
+                  }}
+                  className="flex min-h-10 items-center justify-center gap-1.5 px-1.5 sm:px-3 sm:py-1.5 text-[11px] sm:text-sm bg-gray-100 hover:bg-gray-200 text-gray-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700 rounded-xl transition-colors cursor-pointer shadow-sm font-bold"
+                  title="فتح خطة مشتركة باستخدام رمز أو رابط"
                 >
                   <Search size={15} />
                   <span className="sm:hidden">استرجاع</span>
                   <span className="hidden sm:inline">استرجاع برمز</span>
-                  <span className="text-[9px]">قيد التطوير</span>
                 </button>
 
                 <button
                   onClick={() => setIsSupportModalOpen(true)}
-                  className="flex min-h-10 items-center justify-center gap-1 px-1.5 sm:px-3 sm:py-1.5 text-[11px] sm:text-sm bg-emerald-100 hover:bg-emerald-200 text-emerald-700 dark:bg-emerald-950/70 dark:text-emerald-300 dark:hover:bg-emerald-900/50 rounded-lg transition-colors cursor-pointer shadow-sm font-semibold"
+                  className="flex min-h-10 items-center justify-center gap-1.5 px-1.5 sm:px-3 sm:py-1.5 text-[11px] sm:text-sm bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700 text-white dark:from-emerald-600 dark:to-emerald-700 dark:hover:from-emerald-700 dark:hover:to-emerald-800 rounded-xl transition-all duration-200 cursor-pointer shadow-lg shadow-emerald-200/50 dark:shadow-emerald-900/30 hover:shadow-xl hover:shadow-emerald-300/60 dark:hover:shadow-emerald-900/50 hover:-translate-y-0.5 font-extrabold"
                   title="الدعم والاقتراحات"
                 >
                   <MessageCircle size={14} className="text-emerald-600 dark:text-emerald-400 sm:hidden" />
@@ -1087,12 +1118,12 @@ function FlowComponent() {
                 </button>
                 </div>
               </div>
-              <p className="text-[10px] sm:text-sm text-gray-500 dark:text-slate-400 uppercase font-semibold flex items-center gap-2">
+              <p className="text-[10px] sm:text-sm text-gray-600 dark:text-slate-400 uppercase font-bold flex items-center gap-2">
                 تخصص هندسة أنظمة الحاسوب{" "}
-                <span className="w-1 h-1 rounded-full bg-gray-300 dark:bg-slate-700"></span> جامعة
+                <span className="w-1.5 h-1.5 rounded-full bg-gradient-to-r from-blue-500 to-indigo-500"></span> جامعة
                 فلسطين التقنية - خضوري (PTUK)
               </p>
-              <div className="mt-2 hidden sm:flex items-center gap-2 text-[10px] font-bold text-amber-600 dark:text-amber-400 bg-amber-50/50 dark:bg-amber-900/10 px-3 py-1 rounded-lg border border-amber-100 dark:border-amber-900/30 w-fit animate-in fade-in slide-in-from-right-2 duration-500">
+              <div className="mt-2 hidden sm:flex items-center gap-2 text-[10px] font-extrabold text-amber-700 dark:text-amber-300 bg-gradient-to-r from-amber-100 to-orange-100 dark:from-amber-900/30 dark:to-orange-900/30 px-4 py-1.5 rounded-xl border border-amber-200 dark:border-amber-800/50 shadow-md shadow-amber-200/30 dark:shadow-amber-900/20 w-fit animate-in fade-in slide-in-from-right-2 duration-500">
                 <Pin size={12} className="rotate-25" />
                 <span>ملاحظة: عند تثبيت المادة، يظهر كامل المسار المعتمد عليها والمتطلبات السابقة.</span>
               </div>
@@ -1111,7 +1142,7 @@ function FlowComponent() {
                 placeholder="ابحث عن مادة أو رقم..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full min-h-11 bg-gray-50 dark:bg-slate-900 border border-gray-200 dark:border-slate-700 dark:text-slate-200 rounded-lg pl-3 pr-10 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 focus:bg-white dark:focus:bg-slate-800 transition-all shadow-inner"
+                className="w-full min-h-11 bg-gradient-to-br from-gray-50 to-gray-100 dark:from-slate-900 dark:to-slate-800 border border-gray-200 dark:border-slate-700 dark:text-slate-200 rounded-xl pl-3 pr-10 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500 focus:bg-white dark:focus:bg-slate-800 transition-all shadow-lg shadow-gray-200/30 dark:shadow-slate-900/30"
               />
               {searchQuery && (
                 <div
@@ -1257,13 +1288,8 @@ function FlowComponent() {
           dir="ltr"
         >
           <>
-            <div
-              className={cn(
-                "absolute inset-0",
-                viewMode === "map" ? "visible" : "invisible pointer-events-none",
-              )}
-              aria-hidden={viewMode !== "map"}
-            >
+            {viewMode === "map" && (
+            <div className="absolute inset-0">
               <ReactFlow
                 nodes={nodes}
                 edges={edges}
@@ -1372,6 +1398,7 @@ function FlowComponent() {
                 );
               })()}
             </div>
+            )}
             {viewMode === "list" && (
             <ListView
               activeCourses={activeCourses}
@@ -1991,6 +2018,13 @@ function FlowComponent() {
           completedCourses={completedCourses}
           courses={courses}
           courseGrades={courseGrades}
+          weeklySchedule={weeklySchedule}
+          selectedElectives={selectedElectives}
+          failedCourseIds={failedCourseIds}
+          planStartSemester={planStartSemester}
+          planEndSemester={planEndSemester}
+          hidePastSemesters={hidePastSemesters}
+          darkMode={isDarkMode}
         />
 
         {/* Planning Mode Modal */}
@@ -2096,6 +2130,7 @@ function FlowComponent() {
           code={loadedSchedule?.code ?? null}
           warning={loadedSchedule?.viewCountWarning}
           onClose={() => setLoadedSchedule(null)}
+          onApply={applySharedSchedule}
         />
       </div>
     </div>

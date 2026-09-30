@@ -1,10 +1,10 @@
 import React from "react";
-import { Download, Printer, ImageIcon, X, Sparkles, Loader2, CircleCheckBig } from "lucide-react";
+import { Download, ImageIcon, X, Sparkles, Loader2, CircleCheckBig } from "lucide-react";
 import { cn } from "../utils";
 import { toPng } from "html-to-image";
 import { jsPDF } from "jspdf";
-import { Course } from "../data";
-import { TOTAL_CREDITS } from "../constants";
+import { Course, ScheduleEntry } from "../data";
+import { SEMESTERS, TOTAL_CREDITS } from "../constants";
 
 interface ExportModalProps {
   isExportModalOpen: boolean;
@@ -14,6 +14,13 @@ interface ExportModalProps {
   completedCourses: Set<string>;
   courses: Course[];
   courseGrades: Record<string, number>;
+  weeklySchedule: Record<string, Record<string, ScheduleEntry>>;
+  selectedElectives: Record<string, string>;
+  failedCourseIds: string[];
+  planStartSemester: string;
+  planEndSemester: string;
+  hidePastSemesters: boolean;
+  darkMode: boolean;
 }
 
 const ExportModal: React.FC<ExportModalProps> = ({
@@ -24,8 +31,16 @@ const ExportModal: React.FC<ExportModalProps> = ({
   completedCourses,
   courses,
   courseGrades,
+  weeklySchedule,
+  selectedElectives,
+  failedCourseIds,
+  planStartSemester,
+  planEndSemester,
+  hidePastSemesters,
+  darkMode,
 }) => {
   const [isExportLoading, setIsExportLoading] = React.useState(false);
+  const [importError, setImportError] = React.useState<string | null>(null);
   const fileInputRef = React.useRef<HTMLInputElement>(null);
 
   const gpa = React.useMemo(() => {
@@ -48,14 +63,39 @@ const ExportModal: React.FC<ExportModalProps> = ({
   if (!isExportModalOpen) return null;
 
   const exportToJson = () => {
+    const safeWeeklySchedule = Object.fromEntries(
+      Object.entries(weeklySchedule).map(([semester, entries]) => [
+        semester,
+        Object.fromEntries(
+          Object.entries(entries ?? {}).map(([courseId, entry]) => [
+            courseId,
+            {
+              courseId,
+              startTime: entry?.startTime || "08:00",
+              endTime: entry?.endTime || "09:00",
+              section: entry?.section || "",
+              instructor: entry?.instructor || "",
+              room: entry?.room || entry?.location || "",
+              days: Array.isArray(entry?.days)
+                ? entry.days.filter((day): day is string => typeof day === "string")
+                : entry?.day ? [entry.day] : [],
+            },
+          ]),
+        ),
+      ]),
+    );
     const data = {
       completed_courses: Array.from(completedCourses),
       planned_courses: plannedCourses,
+      version: 2,
+      weekly_schedule: safeWeeklySchedule,
+      selected_electives_map: selectedElectives,
       course_grades: courseGrades,
-      // Add other relevant settings if they exist in localStorage
-      plan_start_semester: localStorage.getItem("plan_start_semester"),
-      plan_end_semester: localStorage.getItem("plan_end_semester"),
-      dark_mode: localStorage.getItem("dark_mode"),
+      failed_course_ids: failedCourseIds,
+      plan_start_semester: planStartSemester,
+      plan_end_semester: planEndSemester,
+      hide_past_semesters: hidePastSemesters,
+      dark_mode: darkMode,
     };
     
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
@@ -64,31 +104,154 @@ const ExportModal: React.FC<ExportModalProps> = ({
     link.href = url;
     link.download = `نسخة-احتياطية-خطة-${new Date().toLocaleDateString("ar-EG")}.json`;
     link.click();
-    URL.revokeObjectURL(url);
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
   };
 
   const importFromJson = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-
+    const input = e.currentTarget;
     const reader = new FileReader();
     reader.onload = (event) => {
+      let parsed: unknown;
       try {
-        const data = JSON.parse(event.target?.result as string);
-        
-        if (data.completed_courses) localStorage.setItem("completed_courses", JSON.stringify(data.completed_courses));
-        if (data.planned_courses) localStorage.setItem("planned_courses", JSON.stringify(data.planned_courses));
-        if (data.course_grades) localStorage.setItem("course_grades", JSON.stringify(data.course_grades));
-        if (data.plan_start_semester) localStorage.setItem("plan_start_semester", data.plan_start_semester);
-        if (data.plan_end_semester) localStorage.setItem("plan_end_semester", data.plan_end_semester);
-        
-        alert("تم استيراد البيانات بنجاح! سيتم إعادة تحميل الصفحة لتطبيق التغييرات.");
-        window.location.reload();
-      } catch (err) {
-        alert("خطأ في قراءة ملف النسخة الاحتياطية.");
+        parsed = JSON.parse(String(event.target?.result ?? ""));
+      } catch {
+        setImportError("ملف النسخة الاحتياطية ليس JSON صالحاً.");
+        input.value = "";
+        return;
       }
+      if (!isRecord(parsed)) {
+        setImportError("بنية ملف النسخة الاحتياطية غير صالحة.");
+        input.value = "";
+        return;
+      }
+      if (parsed.version !== undefined && parsed.version !== 2) {
+        setImportError("إصدار النسخة الاحتياطية غير مدعوم.");
+        input.value = "";
+        return;
+      }
+
+      const entries: Array<[string, unknown, (value: unknown) => boolean]> = [
+          ["completed_courses", parsed.completed_courses, isKnownCourseArray],
+          ["planned_courses", parsed.planned_courses, isPlanMap],
+          ["weekly_schedule", parsed.weekly_schedule, isWeeklySchedule],
+          ["selected_electives_map", parsed.selected_electives_map, isCourseMap],
+          ["course_grades", parsed.course_grades, isGrades],
+          ["failed_course_ids", parsed.failed_course_ids, isKnownCourseArray],
+          ["plan_start_semester", parsed.plan_start_semester, isSemester],
+          ["plan_end_semester", parsed.plan_end_semester, isSemester],
+          ["hide_past_semesters", parsed.hide_past_semesters, isBoolean],
+          ["dark_mode", parsed.dark_mode, isBoolean],
+      ];
+      const updates = entries.filter(([key]) => Object.hasOwn(parsed, key));
+      if (updates.length === 0) {
+        setImportError("النسخة الاحتياطية لا تحتوي بيانات قابلة للاستيراد.");
+        input.value = "";
+        return;
+      }
+
+      const normalizedUpdates = updates.map(([key, value]) => {
+        if (parsed.version !== undefined || typeof value !== "string") {
+          return [key, value] as const;
+        }
+        if (!["plan_start_semester", "plan_end_semester", "hide_past_semesters", "dark_mode"].includes(key)) {
+          return [key, value] as const;
+        }
+        try {
+          return [key, JSON.parse(value)] as const;
+        } catch {
+          return [key, value] as const;
+        }
+      });
+
+      const invalidUpdate = normalizedUpdates.find(([key, value]) => {
+        const validator = entries.find(([entryKey]) => entryKey === key)?.[2];
+        return !validator || !validator(value);
+      });
+      if (invalidUpdate) {
+        setImportError(`القيمة في "${invalidUpdate[0]}" غير صالحة.`);
+        input.value = "";
+        return;
+      }
+
+      const snapshots = normalizedUpdates.map(([key]) => [key, localStorage.getItem(key)] as const);
+      try {
+        normalizedUpdates.forEach(([key, value]) => localStorage.setItem(key, JSON.stringify(value)));
+      } catch (error) {
+        let rollbackFailed = false;
+        snapshots.forEach(([key, value]) => {
+          try {
+            if (value === null) localStorage.removeItem(key);
+            else localStorage.setItem(key, value);
+          } catch {
+            rollbackFailed = true;
+          }
+        });
+        const reason = error instanceof Error ? error.message : "خطأ تخزين غير معروف";
+        setImportError(rollbackFailed
+          ? `فشل الاستيراد وتعذر التراجع عن بعض التغييرات: ${reason}`
+          : `تعذر حفظ النسخة في المتصفح: ${reason}`);
+        input.value = "";
+        return;
+      }
+      setImportError(null);
+      alert("تم استيراد النسخة الاحتياطية بنجاح. سيتم تحديث الصفحة لتطبيق البيانات.");
+      window.location.reload();
+      input.value = "";
+    };
+    reader.onerror = () => {
+      setImportError("تعذر قراءة الملف. اختر نسخة احتياطية أخرى.");
+      input.value = "";
     };
     reader.readAsText(file);
+
+    function isKnownCourseArray(value: unknown): boolean {
+      return Array.isArray(value) && value.every((id) => typeof id === "string");
+    }
+    function isRecord(value: unknown): value is Record<string, unknown> {
+      return typeof value === "object" && value !== null && !Array.isArray(value);
+    }
+    function isCourseMap(value: unknown): boolean {
+      return isRecord(value)
+        && Object.values(value).every((id) => typeof id === "string");
+    }
+    function isPlanMap(value: unknown): boolean {
+      return isRecord(value)
+        && Object.entries(value).every(([id, semester]) => (
+          typeof id === "string" && typeof semester === "string" && SEMESTERS.includes(semester)
+        ));
+    }
+    function isWeeklySchedule(value: unknown): boolean {
+      return isRecord(value) && Object.entries(value).every(([semester, semesterEntries]) => (
+        SEMESTERS.includes(semester)
+        && isRecord(semesterEntries)
+        && Object.entries(semesterEntries).every(([id, entry]) => (
+          typeof id === "string"
+          && isRecord(entry)
+          && typeof entry.startTime === "string"
+          && typeof entry.endTime === "string"
+          && (entry.days === undefined || (Array.isArray(entry.days) && entry.days.every((day) => typeof day === "string")))
+          && ["section", "instructor", "room", "location", "day"].every((field) => (
+            entry[field] === undefined || typeof entry[field] === "string"
+          ))
+        ))
+      ));
+    }
+    function isGrades(value: unknown): boolean {
+      return isRecord(value) && Object.entries(value).every(([id, grade]) => (
+        typeof id === "string"
+        && typeof grade === "number"
+        && Number.isFinite(grade)
+        && (grade === -1 || (grade >= 0 && grade <= 100))
+      ));
+    }
+    function isSemester(value: unknown): boolean {
+      return typeof value === "string" && SEMESTERS.includes(value);
+    }
+    function isBoolean(value: unknown): boolean {
+      return typeof value === "boolean";
+    }
   };
 
   const exportToImage = async () => {
@@ -173,24 +336,6 @@ const ExportModal: React.FC<ExportModalProps> = ({
     }
   };
 
-  const SEMESTERS = [
-    "السنة الأولى - الفصل الأول",
-    "السنة الأولى - الفصل الثاني",
-    "السنة الأولى - الصيفي",
-    "السنة الثانية - الفصل الأول",
-    "السنة الثانية - الفصل الثاني",
-    "السنة الثانية - الصيفي",
-    "السنة الثالثة - الفصل الأول",
-    "السنة الثالثة - الفصل الثاني",
-    "السنة الثالثة - الصيفي",
-    "السنة الرابعة - الفصل الأول",
-    "السنة الرابعة - الفصل الثاني",
-    "السنة الرابعة - الصيفي",
-    "السنة الخامسة - الفصل الأول",
-    "السنة الخامسة - الفصل الثاني",
-    "السنة الخامسة - الصيفي",
-  ];
-
   return (
     <div
       className={cn(
@@ -239,6 +384,11 @@ const ExportModal: React.FC<ExportModalProps> = ({
               <Download size={18} className="text-gray-500" />
               تصدير نسخة JSON
             </button>
+            {importError && (
+              <p role="alert" className="basis-full text-sm font-bold text-red-600">
+                {importError}
+              </p>
+            )}
             <div className="h-8 w-px bg-gray-200 mx-1 hidden md:block"></div>
             <button
               onClick={exportToImage}
@@ -363,7 +513,7 @@ const ExportModal: React.FC<ExportModalProps> = ({
               <div className="space-y-8">
                 {SEMESTERS.map((semester) => {
                   const semCourses = Object.entries(plannedCourses)
-                    .filter(([id, s]) => s === semester)
+                    .filter(([, s]) => s === semester)
                     .map(([id]) => courses.find((c) => c.id === id)!)
                     .filter(Boolean);
                   if (semCourses.length === 0) return null;

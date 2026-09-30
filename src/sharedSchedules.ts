@@ -1,3 +1,5 @@
+import type { SupabaseClient as SupabaseSdkClient } from "@supabase/supabase-js";
+
 export interface SharedCourseSnapshot {
   courseId: string;
   courseCode: string;
@@ -54,27 +56,38 @@ export interface SharedScheduleSnapshot {
   courses: SharedCourseSnapshot[];
 }
 
-interface SupabaseError {
-  code?: string;
-  message: string;
+interface SharedSchedulesTable {
+  Row: {
+    id: string;
+    schedule_data: SharedScheduleSnapshot;
+    created_at: string;
+    expires_at: string;
+    views_count: number;
+  };
+  Insert: {
+    id: string;
+    schedule_data: SharedScheduleSnapshot;
+    created_at?: string;
+    expires_at?: string;
+    views_count?: number;
+  };
+  Update: Partial<SharedSchedulesTable["Insert"]>;
+  Relationships: [];
 }
 
-interface SupabaseResult<T> {
-  data: T | null;
-  error: SupabaseError | null;
-}
-
-interface SupabaseQuery<T> extends PromiseLike<SupabaseResult<T>> {
-  select(columns: string): SupabaseQuery<T>;
-  eq(column: string, value: string): SupabaseQuery<T>;
-  gt(column: string, value: string): SupabaseQuery<T>;
-  maybeSingle(): Promise<SupabaseResult<T>>;
-  insert(values: Record<string, unknown>): Promise<SupabaseResult<unknown>>;
-}
-
-export interface SupabaseClient {
-  from<T>(table: string): SupabaseQuery<T>;
-  rpc(name: string, args: Record<string, unknown>): Promise<SupabaseResult<unknown>>;
+interface Database {
+  public: {
+    Tables: { shared_schedules: SharedSchedulesTable };
+    Views: Record<string, never>;
+    Functions: {
+      increment_shared_schedule_views: {
+        Args: { p_code: string };
+        Returns: number;
+      };
+    };
+    Enums: Record<string, never>;
+    CompositeTypes: Record<string, never>;
+  };
 }
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL
@@ -86,84 +99,181 @@ const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY
   ?? "YOUR_SUPABASE_ANON_KEY";
 const CODE_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
 
-let client: SupabaseClient | null = null;
+let clientPromise: Promise<SupabaseSdkClient<Database>> | null = null;
 
-function getSupabaseClient(): SupabaseClient {
-  if (client) return client;
+function getSupabaseClient(): Promise<SupabaseSdkClient<Database>> {
+  if (clientPromise) return clientPromise;
   if (
     SUPABASE_URL.includes("YOUR_PROJECT")
     || SUPABASE_ANON_KEY === "YOUR_SUPABASE_ANON_KEY"
   ) {
     throw new Error("لم تُحمّل إعدادات Supabase. تحقق من NEXT_PUBLIC_SUPABASE_URL وNEXT_PUBLIC_SUPABASE_ANON_KEY (أو VITE_SUPABASE_URL وVITE_SUPABASE_ANON_KEY)، ثم أعد تشغيل الخادم أو أعد نشر الموقع.");
   }
-  if (!window.supabase?.createClient) {
-    throw new Error("تعذر تحميل مكتبة Supabase. تحقق من اتصال الإنترنت ثم أعد المحاولة.");
-  }
-  client = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-  return client;
+  clientPromise = import("@supabase/supabase-js").then(({ createClient }) => (
+    createClient<Database>(SUPABASE_URL, SUPABASE_ANON_KEY)
+  ));
+  return clientPromise;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-function isSharedScheduleSnapshot(value: unknown): value is SharedScheduleSnapshot {
-  if (!isRecord(value) || (value.version !== 1 && value.version !== 2)) return false;
-
+function normalizeSharedScheduleSnapshot(value: unknown): SharedScheduleSnapshot | null {
   if (
-    typeof value.name !== "string"
+    !isRecord(value)
+    || (value.version !== 1 && value.version !== 2)
+    || typeof value.name !== "string"
     || typeof value.exportedAt !== "string"
-    || !isRecord(value.plannedCourses)
-    || !isRecord(value.weeklySchedule)
     || !Array.isArray(value.completedCourses)
-    || !value.completedCourses.every((course) => (
-      isRecord(course)
-      && typeof course.courseCode === "string"
-      && typeof course.courseName === "string"
-      && typeof course.credits === "number"
-      && typeof course.category === "string"
-    ))
     || !Array.isArray(value.courses)
-  ) return false;
+  ) return null;
 
-  const validCourseList = value.courses.every((course) => (
-    isRecord(course)
-    && typeof course.courseId === "string"
-    && typeof course.courseCode === "string"
-    && typeof course.courseName === "string"
-    && typeof course.credits === "number"
-    && typeof course.category === "string"
-    && typeof course.semester === "string"
-    && typeof course.color === "string"
-    && typeof course.section === "string"
-    && typeof course.startTime === "string"
-    && typeof course.endTime === "string"
-    && Array.isArray(course.days)
-    && course.days.every((day) => typeof day === "string")
-    && typeof course.instructor === "string"
-    && typeof course.room === "string"
-  ));
-  if (!validCourseList) return false;
+  const completedCourses = value.completedCourses.flatMap((course) => {
+    if (
+      !isRecord(course)
+      || typeof course.courseCode !== "string"
+      || typeof course.courseName !== "string"
+      || typeof course.credits !== "number"
+      || !Number.isFinite(course.credits)
+      || typeof course.category !== "string"
+    ) return [];
+    const grade = typeof course.grade === "number" ? course.grade : undefined;
+    return [{
+      courseCode: course.courseCode,
+      courseName: course.courseName,
+      credits: course.credits,
+      category: course.category,
+      ...(grade !== undefined ? { grade } : {}),
+    }];
+  });
+  if (completedCourses.length !== value.completedCourses.length) return null;
 
-  if (value.version === 1) return true;
-  return Array.isArray(value.failedCourseIds)
-    && value.failedCourseIds.every((id) => typeof id === "string")
-    && isRecord(value.courseGrades)
-    && Object.values(value.courseGrades).every((grade) => typeof grade === "number")
-    && isRecord(value.selectedElectives)
-    && isRecord(value.preferences)
-    && typeof value.preferences.planStartSemester === "string"
-    && typeof value.preferences.planEndSemester === "string"
-    && typeof value.preferences.hidePastSemesters === "boolean"
-    && typeof value.preferences.darkMode === "boolean"
-    && value.courses.every((course) => (
-      isRecord(course)
-      && Array.isArray(course.prerequisites)
-      && course.prerequisites.every((id) => typeof id === "string")
-      && typeof course.completed === "boolean"
-      && typeof course.failed === "boolean"
-      && (typeof course.grade === "number" || course.grade === null)
-    ));
+  const courses = value.courses.flatMap((course) => {
+    if (
+      !isRecord(course)
+      || typeof course.courseCode !== "string"
+      || typeof course.courseName !== "string"
+      || typeof course.credits !== "number"
+      || !Number.isFinite(course.credits)
+      || typeof course.category !== "string"
+    ) return [];
+
+    const prerequisites = Array.isArray(course.prerequisites)
+      ? course.prerequisites.filter((id): id is string => typeof id === "string")
+      : [];
+    const days = Array.isArray(course.days)
+      ? course.days.filter((day): day is string => typeof day === "string")
+      : typeof course.days === "string"
+        ? [course.days]
+        : typeof course.day === "string" ? [course.day] : [];
+    const grade: number | null = typeof course.grade === "number" ? course.grade : null;
+    const seasonal: SharedCourseSnapshot["seasonal"] = (
+      course.seasonal === "first" || course.seasonal === "second" || course.seasonal === "both"
+    ) ? course.seasonal : undefined;
+    const availableSemesters = course.availableSemesters;
+
+    return [{
+      courseId: typeof course.courseId === "string" ? course.courseId : course.courseCode,
+      courseCode: course.courseCode,
+      courseName: course.courseName,
+      credits: course.credits,
+      category: course.category,
+      prerequisites,
+      semester: typeof course.semester === "string" ? course.semester : "",
+      color: typeof course.color === "string" ? course.color : "#3b82f6",
+      section: typeof course.section === "string" ? course.section : "",
+      startTime: typeof course.startTime === "string" ? course.startTime : "",
+      endTime: typeof course.endTime === "string" ? course.endTime : "",
+      days,
+      instructor: typeof course.instructor === "string" ? course.instructor : "",
+      room: typeof course.room === "string" ? course.room : "",
+      completed: typeof course.completed === "boolean" ? course.completed : false,
+      failed: typeof course.failed === "boolean" ? course.failed : false,
+      grade,
+      ...(seasonal ? { seasonal } : {}),
+      ...(Array.isArray(availableSemesters)
+        ? { availableSemesters: availableSemesters.filter(
+          (semester): semester is "first" | "second" | "summer" => (
+            semester === "first" || semester === "second" || semester === "summer"
+          ),
+        ) }
+        : {}),
+      ...(typeof course.resourceLink === "string" ? { resourceLink: course.resourceLink } : {}),
+    }];
+  });
+  if (courses.length !== value.courses.length) return null;
+
+  const plannedCourses = isRecord(value.plannedCourses)
+    ? Object.fromEntries(Object.entries(value.plannedCourses).filter(
+      (entry): entry is [string, string] => typeof entry[1] === "string",
+    ))
+    : {};
+  const weeklySchedule: SharedScheduleSnapshot["weeklySchedule"] = {};
+  if (isRecord(value.weeklySchedule)) {
+    Object.entries(value.weeklySchedule).forEach(([semester, entries]) => {
+      if (!isRecord(entries)) return;
+      weeklySchedule[semester] = Object.fromEntries(
+        Object.entries(entries).flatMap(([courseId, entry]) => {
+          if (!isRecord(entry)) return [];
+          const days = Array.isArray(entry.days)
+            ? entry.days.filter((day): day is string => typeof day === "string")
+            : typeof entry.days === "string" ? [entry.days] : [];
+          return [[courseId, {
+            courseId: typeof entry.courseId === "string" ? entry.courseId : courseId,
+            startTime: typeof entry.startTime === "string" ? entry.startTime : "",
+            endTime: typeof entry.endTime === "string" ? entry.endTime : "",
+            section: typeof entry.section === "string" ? entry.section : "",
+            instructor: typeof entry.instructor === "string" ? entry.instructor : "",
+            room: typeof entry.room === "string" ? entry.room : "",
+            days,
+          }]];
+        }),
+      );
+    });
+  }
+
+  const preferences = isRecord(value.preferences)
+    ? {
+      planStartSemester: typeof value.preferences.planStartSemester === "string"
+        ? value.preferences.planStartSemester : "",
+      planEndSemester: typeof value.preferences.planEndSemester === "string"
+        ? value.preferences.planEndSemester : "",
+      hidePastSemesters: typeof value.preferences.hidePastSemesters === "boolean"
+        ? value.preferences.hidePastSemesters : false,
+      darkMode: typeof value.preferences.darkMode === "boolean"
+        ? value.preferences.darkMode : false,
+    }
+    : undefined;
+  const courseGrades = isRecord(value.courseGrades)
+    ? Object.fromEntries(Object.entries(value.courseGrades).filter(
+      (entry): entry is [string, number] => (
+        typeof entry[1] === "number" && Number.isFinite(entry[1])
+      ),
+    ))
+    : {};
+  const selectedElectives = isRecord(value.selectedElectives)
+    ? Object.fromEntries(Object.entries(value.selectedElectives).filter(
+      (entry): entry is [string, string] => typeof entry[1] === "string",
+    ))
+    : {};
+  const failedCourseIds = Array.isArray(value.failedCourseIds)
+    ? value.failedCourseIds.filter((id): id is string => typeof id === "string")
+    : [];
+
+  return {
+    version: value.version,
+    name: value.name,
+    exportedAt: value.exportedAt,
+    plannedCourses,
+    completedCourses,
+    courseGrades,
+    failedCourseIds,
+    selectedElectives,
+    preferences,
+    weeklySchedule,
+    courses,
+  };
 }
 
 export function normalizeScheduleCode(value: string): string {
@@ -209,7 +319,7 @@ export function generate8Charcode(): string {
 export async function shareScheduleToCloud(
   scheduleObj: SharedScheduleSnapshot,
 ): Promise<string> {
-  const supabase = getSupabaseClient();
+  const supabase = await getSupabaseClient();
   for (let attempt = 0; attempt < 3; attempt += 1) {
     const code = generate8Charcode();
     const { error } = await supabase.from("shared_schedules").insert({
@@ -231,9 +341,9 @@ export async function fetchScheduleByCode(
   if (!/^[A-HJ-KM-NP-Z2-9]{8}$/.test(code)) {
     throw new Error("أدخل رمزاً صحيحاً من 8 أحرف أو أرقام.");
   }
-  const supabase = getSupabaseClient();
+  const supabase = await getSupabaseClient();
   const { data, error } = await supabase
-    .from<{ schedule_data: SharedScheduleSnapshot }>("shared_schedules")
+    .from("shared_schedules")
     .select("schedule_data")
     .eq("id", code)
     .gt("expires_at", new Date().toISOString())
@@ -241,9 +351,9 @@ export async function fetchScheduleByCode(
 
   if (error) throw new Error(`تعذر جلب الجدول: ${error.message}`);
   if (!data) throw new Error("لم يُعثر على جدول بهذا الرمز، أو انتهت صلاحيته.");
-  const schedule: unknown = data.schedule_data;
-  if (!isSharedScheduleSnapshot(schedule)) {
-    throw new Error("بيانات الجدول المشارك غير صالحة أو غير مدعومة.");
+  const schedule = normalizeSharedScheduleSnapshot(data.schedule_data);
+  if (!schedule) {
+    throw new Error("تعذر قراءة الخطة: بياناتها الأساسية ناقصة أو غير صالحة. اطلب من المرسل إنشاء رابط مشاركة جديد.");
   }
 
   const { error: counterError } = await supabase.rpc(

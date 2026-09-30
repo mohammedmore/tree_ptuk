@@ -116,44 +116,44 @@ const PlannerView: React.FC<PlannerViewProps> = ({
 
   return (
     <div
-      className="fixed inset-0 bg-gray-900/50 backdrop-blur-sm z-[100] flex items-center justify-center p-1.5 sm:p-4"
+      className="fixed inset-0 bg-gray-900/60 backdrop-blur-xl z-[100] flex items-center justify-center p-1.5 sm:p-4"
       onClick={onClose}
     >
       <div
-        className="bg-white dark:bg-slate-900 rounded-xl sm:rounded-2xl p-3 sm:p-6 w-full max-w-6xl h-[97dvh] sm:h-[85vh] flex flex-col shadow-2xl animate-in zoom-in-95 duration-200"
+        className="bg-white/95 dark:bg-slate-900/95 backdrop-blur-2xl rounded-2xl sm:rounded-3xl p-4 sm:p-6 w-full max-w-6xl h-[97dvh] sm:h-[85vh] flex flex-col shadow-2xl shadow-gray-900/20 dark:shadow-slate-950/50 animate-in zoom-in-95 duration-300 border border-gray-200/50 dark:border-slate-700/50"
         dir="rtl"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2 sm:gap-4 mb-3 sm:mb-6 shrink-0">
-          <h2 className="text-lg sm:text-2xl font-black text-gray-800 dark:text-slate-100 flex items-center gap-2">
-            <CalendarDays className="text-orange-500" />
+        <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 sm:gap-4 mb-4 sm:mb-6 shrink-0">
+          <h2 className="text-lg sm:text-2xl font-extrabold bg-gradient-to-r from-orange-600 to-amber-600 dark:from-orange-400 dark:to-amber-400 bg-clip-text text-transparent flex items-center gap-2">
+            <CalendarDays className="text-orange-600 dark:text-orange-400" />
             الخطة الفصلية
           </h2>
           <div className="grid grid-cols-2 sm:flex items-center gap-1.5 sm:gap-2">
             <button
               onClick={() => setShowStats(!showStats)}
               className={cn(
-                "min-h-10 flex items-center justify-center gap-1 sm:gap-2 px-2 sm:px-4 py-1.5 sm:py-2 border rounded-xl transition-all font-bold text-[11px] sm:text-sm shadow-sm",
+                "min-h-10 flex items-center justify-center gap-1 sm:gap-2 px-2 sm:px-4 py-1.5 sm:py-2 border rounded-xl transition-all duration-200 font-extrabold text-[11px] sm:text-sm shadow-lg",
                 showStats 
-                  ? "bg-indigo-50 text-indigo-700 border-indigo-200 dark:bg-indigo-950/40 dark:text-indigo-300 dark:border-indigo-900/50"
-                  : "bg-white text-gray-700 border-gray-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700 hover:bg-gray-50"
+                  ? "bg-gradient-to-r from-indigo-500 to-indigo-600 text-white border-indigo-500 dark:from-indigo-600 dark:to-indigo-700 dark:border-indigo-600 shadow-indigo-200/50 dark:shadow-indigo-900/30 hover:shadow-xl hover:shadow-indigo-300/60 dark:hover:shadow-indigo-900/50 hover:-translate-y-0.5"
+                  : "bg-gradient-to-r from-white to-gray-50 text-gray-700 border-gray-200 dark:from-slate-800 dark:to-slate-700 dark:text-slate-300 dark:border-slate-600 hover:from-gray-50 hover:to-gray-100 dark:hover:from-slate-700 dark:hover:to-slate-600 shadow-gray-200/30 dark:shadow-slate-900/30"
               )}
             >
-              <PieChart size={16} className={showStats ? "text-indigo-600" : "text-gray-500"} />
+              <PieChart size={16} className={showStats ? "text-white" : "text-gray-500 dark:text-slate-400"} />
               {showStats ? "إخفاء الإحصائيات" : "عرض الإحصائيات الذكية"}
               {showStats ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
             </button>
             <button
               onClick={() => setIsExportModalOpen(true)}
-              className="min-h-10 flex items-center justify-center gap-1 sm:gap-2 px-2 sm:px-4 py-1.5 sm:py-2 bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-900/50 rounded-xl hover:bg-emerald-100 dark:hover:bg-emerald-900/30 transition-all font-bold text-[11px] sm:text-sm shadow-sm"
+              className="min-h-10 flex items-center justify-center gap-1 sm:gap-2 px-2 sm:px-4 py-1.5 sm:py-2 bg-gradient-to-r from-emerald-500 to-emerald-600 text-white border-emerald-500 dark:from-emerald-600 dark:to-emerald-700 dark:border-emerald-600 rounded-xl hover:from-emerald-600 hover:to-emerald-700 dark:hover:from-emerald-700 dark:hover:to-emerald-800 transition-all duration-200 font-extrabold text-[11px] sm:text-sm shadow-lg shadow-emerald-200/50 dark:shadow-emerald-900/30 hover:shadow-xl hover:shadow-emerald-300/60 dark:hover:shadow-emerald-900/50 hover:-translate-y-0.5"
             >
-              <Download size={16} className="text-emerald-600 dark:text-emerald-400" />
+              <Download size={16} className="text-white" />
               <span className="sm:hidden">تصدير</span>
               <span className="hidden sm:inline">تنزيل الخطة (PDF / صورة)</span>
             </button>
             <button
               onClick={onClose}
-              className="min-h-10 min-w-10 flex items-center justify-center p-2 text-gray-400 dark:text-slate-500 hover:bg-gray-100 dark:hover:bg-slate-800 rounded-full transition-colors"
+              className="min-h-10 min-w-10 flex items-center justify-center p-2 text-gray-400 dark:text-slate-500 hover:bg-gray-100 dark:hover:bg-slate-800 rounded-full transition-all duration-200 hover:scale-110 hover:shadow-md"
             >
               <X />
             </button>
@@ -178,12 +178,12 @@ const PlannerView: React.FC<PlannerViewProps> = ({
           )}
 
           {/* Controls Bar for Planning Boundaries */}
-          <div className="bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 p-2.5 sm:p-3.5 rounded-2xl mb-3 sm:mb-4 flex flex-col md:flex-row justify-between items-start md:items-center gap-2 sm:gap-3 text-right">
+          <div className="bg-gradient-to-br from-slate-50 to-gray-100 dark:from-slate-900/80 dark:to-slate-800/80 border border-slate-200 dark:border-slate-700 p-3 sm:p-4 rounded-2xl mb-4 sm:mb-6 flex flex-col md:flex-row justify-between items-start md:items-center gap-3 sm:gap-4 text-right shadow-lg shadow-gray-200/30 dark:shadow-slate-900/30">
             <div className="flex items-center gap-2.5 flex-wrap">
-              <span className="text-xs font-black text-indigo-600 bg-indigo-55 px-2 py-0.5 rounded-md border border-indigo-100">
+              <span className="text-xs font-extrabold bg-gradient-to-r from-indigo-600 to-indigo-700 text-white px-3 py-1 rounded-xl border border-indigo-500 shadow-md shadow-indigo-200/30 dark:shadow-indigo-900/30">
                 تحجيم التخطيط الأكاديمي
               </span>
-              <span className="text-xs font-extrabold text-gray-750 dark:text-slate-300">
+              <span className="text-xs font-extrabold text-gray-700 dark:text-slate-300">
                 بداية التخطيط الفعلي (الفصل القادم):
               </span>
               <select
@@ -197,7 +197,7 @@ const PlannerView: React.FC<PlannerViewProps> = ({
                     setPlanEndSemester(e.target.value);
                   }
                 }}
-                className="p-1 px-2.5 bg-white dark:bg-slate-800 dark:text-slate-200 border border-gray-200 dark:border-slate-700 rounded-lg text-xs font-extrabold focus:ring-2 focus:ring-indigo-500 outline-none text-right text-indigo-755 font-sans"
+                className="p-1.5 px-3 bg-gradient-to-br from-white to-gray-50 dark:from-slate-800 dark:to-slate-700 dark:text-slate-200 border border-gray-200 dark:border-slate-600 rounded-xl text-xs font-extrabold focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 outline-none text-right shadow-md shadow-gray-200/30 dark:shadow-slate-900/30 transition-all"
               >
                 {SEMESTERS.map((semName) => (
                   <option key={semName} value={semName}>
@@ -215,7 +215,7 @@ const PlannerView: React.FC<PlannerViewProps> = ({
                   onChange={(e) => setHidePastSemesters(e.target.checked)}
                   className="w-4 h-4 rounded text-indigo-600 border-gray-300 focus:ring-indigo-500 cursor-pointer"
                 />
-                <span className="text-xs font-bold text-gray-700 dark:text-slate-300">
+                <span className="text-xs font-extrabold text-gray-700 dark:text-slate-300">
                   إخفاء الفصول القديمة والمجتازة (قبل موعد بدء الخطة)
                 </span>
               </label>
@@ -223,9 +223,9 @@ const PlannerView: React.FC<PlannerViewProps> = ({
           </div>
 
           {planningCourseId && (
-            <div className="bg-orange-50 border border-orange-200 text-orange-800 p-3 sm:p-4 rounded-xl mb-3 sm:mb-4 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+            <div className="bg-gradient-to-r from-orange-50 to-amber-50 dark:from-orange-950/30 dark:to-amber-950/30 border border-orange-200 dark:border-orange-800/50 text-orange-800 dark:text-orange-200 p-3 sm:p-4 rounded-2xl mb-4 sm:mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-lg shadow-orange-200/30 dark:shadow-orange-900/20">
               <div>
-                <span className="font-bold">
+                <span className="font-extrabold">
                   قم بتحديد الفصل الدراسي لإضافة مادة:{" "}
                 </span>
                 <span className="ml-2 font-black">
@@ -234,7 +234,7 @@ const PlannerView: React.FC<PlannerViewProps> = ({
               </div>
               <button
                 onClick={() => setPlanningCourseId(null)}
-                className="text-orange-600 text-sm font-bold hover:underline"
+                className="text-orange-600 dark:text-orange-400 text-sm font-extrabold hover:underline transition-all"
               >
                 إلغاء التحديد
               </button>
@@ -242,25 +242,25 @@ const PlannerView: React.FC<PlannerViewProps> = ({
           )}
 
           {allSemestersEmpty ? (
-            <div className="flex flex-col items-center justify-center text-gray-500 dark:text-slate-400 p-12 text-center bg-gray-50 dark:bg-slate-950/40 rounded-xl border border-gray-200 dark:border-slate-800">
+            <div className="flex flex-col items-center justify-center text-gray-500 dark:text-slate-400 p-12 text-center bg-gradient-to-br from-gray-50 to-slate-100 dark:from-slate-950/40 dark:to-slate-900/40 rounded-2xl border border-gray-200 dark:border-slate-800 shadow-xl">
               <Sparkles size={48} className="mb-4 text-orange-400" />
-              <p className="text-lg font-bold mb-2">لا توجد مواد مخططة بعد!</p>
+              <p className="text-lg font-extrabold mb-2">لا توجد مواد مخططة بعد!</p>
               <p className="text-sm mb-4">
                 ابدأ بإنشاء خطتك الأكاديمية من خلال وضع التخطيط.
               </p>
               <button
                 onClick={() => {
-                  onClose(); // Close PlannerView
-                  onOpenPlanningMode(); // Open PlanningModeModal
+                  onClose();
+                  onOpenPlanningMode();
                 }}
-                className="flex items-center gap-2 px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl transition-colors cursor-pointer shadow-lg font-bold"
+                className="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-700 hover:to-indigo-800 text-white rounded-xl transition-all duration-200 cursor-pointer shadow-lg shadow-indigo-200/50 dark:shadow-indigo-900/30 hover:shadow-xl hover:shadow-indigo-300/60 dark:hover:shadow-indigo-900/50 hover:-translate-y-0.5 font-extrabold"
               >
                 <CalendarDays size={20} />
                 اذهب إلى وضع التخطيط
               </button>
             </div>
           ) : (
-            <div className="overflow-x-auto bg-gray-50 dark:bg-slate-950/40 rounded-xl border border-gray-200 dark:border-slate-800 p-4 min-h-[500px]">
+            <div className="overflow-x-auto bg-gradient-to-br from-gray-50 to-slate-100 dark:from-slate-950/40 dark:to-slate-900/40 rounded-2xl border border-gray-200 dark:border-slate-800 p-4 min-h-[500px] shadow-xl">
               <div className="flex gap-4 min-w-max">
                 {SEMESTERS.filter((sem) => {
                   if (hidePastSemesters) {
@@ -282,20 +282,20 @@ const PlannerView: React.FC<PlannerViewProps> = ({
                     <div
                       key={sem}
                       className={cn(
-                        "w-64 flex flex-col min-h-[450px] rounded-xl border shrink-0 overflow-hidden group transition-all",
+                        "w-64 flex flex-col min-h-[450px] rounded-2xl border shrink-0 overflow-hidden group transition-all duration-300 shadow-lg",
                         isPastSem
-                          ? "bg-slate-100/60 dark:bg-slate-900/40 border-dashed border-slate-300 dark:border-slate-700 opacity-[0.72] ring-1 ring-slate-100 dark:ring-slate-900 select-none"
-                          : "bg-white dark:bg-slate-800 border-gray-200 dark:border-slate-700",
+                          ? "bg-gradient-to-br from-slate-100/80 to-slate-200/80 dark:from-slate-900/40 dark:to-slate-800/40 border-dashed border-slate-300 dark:border-slate-700 opacity-[0.72] ring-1 ring-slate-200 dark:ring-slate-900 select-none"
+                          : "bg-gradient-to-br from-white to-gray-50 dark:from-slate-800 dark:to-slate-900 border-gray-200 dark:border-slate-700 hover:shadow-xl",
                       )}
                     >
                       <div
                         className={cn(
-                          "p-3 border-b border-gray-100 dark:border-slate-750 flex justify-between items-center transition-colors relative group/header",
+                          "p-3 sm:p-4 border-b border-gray-100 dark:border-slate-700 flex justify-between items-center transition-all duration-200 relative group/header",
                           isPastSem
-                            ? "bg-slate-200/90 dark:bg-slate-950/60 text-slate-400 dark:text-slate-500 cursor-not-allowed"
+                            ? "bg-gradient-to-r from-slate-200/90 to-slate-300/90 dark:from-slate-950/60 dark:to-slate-900/60 text-slate-400 dark:text-slate-500 cursor-not-allowed"
                             : planningCourseId
-                              ? "cursor-pointer hover:bg-orange-100 dark:hover:bg-orange-950/30 bg-orange-50/50 dark:bg-orange-950/10"
-                              : "bg-gray-50 dark:bg-slate-900/60",
+                              ? "cursor-pointer hover:bg-gradient-to-r hover:from-orange-100 hover:to-amber-100 dark:hover:from-orange-950/30 dark:hover:to-amber-950/30 bg-gradient-to-r from-orange-50/50 to-amber-50/50 dark:from-orange-950/10 dark:to-amber-950/10"
+                              : "bg-gradient-to-r from-gray-50 to-slate-50 dark:from-slate-900/60 dark:to-slate-800/60",
                           !!planningCourseId &&
                           !isPastSem &&
                           "border-orange-200 dark:border-orange-900/50",
@@ -311,21 +311,20 @@ const PlannerView: React.FC<PlannerViewProps> = ({
                         }}
                       >
                         <div>
-                          <h3 className="font-bold text-gray-700 dark:text-slate-200 text-xs mb-1 flex items-center gap-1.5 flex-wrap">
+                          <h3 className="font-extrabold text-gray-700 dark:text-slate-200 text-xs mb-1 flex items-center gap-1.5 flex-wrap">
                             {isPastSem && (
-                              // Replaced <Lock> with a span for testing
                               <span className="text-slate-400 dark:text-slate-500 shrink-0">
                                 [قفل]
                               </span>
                             )}
                             <span>{sem}</span>
                             {isPastSem && (
-                              <span className="text-[9px] bg-slate-250 text-slate-600 px-1.5 py-0.2 rounded font-black">
+                              <span className="text-[9px] bg-gradient-to-r from-slate-200 to-slate-300 dark:from-slate-700 dark:to-slate-800 text-slate-600 dark:text-slate-400 px-2 py-0.5 rounded-lg font-extrabold">
                                 مجتاز/سابق
                               </span>
                             )}
                           </h3>
-                          <span className="text-[10px] bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 text-gray-500 dark:text-slate-400 px-2 py-0.5 rounded-full font-bold">
+                          <span className="text-[10px] bg-gradient-to-r from-white to-gray-50 dark:from-slate-800 dark:to-slate-700 border border-gray-200 dark:border-slate-700 text-gray-500 dark:text-slate-400 px-2.5 py-1 rounded-full font-extrabold shadow-sm">
                             {semCourses.reduce(
                               (sum, c) => sum + c.credits,
                               0,
@@ -335,7 +334,6 @@ const PlannerView: React.FC<PlannerViewProps> = ({
                         </div>
                         {!planningCourseId && semCourses.length > 0 && (
                           <div className="flex gap-1 items-center shrink-0">
-                            {/* زر حذف جميع المواد المخططة في هذا الفصل */}
                             <button
                               onClick={(e) => {
                                 e.stopPropagation();
@@ -347,7 +345,7 @@ const PlannerView: React.FC<PlannerViewProps> = ({
                                   return next;
                                 });
                               }}
-                              className="min-h-9 min-w-9 sm:min-h-0 sm:min-w-0 opacity-100 sm:opacity-0 sm:group-hover/header:opacity-100 p-2 sm:p-1 bg-red-50 text-red-500 hover:bg-red-100 hover:text-red-700 rounded-md transition-all shadow-sm border border-red-200"
+                              className="min-h-9 min-w-9 sm:min-h-0 sm:min-w-0 opacity-100 sm:opacity-0 sm:group-hover/header:opacity-100 p-2 sm:p-1 bg-gradient-to-r from-red-50 to-red-100 text-red-500 hover:from-red-100 hover:to-red-200 hover:text-red-700 rounded-xl transition-all duration-200 shadow-md shadow-red-200/30 dark:from-red-950/30 dark:to-red-900/30 dark:text-red-400 dark:hover:from-red-900/40 dark:hover:to-red-800/40 dark:hover:text-red-300 border border-red-200 dark:border-red-800/50"
                               title="حذف كل مواد الفصل من الخطة"
                             >
                               <Trash2 size={14} />
@@ -372,7 +370,7 @@ const PlannerView: React.FC<PlannerViewProps> = ({
                                       return next;
                                     });
                                   }}
-                                  className="min-h-9 min-w-9 sm:min-h-0 sm:min-w-0 opacity-100 sm:opacity-0 sm:group-hover/header:opacity-100 p-2 sm:p-1 bg-emerald-50 text-emerald-600 hover:bg-emerald-100 hover:text-emerald-700 rounded-md transition-all shadow-sm border border-emerald-200"
+                                  className="min-h-9 min-w-9 sm:min-h-0 sm:min-w-0 opacity-100 sm:opacity-0 sm:group-hover/header:opacity-100 p-2 sm:p-1 bg-gradient-to-r from-emerald-50 to-emerald-100 text-emerald-600 hover:from-emerald-100 hover:to-emerald-200 hover:text-emerald-700 rounded-xl transition-all duration-200 shadow-md shadow-emerald-200/30 dark:from-emerald-950/30 dark:to-emerald-900/30 dark:text-emerald-400 dark:hover:from-emerald-900/40 dark:hover:to-emerald-800/40 dark:hover:text-emerald-300 border border-emerald-200 dark:border-emerald-800/50"
                                   title="إنجاز كل مواد الفصل"
                                 >
                                   <CircleCheckBig size={14} />
@@ -382,7 +380,7 @@ const PlannerView: React.FC<PlannerViewProps> = ({
                         )}
                       </div>
 
-                      <div className="overflow-y-auto p-2 flex flex-col gap-2">
+                      <div className="overflow-y-auto p-3 flex flex-col gap-2">
                         {semCourses.map((c) => {
                           const isCompleted = completedCourses.has(c.id);
                           return (
@@ -390,24 +388,24 @@ const PlannerView: React.FC<PlannerViewProps> = ({
                               key={c.id}
                               onClick={() => setPlannerSelectedCourse(c)}
                               className={cn(
-                                "p-3 border rounded-lg flex flex-col relative group/card shadow-sm cursor-pointer transition-all duration-200 hover:shadow-md hover:border-indigo-300 hover:bg-neutral-50/50 hover:-translate-y-0.5 active:scale-[0.98]",
+                                "p-3 border rounded-xl flex flex-col relative group/card shadow-md cursor-pointer transition-all duration-300 hover:shadow-lg hover:-translate-y-1 active:scale-[0.98]",
                                 isCompleted
-                                  ? "bg-emerald-50 dark:bg-emerald-950/20 border-emerald-100/60 dark:border-emerald-900/50 hover:border-emerald-200"
+                                  ? "bg-gradient-to-br from-emerald-50/80 to-green-50/80 dark:from-emerald-950/20 dark:to-green-950/20 border-emerald-200/60 dark:border-emerald-900/50 hover:border-emerald-300 hover:shadow-emerald-200/30 dark:hover:shadow-emerald-900/30"
                                   : planWarnings[c.id]
-                                    ? "bg-amber-50 dark:bg-amber-950/20 border-amber-200 dark:border-amber-900/50 hover:border-amber-400"
-                                    : "bg-blue-50/40 dark:bg-blue-900/10 border-blue-100 dark:border-blue-900/30 hover:border-indigo-200 dark:hover:border-indigo-800",
+                                    ? "bg-gradient-to-br from-amber-50/80 to-orange-50/80 dark:from-amber-950/20 dark:to-orange-950/20 border-amber-200 dark:border-amber-900/50 hover:border-amber-400 hover:shadow-amber-200/30 dark:hover:shadow-amber-900/30"
+                                    : "bg-gradient-to-br from-blue-50/60 to-indigo-50/60 dark:from-blue-900/10 dark:to-indigo-900/10 border-blue-200 dark:border-blue-900/30 hover:border-indigo-300 hover:shadow-blue-200/30 dark:hover:shadow-blue-900/30",
                               )}
                             >
                               <div className="flex justify-between items-start">
                                 <div className="flex items-center gap-1.5">
                                   <span
                                     className={cn(
-                                      "text-[10px] font-bold tracking-widest",
+                                      "text-[10px] font-extrabold tracking-wider",
                                       isCompleted
-                                        ? "text-emerald-500"
+                                        ? "text-emerald-600 dark:text-emerald-400"
                                         : planWarnings[c.id]
-                                          ? "text-amber-600"
-                                          : "text-blue-600/60 dark:text-blue-400/60",
+                                          ? "text-amber-600 dark:text-amber-400"
+                                          : "text-blue-600 dark:text-blue-400",
                                     )}
                                   >
                                     {c.id}
@@ -427,7 +425,7 @@ const PlannerView: React.FC<PlannerViewProps> = ({
                                       return next;
                                     });
                                   }}
-                                  className="min-h-9 min-w-9 sm:min-h-0 sm:min-w-0 p-2 sm:p-1 text-gray-400 dark:text-slate-600 hover:text-red-500 hover:bg-red-50 rounded opacity-100 sm:opacity-0 sm:group-hover/card:opacity-100 transition-all"
+                                  className="min-h-9 min-w-9 sm:min-h-0 sm:min-w-0 p-2 sm:p-1 text-gray-400 dark:text-slate-600 hover:text-red-500 hover:bg-red-50 rounded-lg opacity-100 sm:opacity-0 sm:group-hover/card:opacity-100 transition-all duration-200 hover:scale-110"
                                   title="حذف من الخطة"
                                 >
                                   <Trash2 size={12} />
@@ -435,7 +433,7 @@ const PlannerView: React.FC<PlannerViewProps> = ({
                               </div>
                               <span
                                 className={cn(
-                                  "text-sm font-bold leading-tight mt-1",
+                                  "text-sm font-extrabold leading-tight mt-1",
                                   isCompleted
                                     ? "text-emerald-800 dark:text-emerald-300"
                                     : "text-blue-900 dark:text-blue-100",
@@ -461,7 +459,7 @@ const PlannerView: React.FC<PlannerViewProps> = ({
                               }));
                               setPlanningCourseId(null);
                             }}
-                            className="w-full mt-2 py-3 border-2 border-dashed border-orange-200 text-orange-500 hover:border-orange-400 hover:bg-orange-50 rounded-lg text-sm font-bold transition-colors opacity-100 sm:opacity-0 sm:group-hover:opacity-100"
+                            className="w-full mt-2 py-3 border-2 border-dashed border-orange-300 dark:border-orange-700 text-orange-600 dark:text-orange-400 hover:border-orange-400 dark:hover:border-orange-600 hover:bg-gradient-to-r hover:from-orange-50 hover:to-amber-50 dark:hover:from-orange-950/20 dark:hover:to-amber-950/20 rounded-xl text-sm font-extrabold transition-all duration-200 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 hover:shadow-md"
                           >
                             + أضف{" "}
                             {
@@ -477,7 +475,7 @@ const PlannerView: React.FC<PlannerViewProps> = ({
                               size={24}
                               className="mb-2 opacity-20"
                             />
-                            <p className="text-xs font-medium">
+                            <p className="text-xs font-extrabold">
                               {isPastSem
                                 ? "فصل سابق تم تجاوزه"
                                 : "هذا الفصل فارغ"}

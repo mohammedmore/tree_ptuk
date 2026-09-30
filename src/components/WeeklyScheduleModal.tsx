@@ -74,14 +74,15 @@ export const WeeklyScheduleModal: React.FC<WeeklyScheduleModalProps> = ({
     handleUpdateEntry(courseId, "days", newDays);
   };
 
-  const timeToMinutes = (time: string) => {
-    const [h, m] = time.split(":").map(Number);
-    return h * 60 + m;
+  const timeToMinutes = (time: string | undefined, fallback: number) => {
+    const match = /^([01]\d|2[0-3]):([0-5]\d)$/.exec(time ?? "");
+    if (!match) return fallback;
+    return Number(match[1]) * 60 + Number(match[2]);
   };
 
-  const getPosition = (startTime: string, endTime: string) => {
-    const start = timeToMinutes(startTime);
-    const end = timeToMinutes(endTime);
+  const getPosition = (startTime: string | undefined, endTime: string | undefined) => {
+    const start = timeToMinutes(startTime, 8 * 60);
+    const end = timeToMinutes(endTime, start + 60);
     const gridStart = 8 * 60; // 8:00 AM
     const totalMinutes = 14 * 60; // 14 hours total
 

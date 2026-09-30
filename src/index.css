@@ -1,38 +1,19 @@
-@import url('https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+Arabic:wght@400;500;600;700;800&display=swap');
 @import "tailwindcss";
 
 @theme {
-  --font-sans: "Tajawal", ui-sans-serif, system-ui, -apple-system, sans-serif;
-
-  /* Neutral Theme Colors */
-  --color-bg-light: #F8FAFC;
-  --color-bg-dark: #0F172A;
+  --font-sans: "Noto Sans Arabic", ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --color-brand: #1E40AF;
+  --color-brand-light: #EFF6FF;
+  --color-accent: #3B82F6;
   --color-edge-neutral: #94A3B8;
-  --color-edge-active: #6366F1;
-
-  /* Semantic Status Colors */
-  --color-passed: #10B981;
-  --color-passed-dark: #059669;
-  --color-available: #3B82F6;
-  --color-available-dark: #6366F1;
-  --color-locked: #6B7280;
-  --color-selected: #F59E0B;
+  --color-edge-active: #3B82F6;
 }
 
 @variant dark (&:where(.dark, .dark *));
 
-/* Light Mode Background */
+html,
 body {
-  background-color: var(--color-bg-light);
-}
-
-/* Dark Mode Background */
-.dark body {
-  background-color: var(--color-bg-dark);
-}
-
-/* تحسينات عامة للجوال */
-html, body {
   width: 100%;
   min-height: 100%;
   margin: 0;
@@ -41,45 +22,500 @@ html, body {
   overscroll-behavior: none;
 }
 
+body {
+  background: #F8FAFC;
+  color: #0F172A;
+  font-family: var(--font-sans), sans-serif;
+}
+
 #root {
   width: 100%;
   height: 100dvh;
 }
 
-/* منع تكبير iOS Safari عند التركيز على الحقول (يتطلب حجم خط >= 16px) */
+.app-shell {
+  background: #F8FAFC !important;
+  color: #0F172A;
+}
+
+.app-shell.dark {
+  background: #1E293B !important;
+  color: #e4e9ee;
+}
+
+.app-shell header {
+  background: #fff !important;
+  border: 1px solid #E2E8F0 !important;
+  border-radius: 10px !important;
+  box-shadow: 0 1px 2px rgb(15 23 42 / 6%) !important;
+  backdrop-filter: none !important;
+}
+
+.app-shell.dark header {
+  background: #1E293B !important;
+  border-color: #334155 !important;
+  box-shadow: none !important;
+}
+
+.app-shell h1 {
+  color: #1E40AF;
+}
+
+.app-shell.dark h1 {
+  color: #e4e9ee;
+}
+
+[class*="bg-gradient-to-"],
+[class*="bg-linear-"] {
+  background-image: none !important;
+  background-color: #F1F5F9 !important;
+}
+
+[class*="from-amber-50"],
+[class*="from-amber-100"],
+[class*="from-orange-50"],
+[class*="from-orange-100"] {
+  background-color: #F1F5F9 !important;
+}
+
+[class*="from-emerald-50"],
+[class*="from-emerald-100"],
+[class*="from-green-50"],
+[class*="from-green-100"] {
+  background-color: #F1F5F9 !important;
+}
+
+[class*="from-blue-50"],
+[class*="from-blue-100"],
+[class*="from-indigo-50"],
+[class*="from-indigo-100"],
+[class*="from-cyan-50"],
+[class*="from-cyan-100"],
+[class*="from-violet-50"],
+[class*="from-violet-100"] {
+  background-color: #EFF6FF !important;
+}
+
+[class*="from-gray-50"],
+[class*="from-gray-100"],
+[class*="from-gray-200"],
+[class*="from-slate-50"],
+[class*="from-slate-100"],
+[class*="from-slate-200"] {
+  background-color: #F1F5F9 !important;
+}
+
+.dark [class*="from-amber-"],
+.dark [class*="from-orange-"] {
+  background-color: #334155 !important;
+}
+
+.dark [class*="from-emerald-"],
+.dark [class*="from-green-"] {
+  background-color: #334155 !important;
+}
+
+.dark [class*="from-blue-"],
+.dark [class*="from-indigo-"],
+.dark [class*="from-cyan-"],
+.dark [class*="from-violet-"] {
+  background-color: #334155 !important;
+}
+
+.dark [class*="from-gray-"],
+.dark [class*="from-slate-"] {
+  background-color: #334155 !important;
+}
+
+[class*="from-amber-500"],
+[class*="from-orange-500"],
+[class*="from-orange-600"] {
+  background-color: #1E40AF !important;
+}
+
+[class*="from-emerald-500"],
+[class*="from-green-500"],
+[class*="from-teal-600"],
+[class*="from-blue-500"],
+[class*="from-blue-600"],
+[class*="from-indigo-500"],
+[class*="from-indigo-600"],
+[class*="from-violet-500"],
+[class*="from-cyan-500"] {
+  background-color: #1E40AF !important;
+}
+
+.dark [class*="from-amber-500"],
+.dark [class*="from-orange-500"],
+.dark [class*="from-orange-600"] {
+  background-color: #1E40AF !important;
+}
+
+.dark [class*="from-emerald-500"],
+.dark [class*="from-green-500"],
+.dark [class*="from-teal-600"],
+.dark [class*="from-blue-500"],
+.dark [class*="from-blue-600"],
+.dark [class*="from-indigo-500"],
+.dark [class*="from-indigo-600"],
+.dark [class*="from-violet-500"],
+.dark [class*="from-cyan-500"] {
+  background-color: #1E40AF !important;
+}
+
+[class*="text-amber-"],
+[class*="text-orange-"] {
+  color: #475569 !important;
+}
+
+[class*="text-emerald-"],
+[class*="text-green-"] {
+  color: #475569 !important;
+}
+
+[class*="text-blue-"],
+[class*="text-indigo-"],
+[class*="text-violet-"],
+[class*="text-cyan-"] {
+  color: #1E40AF !important;
+}
+
+[class*="border-amber-"],
+[class*="border-orange-"],
+[class*="border-emerald-"],
+[class*="border-green-"],
+[class*="border-blue-"],
+[class*="border-indigo-"],
+[class*="border-violet-"],
+[class*="border-cyan-"] {
+  border-color: #BFDBFE !important;
+}
+
+.dark [class*="border-amber-"],
+.dark [class*="border-orange-"],
+.dark [class*="border-emerald-"],
+.dark [class*="border-green-"],
+.dark [class*="border-blue-"],
+.dark [class*="border-indigo-"],
+.dark [class*="border-violet-"],
+.dark [class*="border-cyan-"] {
+  border-color: #475569 !important;
+}
+
+.dark [class*="text-amber-"],
+.dark [class*="text-orange-"] {
+  color: #93C5FD !important;
+}
+
+.dark [class*="text-emerald-"],
+.dark [class*="text-green-"] {
+  color: #93C5FD !important;
+}
+
+.dark [class*="text-blue-"],
+.dark [class*="text-indigo-"],
+.dark [class*="text-violet-"],
+.dark [class*="text-cyan-"] {
+  color: #93C5FD !important;
+}
+
+[class*="bg-clip-text"] {
+  background: none !important;
+  color: #1E40AF !important;
+  -webkit-text-fill-color: currentColor !important;
+}
+
+.dark [class*="bg-clip-text"] {
+  color: #e4e9ee !important;
+}
+
+button[class*="bg-gradient-to-"] {
+  background-color: #1E40AF !important;
+  color: #fff !important;
+  border-radius: 7px !important;
+  box-shadow: none !important;
+}
+
+button[class*="bg-gradient-to-"]:hover:not(:disabled) {
+  background-color: #3B82F6 !important;
+}
+
+button:disabled[class*="bg-gradient-to-"] {
+  background-color: #E2E8F0 !important;
+  color: #475569 !important;
+  opacity: 1 !important;
+}
+
+button[class*="bg-gradient-to-"]:not([class*="absolute"]) svg {
+  color: #fff !important;
+}
+
+button[class*="absolute"][class*="bg-gradient-to-"] {
+  background-color: #F1F5F9 !important;
+  color: #475569 !important;
+  border: 1px solid #CBD5E1 !important;
+}
+
+button[class*="absolute"][class*="from-orange-500"] {
+  background-color: #1E40AF !important;
+  color: #fff !important;
+  border-color: #1E40AF !important;
+}
+
+button[class*="absolute"][class*="from-emerald-500"] {
+  background-color: #1E40AF !important;
+  color: #fff !important;
+  border-color: #1E40AF !important;
+}
+
+[class*="backdrop-blur"] {
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+[class*="shadow-"] {
+  box-shadow: 0 1px 2px rgb(15 23 42 / 7%) !important;
+}
+
+.dark [class*="shadow-"] {
+  box-shadow: none !important;
+}
+
+.course-node {
+  background: #fff !important;
+  border: 1px solid #CBD5E1 !important;
+  box-shadow: 0 1px 3px rgb(15 23 42 / 8%) !important;
+}
+
+.course-node-title {
+  color: #0F172A !important;
+}
+
+.course-node-badge {
+  background: #F1F5F9 !important;
+  color: #475569 !important;
+}
+
+.course-node.status-completed {
+  background: #F0FDF4 !important;
+  border-color: #86EFAC !important;
+}
+
+.course-node.status-completed .course-node-badge {
+  background: #DCFCE7 !important;
+  color: #166534 !important;
+}
+
+.course-node.status-available {
+  background: #EFF6FF !important;
+  border-color: #93C5FD !important;
+}
+
+.course-node.status-available .course-node-badge,
+.course-node.status-dependent .course-node-badge {
+  background: #DBEAFE !important;
+  color: #1E40AF !important;
+}
+
+.course-node.status-planned {
+  background: #F5F3FF !important;
+  border-color: #C4B5FD !important;
+}
+
+.course-node.status-planned .course-node-badge {
+  background: #EDE9FE !important;
+  color: #5B21B6 !important;
+}
+
+.course-node.status-selected {
+  background: #EFF6FF !important;
+  border: 2px solid #1E40AF !important;
+  box-shadow: 0 0 0 2px rgb(30 64 175 / 12%) !important;
+}
+
+.course-node.status-prerequisite {
+  background: #F0F9FF !important;
+  border: 2px solid #7DD3FC !important;
+}
+
+.course-node.status-prerequisite .course-node-badge {
+  background: #E0F2FE !important;
+  color: #075985 !important;
+}
+
+.course-node.status-dependent {
+  background: #EFF6FF !important;
+  border: 2px solid #3B82F6 !important;
+}
+
+.course-node.status-locked {
+  background: #F1F5F9 !important;
+  border-color: #CBD5E1 !important;
+  box-shadow: none !important;
+}
+
+.course-node.status-locked .course-node-title,
+.course-node.status-locked .course-node-badge {
+  color: #64748B !important;
+}
+
+.dark .course-node {
+  background: #1E293B !important;
+  border-color: #475569 !important;
+  box-shadow: none !important;
+}
+
+.dark .course-node-title {
+  color: #E2E8F0 !important;
+}
+
+.dark .course-node-badge {
+  background: #334155 !important;
+  color: #CBD5E1 !important;
+}
+
+.dark .course-node.status-completed {
+  background: #183528 !important;
+  border-color: #4ADE80 !important;
+}
+
+.dark .course-node.status-completed .course-node-badge {
+  background: #14532D !important;
+  color: #BBF7D0 !important;
+}
+
+.dark .course-node.status-available,
+.dark .course-node.status-dependent,
+.dark .course-node.status-selected {
+  background: #172B4D !important;
+  border-color: #60A5FA !important;
+}
+
+.dark .course-node.status-available .course-node-badge,
+.dark .course-node.status-dependent .course-node-badge {
+  background: #1E3A5F !important;
+  color: #BFDBFE !important;
+}
+
+.dark .course-node.status-planned {
+  background: #2E2750 !important;
+  border-color: #A78BFA !important;
+}
+
+.dark .course-node.status-planned .course-node-badge {
+  background: #3B2F68 !important;
+  color: #DDD6FE !important;
+}
+
+.dark .course-node.status-prerequisite {
+  background: #123148 !important;
+  border-color: #38BDF8 !important;
+}
+
+.dark .course-node.status-prerequisite .course-node-badge {
+  background: #164E63 !important;
+  color: #CFFAFE !important;
+}
+
+.dark .course-node.status-locked {
+  background: #1E293B !important;
+  border-color: #475569 !important;
+}
+
+.dark .course-node.status-locked .course-node-title,
+.dark .course-node.status-locked .course-node-badge {
+  color: #94A3B8 !important;
+}
+
+[class*="rounded-2xl"],
+[class*="rounded-3xl"] {
+  border-radius: 10px !important;
+}
+
+input,
+select,
+textarea {
+  border-color: #CBD5E1;
+  border-radius: 7px;
+}
+
+.dark input,
+.dark select,
+.dark textarea {
+  border-color: #475569;
+  background-color: #1E293B;
+  color: #e4e9ee;
+}
+
+.react-flow__controls-button {
+  background: #fff !important;
+  color: #0F172A !important;
+  border-bottom: 1px solid #E2E8F0 !important;
+  box-shadow: none !important;
+  backdrop-filter: none !important;
+}
+
+.react-flow__controls-button:hover {
+  background: #F1F5F9 !important;
+  transform: none !important;
+}
+
+.dark .react-flow__controls-button {
+  background: #1E293B !important;
+  color: #e4e9ee !important;
+  border-bottom-color: #475569 !important;
+}
+
+.react-flow__attribution {
+  opacity: 0 !important;
+  pointer-events: none !important;
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #CBD5E1 transparent;
+}
+
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #CBD5E1;
+  border-radius: 6px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #94A3B8;
+}
+
 @media (max-width: 640px) {
   .app-shell {
     padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
   }
 
-  input, select, textarea {
+  input,
+  select,
+  textarea {
     font-size: 16px !important;
   }
 }
 
-@media print {
-  #root {
-    height: auto;
-  }
-}
-
-/* تحسين مساحة اللمس على الأزرار الصغيرة في الجوال */
 @media (hover: none) and (pointer: coarse) {
   button {
     touch-action: manipulation;
   }
 
-  .react-flow__node-courseNode > div {
-    box-shadow: none !important;
-    transition-duration: 0ms !important;
-  }
-
-  .course-list-card {
-    transition: none !important;
-  }
-
+  .react-flow__node-courseNode > div,
+  .course-list-card,
   .course-list-card:hover {
     box-shadow: none !important;
+    transition: none !important;
   }
 
   .react-flow__edge.animated path {
@@ -88,12 +524,15 @@ html, body {
 }
 
 @media print {
+  #root {
+    height: auto;
+  }
+
   @page {
     margin: 15mm;
     size: A4 portrait;
   }
 
-  /* Hide everything except the element we want to print */
   body * {
     visibility: hidden;
   }
@@ -105,103 +544,28 @@ html, body {
 
   #study-plan-printable {
     position: absolute;
-    left: 0;
     top: 0;
+    left: 0;
     width: 100%;
     margin: 0 !important;
     padding: 0 !important;
-    background-color: white !important;
+    background-color: #fff !important;
   }
 
   body,
   html {
-    background-color: white !important;
+    background-color: #fff !important;
     -webkit-print-color-adjust: exact !important;
     print-color-adjust: exact !important;
   }
 
-  /* Ensure rounded corners and colors show up */
   .rounded-\[2rem\],
   .rounded-3xl,
   .rounded-xl {
-    border-radius: 1rem !important;
-    /* Adjust if printer clips */
+    border-radius: 10px !important;
   }
 
-  /* Force page breaks to be clean */
-  .space-y-12>div {
+  .space-y-12 > div {
     page-break-inside: avoid;
   }
-}
-
-/* دعم الوضع المظلم لأدوات تحكم React Flow */
-.dark .react-flow__controls-button {
-  background-color: #1e293b !important;
-  /* slate-800 */
-  color: #f8fafc !important;
-  /* slate-50 */
-  border-bottom: 1px solid #334155 !important;
-  /* slate-700 */
-}
-
-.dark .react-flow__controls-button:hover {
-  background-color: #334155 !important;
-  /* slate-700 */
-}
-
-.dark .react-flow__controls-button svg {
-  fill: currentColor !important;
-}
-
-.dark .react-flow__controls-button:last-child {
-  border-bottom: none !important;
-}
-
-/* إخفاء رابط Attribution بصرياً مع بقاءه برمجياً */
-.react-flow__attribution {
-  opacity: 0 !important;
-  pointer-events: none !important;
-}
-
-/* تخصيص أشرطة التمرير (Scrollbars) لكافة الموقع */
-* {
-  scrollbar-width: thin;
-  scrollbar-color: #cbd5e1 transparent;
-  /* افتراضي للوضع الفاتح */
-}
-
-.dark * {
-  scrollbar-color: #334155 transparent;
-  /* للوضع المظلم */
-}
-
-/* لمحرجات Webkit (Chrome, Safari, Edge) */
-::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
-}
-
-::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-::-webkit-scrollbar-thumb {
-  background-color: #cbd5e1;
-  /* slate-300 */
-  border-radius: 20px;
-}
-
-.dark ::-webkit-scrollbar-thumb {
-  background-color: #334155;
-  /* slate-700 */
-}
-
-::-webkit-scrollbar-thumb:hover {
-  background-color: #94a3b8;
-  /* slate-400 */
-}
-
-.dark ::-webkit-scrollbar-thumb:hover {
-  background-color: #475569;
-  /* slate-600 */
 }

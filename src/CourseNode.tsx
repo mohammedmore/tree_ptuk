@@ -8,49 +8,30 @@ const CourseNode = ({ data, isConnectable }: any) => {
     const { isSelected, isDirectPrereq, isDirectDep, isCompleted, isAvailable, isPlanned, toggleCompleted, showDetails, onPlan, opacity = 1, seasonal, availableSemesters } = data;
     const isLocked = !isCompleted && !isAvailable;
 
-    // Base card design with better spacing
-    let containerClass = "w-64 h-auto bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl p-3 flex flex-col gap-2 shadow-sm relative group transition-all duration-300";
-    let titleClass = "text-[13px] font-bold text-gray-700 dark:text-gray-200 leading-snug text-right line-clamp-2";
-    let badgeBg = "bg-gray-100 dark:bg-slate-700";
-    let badgeText = "text-gray-600 dark:text-slate-300";
-
-    // Semantic Status Colors
-    if (isSelected) {
-        containerClass = "w-64 h-auto bg-white dark:bg-slate-800 border-2 border-amber-500 dark:border-amber-400 rounded-xl p-3 flex flex-col gap-2 shadow-lg scale-105 z-10 relative group transition-all duration-300";
-        titleClass = "text-[13px] font-bold text-gray-900 dark:text-white leading-snug text-right line-clamp-2";
-        badgeBg = "bg-amber-100 dark:bg-amber-900/30";
-        badgeText = "text-amber-700 dark:text-amber-300";
-    } else if (isDirectPrereq) {
-        containerClass = "w-64 h-auto bg-white dark:bg-slate-800 border-2 border-emerald-500 dark:border-emerald-400 rounded-xl p-3 flex flex-col gap-2 shadow-md scale-105 z-10 relative group transition-all duration-300";
-        badgeBg = "bg-emerald-100 dark:bg-emerald-900/30";
-        badgeText = "text-emerald-700 dark:text-emerald-300";
-    } else if (isDirectDep) {
-        containerClass = "w-64 h-auto bg-white dark:bg-slate-800 border-2 border-indigo-500 dark:border-indigo-400 rounded-xl p-3 flex flex-col gap-2 shadow-md scale-105 z-10 relative group transition-all duration-300";
-        badgeBg = "bg-indigo-100 dark:bg-indigo-900/30";
-        badgeText = "text-indigo-700 dark:text-indigo-300";
-    } else if (isCompleted) {
-        containerClass = "w-64 h-auto bg-white dark:bg-slate-800 border-2 border-emerald-500 dark:border-emerald-400 rounded-xl p-3 flex flex-col gap-2 shadow-sm hover:shadow-md cursor-pointer transition-all relative group";
-        badgeBg = "bg-emerald-100 dark:bg-emerald-900/30";
-        badgeText = "text-emerald-700 dark:text-emerald-300";
-    } else if (isPlanned) {
-        containerClass = "w-64 h-auto bg-white dark:bg-slate-800 border-2 border-orange-400 dark:border-orange-400 rounded-xl p-3 flex flex-col gap-2 shadow-sm hover:shadow-md cursor-pointer transition-all relative group";
-        badgeBg = "bg-orange-100 dark:bg-orange-900/30";
-        badgeText = "text-orange-700 dark:text-orange-300";
-    } else if (isAvailable) {
-        containerClass = "w-64 h-auto bg-white dark:bg-slate-800 border-2 border-blue-500 dark:border-blue-400 rounded-xl p-3 flex flex-col gap-2 shadow-sm hover:shadow-md cursor-pointer transition-all relative group";
-        badgeBg = "bg-blue-100 dark:bg-blue-900/30";
-        badgeText = "text-blue-700 dark:text-blue-300";
-    } else if (isLocked) {
-        containerClass = "w-64 h-auto bg-gray-50 dark:bg-slate-800/50 border border-gray-300 dark:border-slate-600 rounded-xl p-3 flex flex-col gap-2 opacity-60 shadow-none relative group transition-all duration-300";
-        badgeBg = "bg-gray-200 dark:bg-slate-700";
-        badgeText = "text-gray-500 dark:text-slate-400";
-    } else if (opacity < 1) {
-        containerClass = "w-64 h-auto bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl p-3 flex flex-col gap-2 opacity-40 shadow-none relative group transition-all duration-300";
-    }
+    const statusClass = isSelected
+        ? "status-selected"
+        : isDirectPrereq
+          ? "status-prerequisite"
+          : isDirectDep
+            ? "status-dependent"
+            : isCompleted
+              ? "status-completed"
+              : isPlanned
+                ? "status-planned"
+                : isAvailable
+                  ? "status-available"
+                  : "status-locked";
+    const containerClass = cn(
+        "course-node w-64 h-auto rounded-xl border p-4 flex flex-col gap-3 relative group transition-colors duration-200",
+        statusClass,
+        isLocked && "opacity-70",
+        opacity < 1 && "opacity-40",
+    );
+    const badgeClass = "course-node-badge px-3 py-1.5 rounded-lg font-mono font-bold text-xs tracking-wider";
 
     return (
         <div
-            className={cn(containerClass, "transition-all duration-300")}
+            className={containerClass}
             dir="rtl"
             onMouseEnter={(e) => data.onHoverStart && data.onHoverStart(e)}
             onMouseMove={(e) => data.onHoverMove && data.onHoverMove(e)}
@@ -63,7 +44,7 @@ const CourseNode = ({ data, isConnectable }: any) => {
                     e.stopPropagation();
                     if (showDetails) showDetails();
                 }}
-                className="absolute top-3 right-3 w-6 h-6 rounded flex items-center justify-center bg-gray-50 dark:bg-slate-700 text-gray-400 hover:text-blue-500 dark:text-slate-400 dark:hover:text-blue-400 border border-gray-200 dark:border-slate-600 transition-colors z-20"
+                className="absolute top-3 right-3 w-7 h-7 rounded-xl flex items-center justify-center bg-gradient-to-br from-gray-100 to-gray-200 dark:from-slate-700 dark:to-slate-800 text-gray-500 hover:text-blue-600 dark:text-slate-400 dark:hover:text-blue-400 border border-gray-200 dark:border-slate-600 transition-all duration-200 hover:scale-110 hover:shadow-md z-20"
                 title="عرض التفاصيل والمعلومات"
             >
                 <Info size={14} />
@@ -75,8 +56,10 @@ const CourseNode = ({ data, isConnectable }: any) => {
                     if (onPlan) onPlan();
                 }}
                 className={cn(
-                    "absolute top-3 left-12 w-6 h-6 rounded flex items-center justify-center transition-colors z-20 border",
-                    isPlanned ? "bg-orange-500 text-white border-none" : "bg-gray-50 dark:bg-slate-700 text-gray-400 hover:text-orange-500 dark:border-slate-600"
+                    "absolute top-3 left-12 w-7 h-7 rounded-xl flex items-center justify-center transition-all duration-200 hover:scale-110 hover:shadow-md z-20 border",
+                    isPlanned 
+                        ? "bg-gradient-to-br from-orange-500 to-orange-600 text-white border-none shadow-lg shadow-orange-200/50 dark:shadow-orange-900/30" 
+                        : "bg-gradient-to-br from-gray-100 to-gray-200 dark:from-slate-700 dark:to-slate-800 text-gray-500 hover:text-orange-600 dark:text-slate-400 dark:hover:text-orange-400 border-gray-200 dark:border-slate-600"
                 )}
                 title="جدولة المساق في الخطة"
             >
@@ -86,8 +69,12 @@ const CourseNode = ({ data, isConnectable }: any) => {
             <button
                 onClick={(e) => { e.stopPropagation(); if (toggleCompleted) toggleCompleted(); }}
                 className={cn(
-                    "absolute top-3 left-3 w-6 h-6 rounded flex items-center justify-center transition-colors z-20",
-                    isCompleted ? "bg-emerald-500 border-none text-white" : isLocked ? "bg-gray-100 text-gray-400 cursor-not-allowed" : "bg-white border border-gray-300 hover:border-emerald-400",
+                    "absolute top-3 left-3 w-7 h-7 rounded-xl flex items-center justify-center transition-all duration-200 hover:scale-110 hover:shadow-md z-20",
+                    isCompleted 
+                        ? "bg-gradient-to-br from-emerald-500 to-emerald-600 text-white border-none shadow-lg shadow-emerald-200/50 dark:shadow-emerald-900/30" 
+                        : isLocked 
+                            ? "bg-gradient-to-br from-gray-200 to-gray-300 dark:from-slate-700 dark:to-slate-800 text-gray-400 cursor-not-allowed border border-gray-300 dark:border-slate-600" 
+                            : "bg-gradient-to-br from-white to-gray-50 dark:from-slate-800 dark:to-slate-700 border border-gray-300 dark:border-slate-600 text-gray-500 hover:border-emerald-400 hover:text-emerald-600 dark:text-slate-400 dark:hover:border-emerald-500 dark:hover:text-emerald-400"
                 )}
                 title={isCompleted ? "تحديد كغير منجز" : isLocked ? "مغلقة" : "تحديد كمنجز"}
             >
@@ -96,36 +83,28 @@ const CourseNode = ({ data, isConnectable }: any) => {
             </button>
 
             {/* Course Code Badge */}
-            <div className={cn(
-                "px-2.5 py-1 rounded-lg font-mono font-bold text-xs tracking-wider",
-                badgeBg,
-                badgeText
-            )}>
+            <div className={badgeClass}>
                 {data.id}
             </div>
 
             {/* Course Name */}
-            <div className={titleClass}>{data.label}</div>
+            <div className="course-node-title text-[13px] font-bold leading-snug text-right line-clamp-2">{data.label}</div>
 
             {/* Credits and Info */}
             <div className="flex items-center justify-between gap-2">
-                <div className={cn(
-                    "px-2 py-0.5 rounded text-xs font-bold",
-                    badgeBg,
-                    badgeText
-                )}>
+                <div className="course-node-badge px-2.5 py-1 rounded-md text-xs font-bold">
                     {data.credits} ساعة
                 </div>
                 {availableSemesters && availableSemesters.length > 0 && (
-                    <div className="flex items-center gap-1 text-[10px] text-gray-500 dark:text-slate-400">
+                    <div className="flex items-center gap-1 text-[10px] text-gray-500 dark:text-slate-400 font-semibold">
                         <CalendarDays size={11} />
-                        <span className="font-semibold">{formatOfferings(availableSemesters)}</span>
+                        <span>{formatOfferings(availableSemesters)}</span>
                     </div>
                 )}
                 {seasonal && !availableSemesters && (
-                    <div className="flex items-center gap-1 text-[10px] text-gray-500 dark:text-slate-400">
+                    <div className="flex items-center gap-1 text-[10px] text-gray-500 dark:text-slate-400 font-semibold">
                         <Snowflake size={11} />
-                        <span className="font-semibold">
+                        <span>
                             {seasonal === 'first' ? 'الفصل الأول فقط' : seasonal === 'second' ? 'الفصل الثاني فقط' : 'كل الفصول'}
                         </span>
                     </div>

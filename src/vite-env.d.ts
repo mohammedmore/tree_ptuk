@@ -7,9 +7,3 @@ interface ImportMetaEnv {
   readonly NEXT_PUBLIC_SUPABASE_ANON_KEY?: string;
   readonly SUPABASE_PUBLISHABLE_KEY?: string;
 }
-
-interface Window {
-  supabase?: {
-    createClient: (url: string, anonKey: string) => import("./sharedSchedules").SupabaseClient;
-  };
-}

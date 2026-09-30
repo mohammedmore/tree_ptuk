@@ -231,6 +231,7 @@ interface SharedSchedulePreviewProps {
   code: string | null;
   warning?: string;
   onClose: () => void;
+  onApply: () => void;
 }
 
 export const SharedSchedulePreviewModal: React.FC<SharedSchedulePreviewProps> = ({
@@ -238,6 +239,7 @@ export const SharedSchedulePreviewModal: React.FC<SharedSchedulePreviewProps> = 
   code,
   warning,
   onClose,
+  onApply,
 }) => {
   const gradedCourses = schedule?.courses.filter((course) => {
     const grade = course.grade ?? schedule.courseGrades?.[course.courseCode];
@@ -352,12 +354,20 @@ export const SharedSchedulePreviewModal: React.FC<SharedSchedulePreviewProps> = 
               {" · "}المظهر: {schedule.preferences.darkMode ? "داكن" : "فاتح"}
             </div>
           )}
-          <button
-            onClick={onClose}
-            className="flex w-full items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-3 font-black text-white"
-          >
-            <X size={17} /> إغلاق
-          </button>
+          <div className="flex flex-col-reverse gap-2 sm:flex-row">
+            <button
+              onClick={onClose}
+              className="flex flex-1 items-center justify-center gap-2 rounded-xl border border-gray-300 px-4 py-3 font-black text-gray-700 dark:border-slate-600 dark:text-slate-200"
+            >
+              <X size={17} /> إغلاق
+            </button>
+            <button
+              onClick={onApply}
+              className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-3 font-black text-white hover:bg-blue-700"
+            >
+              استبدال خطتي بهذه الخطة
+            </button>
+          </div>
         </div>
       )}
     </BaseModal>
