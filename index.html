@@ -1,20 +1,156 @@
 <!doctype html>
 <html lang="ar" dir="rtl">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, viewport-fit=cover"
+    />
+    <meta
+      name="description"
+      content="خريطة أكاديمية تفاعلية لمتطلبات تخصص هندسة أنظمة الحاسوب في جامعة فلسطين التقنية - خضوري، تساعدك على متابعة إنجاز المواد والتخطيط للفصول."
+    />
+    <meta name="theme-color" content="#0A1128" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta
+      name="apple-mobile-web-app-status-bar-style"
+      content="black-translucent"
+    />
+    <script>
+      (() => {
+        const root = document.documentElement;
+        const presets = {
+          "warm-alabaster": ["#FAF8F5", "#FFFFFF", "#1E293B", "#0284C7"],
+          "toasted-mocha": ["#241E1C", "#332B28", "#F5EBE6", "#D97706"],
+          "pure-onyx": ["#000000", "#0D0D0D", "#EDEDED", "#3B82F6"],
+          "cyber-pulse": ["#080711", "#120F24", "#FDFEFE", "#00F0FF"],
+          "academic-sapphire": ["#0A1128", "#121D3D", "#F0F4FF", "#4F46E5"],
+        };
+        const validLegacyThemes = [
+          "warm-ivory",
+          "deep-navy",
+          "slate-indigo",
+          "deep-forest",
+          "cyber-violet",
+          "tokyo-cyberpunk",
+          "liquid-amber",
+          "swiss-luxury",
+          "bioluminescent-abyss",
+        ];
+        const tokenProperties = [
+          "--bg-canvas",
+          "--surface-card",
+          "--text-main",
+          "--accent-primary",
+        ];
+        const isHex = (value) =>
+          typeof value === "string" && /^#[\da-f]{6}$/i.test(value);
+        let theme = null;
+        let customTokens = null;
 
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-  <meta name="description" content="خريطة أكاديمية تفاعلية لمتطلبات تخصص هندسة أنظمة الحاسوب في جامعة فلسطين التقنية - خضوري، تساعدك على متابعة إنجاز المواد والتخطيط للفصول." />
-  <meta name="theme-color" content="#F8FAFC" />
-  <meta name="mobile-web-app-capable" content="yes" />
-  <meta name="apple-mobile-web-app-capable" content="yes" />
-  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-  <title>خريطة المتطلبات الأكاديمية | جامعة فلسطين التقنية - خضوري</title>
-</head>
+        try {
+          const activeType = localStorage.getItem("active_theme_type");
+          const activePreset = localStorage.getItem("active_preset_name");
+          const savedTheme = localStorage.getItem("planner_theme");
+          const legacyDarkMode = localStorage.getItem("dark_mode");
+          if (activeType === "custom") {
+            let parsed = null;
+            try {
+              parsed = JSON.parse(
+                localStorage.getItem("active_custom_tokens") || "null",
+              );
+            } catch (error) {
+              console.error("Unable to parse saved custom theme", error);
+            }
+            if (
+              parsed &&
+              isHex(parsed.bgCanvas) &&
+              isHex(parsed.surfaceCard) &&
+              isHex(parsed.textMain) &&
+              isHex(parsed.accentPrimary)
+            ) {
+              theme = "custom";
+              customTokens = parsed;
+            }
+          }
+          if (theme === "custom") {
+            // The custom palette was validated above.
+          } else if (
+            activeType === "preset" &&
+            (Object.hasOwn(presets, activePreset) ||
+              validLegacyThemes.includes(activePreset))
+          ) {
+            theme = activePreset;
+          } else if (
+            Object.hasOwn(presets, savedTheme) ||
+            validLegacyThemes.includes(savedTheme)
+          ) {
+            theme = savedTheme;
+          } else if (legacyDarkMode === "true") {
+            theme = "deep-navy";
+          } else if (legacyDarkMode === "false") {
+            theme = "warm-ivory";
+          }
+        } catch (error) {
+          console.error("Unable to read saved theme preference", error);
+        }
 
-<body>
-  <div id="root"></div>
-  <script type="module" src="/src/main.tsx"></script>
-</body>
+        theme ??= window.matchMedia("(prefers-color-scheme: dark)").matches
+          ? "academic-sapphire"
+          : "warm-alabaster";
+        root.dataset.theme = theme;
+        if (customTokens) {
+          const values = [
+            customTokens.bgCanvas,
+            customTokens.surfaceCard,
+            customTokens.textMain,
+            customTokens.accentPrimary,
+          ];
+          values.forEach((value, index) =>
+            root.style.setProperty(tokenProperties[index], value),
+          );
+          const channels = customTokens.bgCanvas
+            .slice(1)
+            .match(/.{2}/g)
+            .map((part) => parseInt(part, 16) / 255);
+          const linear = channels.map((part) =>
+            part <= 0.04045 ? part / 12.92 : ((part + 0.055) / 1.055) ** 2.4,
+          );
+          root.dataset.colorScheme =
+            0.2126 * linear[0] + 0.7152 * linear[1] + 0.0722 * linear[2] < 0.35
+              ? "dark"
+              : "light";
+        }
+        const isDark =
+          theme === "custom"
+            ? root.dataset.colorScheme === "dark"
+            : [
+                "toasted-mocha",
+                "pure-onyx",
+                "cyber-pulse",
+                "academic-sapphire",
+                "deep-navy",
+                "deep-forest",
+                "cyber-violet",
+                "tokyo-cyberpunk",
+                "liquid-amber",
+                "bioluminescent-abyss",
+              ].includes(theme);
+        root.classList.toggle("dark", isDark);
+        document
+          .querySelector('meta[name="theme-color"]')
+          ?.setAttribute(
+            "content",
+            customTokens?.bgCanvas || presets[theme]?.[0] || "#0A1128",
+          );
+      })();
+    </script>
+    <title>خريطة المتطلبات الأكاديمية | جامعة فلسطين التقنية - خضوري</title>
+  </head>
 
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
 </html>

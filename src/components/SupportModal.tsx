@@ -24,15 +24,19 @@ const SupportModal: React.FC<SupportModalProps> = ({
       width: 250,
       margin: 1,
       errorCorrectionLevel: "M",
-    }).then((dataUrl) => {
-      if (!cancelled) setQrImage(dataUrl);
-    }).catch((error: unknown) => {
-      if (!cancelled) {
-        console.error("Unable to generate WhatsApp support QR code", error);
-        setQrImage(null);
-        setQrError("تعذر إنشاء الرمز. يمكنك بدء المحادثة من رابط واتساب أعلاه.");
-      }
-    });
+    })
+      .then((dataUrl) => {
+        if (!cancelled) setQrImage(dataUrl);
+      })
+      .catch((error: unknown) => {
+        if (!cancelled) {
+          console.error("Unable to generate WhatsApp support QR code", error);
+          setQrImage(null);
+          setQrError(
+            "تعذر إنشاء الرمز. يمكنك بدء المحادثة من رابط واتساب أعلاه.",
+          );
+        }
+      });
 
     return () => {
       cancelled = true;
@@ -47,7 +51,10 @@ const SupportModal: React.FC<SupportModalProps> = ({
       maxWidth="max-w-lg"
       className="rounded-3xl"
     >
-      <div className="p-6 sm:p-8 flex flex-col gap-5 text-right font-sans" dir="rtl">
+      <div
+        className="p-6 sm:p-8 flex flex-col gap-5 text-right font-sans"
+        dir="rtl"
+      >
         <button
           type="button"
           onClick={onClose}
@@ -80,10 +87,9 @@ const SupportModal: React.FC<SupportModalProps> = ({
         </div>
 
         <p className="text-xs text-gray-600 dark:text-slate-300 leading-relaxed font-semibold bg-gray-50 dark:bg-slate-950/40 p-4 rounded-2xl border border-gray-100 dark:border-slate-850 text-right">
-          إذا واجهتك أي مشكلة تقنية أثناء استخدام الخريطة الأكاديمية، أو
-          رغبت في رفع اقتراح لتطوير الموقع وتحسين تجربة الطلاب، يسعدنا
-          تواصلك المباشر مع مطور الموقع <strong>(محمد حدرب)</strong> عبر
-          الخيارات المتاحة أدناه:
+          إذا واجهتك أي مشكلة تقنية أثناء استخدام الخريطة الأكاديمية، أو رغبت في
+          رفع اقتراح لتطوير الموقع وتحسين تجربة الطلاب، يسعدنا تواصلك المباشر مع
+          مطور الموقع <strong>(محمد حدرب)</strong> عبر الخيارات المتاحة أدناه:
         </p>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -112,7 +118,8 @@ const SupportModal: React.FC<SupportModalProps> = ({
                 مطور الخريطة
               </h4>
               <p className="text-[10px] text-gray-400 dark:text-slate-500 font-bold mt-0.5">
-                @mhmd.hdrb.2025</p>
+                @mhmd.hdrb.2025
+              </p>
             </div>
             <span className="text-[11px] font-black text-blue-600 dark:text-blue-400 flex items-center gap-1 mt-2">
               زيارة الملف الشخصي ←
@@ -166,7 +173,6 @@ const SupportModal: React.FC<SupportModalProps> = ({
             <div className="w-12 h-12 bg-black rounded-full border-4 border-white flex items-center justify-center absolute -top-6 left-1/2 -translate-x-1/2 shadow-inner">
               <span className="text-white text-base font-black">M</span>
             </div>
-
             {/* White card sub-container */}
             <div className="bg-white rounded-2xl w-full p-5 mt-4 shadow-md flex flex-col items-center">
               <h4 className="text-gray-900 font-bold text-sm tracking-wide">
@@ -185,7 +191,10 @@ const SupportModal: React.FC<SupportModalProps> = ({
                     className="w-40 h-40 object-contain transition-transform group-hover:scale-105 duration-200"
                   />
                 ) : (
-                  <div role="status" className="w-40 h-40 flex items-center justify-center px-3 text-xs font-bold text-gray-600">
+                  <div
+                    role="status"
+                    className="w-40 h-40 flex items-center justify-center px-3 text-xs font-bold text-gray-600"
+                  >
                     {qrError ?? "جارٍ إنشاء رمز واتساب..."}
                   </div>
                 )}
@@ -206,8 +215,8 @@ const SupportModal: React.FC<SupportModalProps> = ({
                   </svg>
                 </div>
               </div>
-            </div> {/* This is the missing closing div for "White card sub-container" */}
-
+            </div>{" "}
+            {/* This is the missing closing div for "White card sub-container" */}
             {/* Subtitle bottom text */}
             <p className="text-white text-[10px] font-bold text-center leading-relaxed mt-4 px-2 w-full">
               Scan this code using the WhatsApp camera to get my number

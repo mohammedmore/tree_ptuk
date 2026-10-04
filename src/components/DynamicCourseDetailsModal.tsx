@@ -19,7 +19,9 @@ interface DynamicCourseDetailsModalProps {
   setPlannerSelectedCourse: (course: Course | null) => void;
   completedCourses: Set<string>;
   plannedCourses: Record<string, string>;
-  setPlannedCourses: React.Dispatch<React.SetStateAction<Record<string, string>>>;
+  setPlannedCourses: React.Dispatch<
+    React.SetStateAction<Record<string, string>>
+  >;
   isRescheduling: boolean;
   setIsRescheduling: React.Dispatch<React.SetStateAction<boolean>>;
   planStartSemester: string;
@@ -57,7 +59,12 @@ const DynamicCourseDetailsModal: React.FC<DynamicCourseDetailsModalProps> = ({
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [isPlannerOpen, plannerSelectedCourse, setPlannerSelectedCourse, setIsRescheduling]);
+  }, [
+    isPlannerOpen,
+    plannerSelectedCourse,
+    setPlannerSelectedCourse,
+    setIsRescheduling,
+  ]);
 
   if (!isPlannerOpen || !plannerSelectedCourse) return null;
 
@@ -75,7 +82,8 @@ const DynamicCourseDetailsModal: React.FC<DynamicCourseDetailsModalProps> = ({
   const foundPlanStartIdx = SEMESTERS.indexOf(planStartSemester);
   const foundPlanEndIdx = SEMESTERS.indexOf(planEndSemester);
   const planStartIdx = foundPlanStartIdx >= 0 ? foundPlanStartIdx : 0;
-  const planEndIdx = foundPlanEndIdx >= 0 ? foundPlanEndIdx : SEMESTERS.length - 1;
+  const planEndIdx =
+    foundPlanEndIdx >= 0 ? foundPlanEndIdx : SEMESTERS.length - 1;
 
   // Active uncompleted prerequisites sems:
   const activePrereqs = prerequisites.filter(
@@ -180,14 +188,19 @@ const DynamicCourseDetailsModal: React.FC<DynamicCourseDetailsModalProps> = ({
               🔥 درجة الصعوبة: {details.difficulty}/10
             </span>
           </div>
-          <h3 id="planner-course-details-title" className="text-xl font-black text-gray-950 dark:text-slate-100 leading-tight text-right">
+          <h3
+            id="planner-course-details-title"
+            className="text-xl font-black text-gray-950 dark:text-slate-100 leading-tight text-right"
+          >
             {plannerSelectedCourse.name}
           </h3>
           <div
             className="mt-2 flex items-center justify-end gap-1"
             aria-label={`درجة صعوبة المادة ${details.difficulty} من 10`}
           >
-            <span className="text-[10px] font-bold text-gray-400 ml-1">مؤشر الصعوبة:</span>
+            <span className="text-[10px] font-bold text-gray-400 ml-1">
+              مؤشر الصعوبة:
+            </span>
             {[1, 2, 3, 4, 5].map((star) => (
               <span
                 key={star}
@@ -196,7 +209,7 @@ const DynamicCourseDetailsModal: React.FC<DynamicCourseDetailsModalProps> = ({
                   "w-6 h-6 rounded-md text-[10px] font-black flex items-center justify-center",
                   details.difficulty >= star * 2
                     ? "bg-amber-100 text-amber-600 border border-amber-200"
-                    : "bg-gray-50 text-gray-300 border border-gray-100"
+                    : "bg-gray-50 text-gray-300 border border-gray-100",
                 )}
               >
                 ★
@@ -214,8 +227,13 @@ const DynamicCourseDetailsModal: React.FC<DynamicCourseDetailsModalProps> = ({
         {plannerSelectedCourse.availableSemesters && (
           <div className="bg-purple-50 dark:bg-purple-950/30 border border-purple-200 dark:border-purple-800 rounded-xl p-3 text-right">
             <div className="flex items-center gap-2 mb-2">
-              <CalendarDays size={14} className="text-purple-600 dark:text-purple-400" />
-              <h4 className="text-xs font-black text-purple-600 dark:text-purple-400">فترات طرح المساق</h4>
+              <CalendarDays
+                size={14}
+                className="text-purple-600 dark:text-purple-400"
+              />
+              <h4 className="text-xs font-black text-purple-600 dark:text-purple-400">
+                فترات طرح المساق
+              </h4>
             </div>
             <p className="text-xs text-purple-900 dark:text-purple-200 font-semibold">
               {formatOfferings(plannerSelectedCourse.availableSemesters)}
@@ -282,22 +300,21 @@ const DynamicCourseDetailsModal: React.FC<DynamicCourseDetailsModalProps> = ({
               >
                 {details.criticality === "high" ? (
                   <span>
-                    ⚠️ <strong>مادة ضمن السلسلة الحرجة!</strong> تأجيل
-                    هذه المادة أو نقلها لفصل متأخر جداً قد يعطل تخريجك
-                    فوراً لأنها متطلب سابق لـ {dependentCourses.length}{" "}
-                    مساقات تالية. يرجى محاولة حجزها في أقرب وقت.
+                    ⚠️ <strong>مادة ضمن السلسلة الحرجة!</strong> تأجيل هذه
+                    المادة أو نقلها لفصل متأخر جداً قد يعطل تخريجك فوراً لأنها
+                    متطلب سابق لـ {dependentCourses.length} مساقات تالية. يرجى
+                    محاولة حجزها في أقرب وقت.
                   </span>
                 ) : details.criticality === "medium" ? (
                   <span>
-                    👍 <strong>مساق متوسط الأهمية:</strong> يفتح مساقاً
-                    تالياً واحداً. ننصح بتوزيعه بعناية دون تركه للفصول
-                    النهائية.
+                    👍 <strong>مساق متوسط الأهمية:</strong> يفتح مساقاً تالياً
+                    واحداً. ننصح بتوزيعه بعناية دون تركه للفصول النهائية.
                   </span>
                 ) : (
                   <span>
-                    ✨ <strong>مادة مرنة ولطيفة:</strong> ليس لها
-                    متطلبات لاحقة! تستطيع نقلها، تأجيلها، أو حجزها في أي
-                    فصل صيفي لرفع العبء الدراسي دون القلق من حدوث Block.
+                    ✨ <strong>مادة مرنة ولطيفة:</strong> ليس لها متطلبات لاحقة!
+                    تستطيع نقلها، تأجيلها، أو حجزها في أي فصل صيفي لرفع العبء
+                    الدراسي دون القلق من حدوث Block.
                   </span>
                 )}
               </div>
@@ -308,8 +325,8 @@ const DynamicCourseDetailsModal: React.FC<DynamicCourseDetailsModalProps> = ({
 
               {validSemesters.length === 0 ? (
                 <div className="p-2.5 bg-red-55 bg-rose-50/50 dark:bg-rose-950/20 border border-rose-200 dark:border-rose-900/50 text-rose-950 dark:text-rose-200 rounded-xl text-xs font-bold leading-relaxed">
-                  🚨 عذراً، لا تتوفر فصول بديلة ضمن نطاق خطتك دون التسبب
-                  بتأخير! هذه المادة محصورة تماماً:
+                  🚨 عذراً، لا تتوفر فصول بديلة ضمن نطاق خطتك دون التسبب بتأخير!
+                  هذه المادة محصورة تماماً:
                   {prereqsWithSem.length > 0 && (
                     <div className="mt-1 text-[11px] text-rose-900 dark:text-rose-400">
                       • يجب أن تُؤخذ بعد متطلبها السابق المجدول:{" "}
@@ -331,8 +348,7 @@ const DynamicCourseDetailsModal: React.FC<DynamicCourseDetailsModalProps> = ({
                 <div className="max-h-[140px] overflow-y-auto border border-gray-150 dark:border-slate-800 rounded-lg divide-y divide-gray-100 dark:divide-slate-800 bg-white dark:bg-slate-900 shadow-inner">
                   {validSemesters.map((semName) => {
                     const isCurrent =
-                      plannedCourses[plannerSelectedCourse.id] ===
-                      semName;
+                      plannedCourses[plannerSelectedCourse.id] === semName;
                     return (
                       <button
                         key={semName}
@@ -382,9 +398,7 @@ const DynamicCourseDetailsModal: React.FC<DynamicCourseDetailsModalProps> = ({
             {prerequisites.length > 0 ? (
               <div className="flex flex-col gap-0.5">
                 {prerequisites.map((preId) => {
-                  const preName =
-                    coursesById.get(preId)?.name ||
-                    preId;
+                  const preName = coursesById.get(preId)?.name || preId;
                   return (
                     <span
                       key={preId}
@@ -394,8 +408,7 @@ const DynamicCourseDetailsModal: React.FC<DynamicCourseDetailsModalProps> = ({
                           : "text-gray-550 dark:text-slate-400 font-bold text-right"
                       }
                     >
-                      {completedCourses.has(preId) ? "✓" : "○"}{" "}
-                      {preName}
+                      {completedCourses.has(preId) ? "✓" : "○"} {preName}
                     </span>
                   );
                 })}
@@ -438,7 +451,9 @@ const DynamicCourseDetailsModal: React.FC<DynamicCourseDetailsModalProps> = ({
         <div className="border-t border-gray-100 dark:border-slate-800 pt-3 flex gap-2">
           <button
             type="button"
-            aria-label={isComp ? "إلغاء تحديد المادة كمكتملة" : "تحديد المادة كمكتملة"}
+            aria-label={
+              isComp ? "إلغاء تحديد المادة كمكتملة" : "تحديد المادة كمكتملة"
+            }
             onClick={() => {
               toggleCourseCompletion(plannerSelectedCourse.id);
             }}

@@ -6,7 +6,10 @@ import {
   serializeAppStorageValue,
 } from "../src/appStorage";
 
-function withLocalStorage<T>(getItem: (key: string) => string | null, run: () => T): T {
+function withLocalStorage<T>(
+  getItem: (key: string) => string | null,
+  run: () => T,
+): T {
   const originalWindow = Object.getOwnPropertyDescriptor(globalThis, "window");
   Object.defineProperty(globalThis, "window", {
     configurable: true,
@@ -16,14 +19,19 @@ function withLocalStorage<T>(getItem: (key: string) => string | null, run: () =>
   try {
     return run();
   } finally {
-    if (originalWindow) Object.defineProperty(globalThis, "window", originalWindow);
+    if (originalWindow)
+      Object.defineProperty(globalThis, "window", originalWindow);
     else Reflect.deleteProperty(globalThis, "window");
   }
 }
 
 test("normalizes legacy completed-course arrays as sets", () => {
   assert.deepEqual(
-    normalizeAppStorageValue("completed_courses", ["12140101"], new Set<string>()),
+    normalizeAppStorageValue(
+      "completed_courses",
+      ["12140101"],
+      new Set<string>(),
+    ),
     new Set(["12140101"]),
   );
 });
@@ -58,7 +66,10 @@ test("fills missing legacy schedule times with safe defaults", () => {
 });
 
 test("rejects grades outside the supported range", () => {
-  assert.equal(normalizeAppStorageValue("course_grades", { course: 150 }, {}), null);
+  assert.equal(
+    normalizeAppStorageValue("course_grades", { course: 150 }, {}),
+    null,
+  );
 });
 
 test("rejects malformed weekly schedule values instead of replacing or filtering them", () => {
@@ -76,7 +87,11 @@ test("rejects malformed weekly schedule values instead of replacing or filtering
 
   for (const entry of invalidEntries) {
     assert.equal(
-      normalizeAppStorageValue("weekly_schedule", { [semester]: { course: entry } }, {}),
+      normalizeAppStorageValue(
+        "weekly_schedule",
+        { [semester]: { course: entry } },
+        {},
+      ),
       null,
       `expected invalid schedule entry ${JSON.stringify(entry)} to be rejected`,
     );
@@ -127,11 +142,12 @@ test("rejects unsupported storage schema versions and reports the issue", () => 
   const issues: string[] = [];
   const value = withLocalStorage(
     () => JSON.stringify({ schemaVersion: 2, value: ["12140101"] }),
-    () => readAppStorageValue(
-      "completed_courses",
-      new Set(["existing"]),
-      (message) => issues.push(message),
-    ),
+    () =>
+      readAppStorageValue(
+        "completed_courses",
+        new Set(["existing"]),
+        (message) => issues.push(message),
+      ),
   );
 
   assert.deepEqual(value, new Set(["existing"]));

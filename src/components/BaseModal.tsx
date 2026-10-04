@@ -30,15 +30,20 @@ const ModalContent: React.FC<Omit<BaseModalProps, "isOpen">> = ({
 
   useEffect(() => {
     const previouslyFocused = document.activeElement;
-    if (openModalCount === 0) bodyOverflowBeforeModal = document.body.style.overflow;
+    if (openModalCount === 0)
+      bodyOverflowBeforeModal = document.body.style.overflow;
     openModalCount += 1;
     document.body.style.overflow = "hidden";
     (closeButtonRef.current ?? dialogRef.current)?.focus();
 
     return () => {
       openModalCount -= 1;
-      if (openModalCount === 0) document.body.style.overflow = bodyOverflowBeforeModal;
-      if (previouslyFocused instanceof HTMLElement && previouslyFocused.isConnected) {
+      if (openModalCount === 0)
+        document.body.style.overflow = bodyOverflowBeforeModal;
+      if (
+        previouslyFocused instanceof HTMLElement &&
+        previouslyFocused.isConnected
+      ) {
         previouslyFocused.focus();
       }
     };
@@ -47,7 +52,8 @@ const ModalContent: React.FC<Omit<BaseModalProps, "isOpen">> = ({
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       const dialog = dialogRef.current;
-      const dialogs = document.querySelectorAll<HTMLElement>("[data-base-modal]");
+      const dialogs =
+        document.querySelectorAll<HTMLElement>("[data-base-modal]");
       if (!dialog || dialogs[dialogs.length - 1] !== dialog) return;
 
       if (event.key === "Escape") {
@@ -71,10 +77,18 @@ const ModalContent: React.FC<Omit<BaseModalProps, "isOpen">> = ({
 
       const firstElement = focusableElements[0];
       const lastElement = focusableElements[focusableElements.length - 1];
-      if (event.shiftKey && (document.activeElement === firstElement || !dialog.contains(document.activeElement))) {
+      if (
+        event.shiftKey &&
+        (document.activeElement === firstElement ||
+          !dialog.contains(document.activeElement))
+      ) {
         event.preventDefault();
         lastElement.focus();
-      } else if (!event.shiftKey && (document.activeElement === lastElement || !dialog.contains(document.activeElement))) {
+      } else if (
+        !event.shiftKey &&
+        (document.activeElement === lastElement ||
+          !dialog.contains(document.activeElement))
+      ) {
         event.preventDefault();
         firstElement.focus();
       }
@@ -97,18 +111,27 @@ const ModalContent: React.FC<Omit<BaseModalProps, "isOpen">> = ({
         role="dialog"
         aria-modal="true"
         aria-labelledby={title ? titleId : undefined}
-        aria-label={title ? undefined : ariaLabel ?? "نافذة حوارية"}
+        aria-label={title ? undefined : (ariaLabel ?? "نافذة حوارية")}
         tabIndex={-1}
         initial={{ opacity: 0, scale: 0.95, y: 20 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
         exit={{ opacity: 0, scale: 0.95, y: 20 }}
         transition={{ duration: 0.3, ease: "easeOut" }}
         onClick={(event) => event.stopPropagation()}
-        className={cn("bg-white dark:bg-slate-900 rounded-xl sm:rounded-2xl shadow-xl shadow-slate-900/15 dark:shadow-black/30 relative overflow-hidden border border-slate-200 dark:border-slate-700 flex flex-col max-h-[calc(100dvh-1rem)] sm:max-h-[90vh] w-full", maxWidth, className)}
+        className={cn(
+          "bg-white dark:bg-slate-900 rounded-xl sm:rounded-2xl shadow-xl shadow-slate-900/15 dark:shadow-black/30 relative overflow-hidden border border-slate-200 dark:border-slate-700 flex flex-col max-h-[calc(100dvh-1rem)] sm:max-h-[90vh] w-full",
+          maxWidth,
+          className,
+        )}
       >
         {title && (
           <div className="p-4 sm:p-6 border-b border-slate-200 dark:border-slate-700 flex justify-between items-center bg-slate-50 dark:bg-slate-800/60 shrink-0">
-            <h2 id={titleId} className="text-lg sm:text-xl font-bold text-slate-900 dark:text-slate-100">{title}</h2>
+            <h2
+              id={titleId}
+              className="text-lg sm:text-xl font-bold text-slate-900 dark:text-slate-100"
+            >
+              {title}
+            </h2>
             <button
               ref={closeButtonRef}
               type="button"
@@ -127,7 +150,5 @@ const ModalContent: React.FC<Omit<BaseModalProps, "isOpen">> = ({
 };
 
 export const BaseModal: React.FC<BaseModalProps> = ({ isOpen, ...props }) => (
-  <AnimatePresence>
-    {isOpen && <ModalContent {...props} />}
-  </AnimatePresence>
+  <AnimatePresence>{isOpen && <ModalContent {...props} />}</AnimatePresence>
 );

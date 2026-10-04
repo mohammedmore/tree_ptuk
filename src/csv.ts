@@ -21,11 +21,17 @@ export function parseCsvRows(text: string): string[][] {
       continue;
     }
 
-    if (quoteClosed && character !== "," && character !== "\n" && character !== "\r") {
+    if (
+      quoteClosed &&
+      character !== "," &&
+      character !== "\n" &&
+      character !== "\r"
+    ) {
       throw new Error("يوجد نص بعد نهاية الحقل المقتبس في ملف CSV.");
     }
     if (character === '"') {
-      if (field.length > 0) throw new Error("علامات الاقتباس في ملف CSV غير صحيحة.");
+      if (field.length > 0)
+        throw new Error("علامات الاقتباس في ملف CSV غير صحيحة.");
       insideQuotes = true;
     } else if (character === ",") {
       row.push(field);
@@ -43,7 +49,8 @@ export function parseCsvRows(text: string): string[][] {
     }
   }
 
-  if (insideQuotes) throw new Error("يوجد حقل غير مكتمل بين علامات الاقتباس في ملف CSV.");
+  if (insideQuotes)
+    throw new Error("يوجد حقل غير مكتمل بين علامات الاقتباس في ملف CSV.");
   if (field.length > 0 || row.length > 0 || quoteClosed) {
     row.push(field);
     rows.push(row);

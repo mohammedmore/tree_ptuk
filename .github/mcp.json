@@ -15,6 +15,27 @@
           }
         }
       }
+    },
+    "io.github.upstash/context7": {
+      "type": "http",
+      "url": "https://mcp.context7.com/mcp",
+      "requestInit": {
+        "headers": {
+          "Authorization": ""
+        }
+      },
+      "x-metadata": {
+        "registry": {
+          "api": {
+            "baseUrl": "https://api.mcp.github.com",
+            "version": "v0.1"
+          },
+          "mcpServer": {
+            "name": "io.github.upstash/context7",
+            "version": "4.1.1"
+          }
+        }
+      }
     }
   }
 }

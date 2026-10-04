@@ -1,5 +1,12 @@
 import React from "react";
-import { Download, ImageIcon, X, Sparkles, Loader2, CircleCheckBig } from "lucide-react";
+import {
+  Download,
+  ImageIcon,
+  X,
+  Sparkles,
+  Loader2,
+  CircleCheckBig,
+} from "lucide-react";
 import { cn } from "../utils";
 import { toPng } from "html-to-image";
 import { jsPDF } from "jspdf";
@@ -59,7 +66,7 @@ const ExportModal: React.FC<ExportModalProps> = ({
   const gpa = React.useMemo(() => {
     let totalPoints = 0;
     let totalCreditsWithGrades = 0;
-    
+
     Object.entries(courseGrades).forEach(([courseId, grade]) => {
       if (!completedCourses.has(courseId)) return;
       const course = coursesById.get(courseId);
@@ -68,7 +75,7 @@ const ExportModal: React.FC<ExportModalProps> = ({
         totalCreditsWithGrades += course.credits;
       }
     });
-    
+
     if (totalCreditsWithGrades === 0) return 0;
     return totalPoints / totalCreditsWithGrades;
   }, [courseGrades, completedCourses, coursesById]);
@@ -102,8 +109,12 @@ const ExportModal: React.FC<ExportModalProps> = ({
                 instructor: entry?.instructor || "",
                 room: entry?.room || entry?.location || "",
                 days: Array.isArray(entry?.days)
-                  ? entry.days.filter((day): day is string => typeof day === "string")
-                  : entry?.day ? [entry.day] : [],
+                  ? entry.days.filter(
+                      (day): day is string => typeof day === "string",
+                    )
+                  : entry?.day
+                    ? [entry.day]
+                    : [],
               },
             ]),
           ),
@@ -123,7 +134,9 @@ const ExportModal: React.FC<ExportModalProps> = ({
         dark_mode: darkMode,
       };
 
-      const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+      const blob = new Blob([JSON.stringify(data, null, 2)], {
+        type: "application/json",
+      });
       const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.href = url;
@@ -143,7 +156,9 @@ const ExportModal: React.FC<ExportModalProps> = ({
     const input = e.currentTarget;
     setImportError(null);
     if (file.size > 5 * 1024 * 1024) {
-      setImportError("حجم ملف النسخة الاحتياطية يتجاوز الحد المسموح (5 ميغابايت).");
+      setImportError(
+        "حجم ملف النسخة الاحتياطية يتجاوز الحد المسموح (5 ميغابايت).",
+      );
       input.value = "";
       return;
     }
@@ -169,16 +184,16 @@ const ExportModal: React.FC<ExportModalProps> = ({
       }
 
       const entries: Array<[string, unknown, (value: unknown) => boolean]> = [
-          ["completed_courses", parsed.completed_courses, isKnownCourseArray],
-          ["planned_courses", parsed.planned_courses, isPlanMap],
-          ["weekly_schedule", parsed.weekly_schedule, isWeeklySchedule],
-          ["selected_electives_map", parsed.selected_electives_map, isCourseMap],
-          ["course_grades", parsed.course_grades, isGrades],
-          ["failed_course_ids", parsed.failed_course_ids, isKnownCourseArray],
-          ["plan_start_semester", parsed.plan_start_semester, isSemester],
-          ["plan_end_semester", parsed.plan_end_semester, isSemester],
-          ["hide_past_semesters", parsed.hide_past_semesters, isBoolean],
-          ["dark_mode", parsed.dark_mode, isBoolean],
+        ["completed_courses", parsed.completed_courses, isKnownCourseArray],
+        ["planned_courses", parsed.planned_courses, isPlanMap],
+        ["weekly_schedule", parsed.weekly_schedule, isWeeklySchedule],
+        ["selected_electives_map", parsed.selected_electives_map, isCourseMap],
+        ["course_grades", parsed.course_grades, isGrades],
+        ["failed_course_ids", parsed.failed_course_ids, isKnownCourseArray],
+        ["plan_start_semester", parsed.plan_start_semester, isSemester],
+        ["plan_end_semester", parsed.plan_end_semester, isSemester],
+        ["hide_past_semesters", parsed.hide_past_semesters, isBoolean],
+        ["dark_mode", parsed.dark_mode, isBoolean],
       ];
       const updates = entries.filter(([key]) => Object.hasOwn(parsed, key));
       if (updates.length === 0) {
@@ -191,7 +206,14 @@ const ExportModal: React.FC<ExportModalProps> = ({
         if (parsed.version !== undefined || typeof value !== "string") {
           return [key, value] as const;
         }
-        if (!["plan_start_semester", "plan_end_semester", "hide_past_semesters", "dark_mode"].includes(key)) {
+        if (
+          ![
+            "plan_start_semester",
+            "plan_end_semester",
+            "hide_past_semesters",
+            "dark_mode",
+          ].includes(key)
+        ) {
           return [key, value] as const;
         }
         try {
@@ -213,15 +235,20 @@ const ExportModal: React.FC<ExportModalProps> = ({
 
       let snapshots: Array<readonly [string, string | null]>;
       try {
-        snapshots = normalizedUpdates.map(([key]) => [key, localStorage.getItem(key)] as const);
+        snapshots = normalizedUpdates.map(
+          ([key]) => [key, localStorage.getItem(key)] as const,
+        );
       } catch (error) {
-        const reason = error instanceof Error ? error.message : "خطأ تخزين غير معروف";
+        const reason =
+          error instanceof Error ? error.message : "خطأ تخزين غير معروف";
         setImportError(`تعذرت قراءة البيانات الحالية قبل الاستيراد: ${reason}`);
         input.value = "";
         return;
       }
       try {
-        normalizedUpdates.forEach(([key, value]) => localStorage.setItem(key, JSON.stringify(value)));
+        normalizedUpdates.forEach(([key, value]) =>
+          localStorage.setItem(key, JSON.stringify(value)),
+        );
       } catch (error) {
         let rollbackFailed = false;
         snapshots.forEach(([key, value]) => {
@@ -232,15 +259,20 @@ const ExportModal: React.FC<ExportModalProps> = ({
             rollbackFailed = true;
           }
         });
-        const reason = error instanceof Error ? error.message : "خطأ تخزين غير معروف";
-        setImportError(rollbackFailed
-          ? `فشل الاستيراد وتعذر التراجع عن بعض التغييرات: ${reason}`
-          : `تعذر حفظ النسخة في المتصفح: ${reason}`);
+        const reason =
+          error instanceof Error ? error.message : "خطأ تخزين غير معروف";
+        setImportError(
+          rollbackFailed
+            ? `فشل الاستيراد وتعذر التراجع عن بعض التغييرات: ${reason}`
+            : `تعذر حفظ النسخة في المتصفح: ${reason}`,
+        );
         input.value = "";
         return;
       }
       setImportError(null);
-      alert("تم استيراد النسخة الاحتياطية بنجاح. سيتم تحديث الصفحة لتطبيق البيانات.");
+      alert(
+        "تم استيراد النسخة الاحتياطية بنجاح. سيتم تحديث الصفحة لتطبيق البيانات.",
+      );
       window.location.reload();
       input.value = "";
     };
@@ -251,58 +283,110 @@ const ExportModal: React.FC<ExportModalProps> = ({
     reader.readAsText(file);
 
     function isKnownCourseArray(value: unknown): boolean {
-      return Array.isArray(value) && value.every((id) => typeof id === "string" && courseIds.has(id));
+      return (
+        Array.isArray(value) &&
+        value.every((id) => typeof id === "string" && courseIds.has(id))
+      );
     }
+
     function isRecord(value: unknown): value is Record<string, unknown> {
-      return typeof value === "object" && value !== null && !Array.isArray(value);
+      return (
+        typeof value === "object" && value !== null && !Array.isArray(value)
+      );
     }
+
     function isCourseMap(value: unknown): boolean {
-      return isRecord(value)
-        && Object.entries(value).every(([slotId, id]) => (
-          typeof slotId === "string" && typeof id === "string" && courseIds.has(id)
-        ));
+      return (
+        isRecord(value) &&
+        Object.entries(value).every(
+          ([slotId, id]) =>
+            typeof slotId === "string" &&
+            typeof id === "string" &&
+            courseIds.has(id),
+        )
+      );
     }
+
     function isPlanMap(value: unknown): boolean {
-      return isRecord(value)
-        && Object.entries(value).every(([id, semester]) => (
-          courseIds.has(id) && typeof semester === "string" && SEMESTERS.includes(semester)
-        ));
+      return (
+        isRecord(value) &&
+        Object.entries(value).every(
+          ([id, semester]) =>
+            courseIds.has(id) &&
+            typeof semester === "string" &&
+            SEMESTERS.includes(semester),
+        )
+      );
     }
+
     function isWeeklySchedule(value: unknown): boolean {
-      return isRecord(value) && Object.entries(value).every(([semester, semesterEntries]) => (
-        SEMESTERS.includes(semester)
-        && isRecord(semesterEntries)
-        && Object.entries(semesterEntries).every(([id, entry]) => (
-          courseIds.has(id)
-          && isRecord(entry)
-          && typeof entry.startTime === "string"
-          && /^([01]\d|2[0-3]):([0-5]\d)$/.test(entry.startTime)
-          && typeof entry.endTime === "string"
-          && /^([01]\d|2[0-3]):([0-5]\d)$/.test(entry.endTime)
-          && (entry.days === undefined || (Array.isArray(entry.days) && entry.days.every((day) => (
-            typeof day === "string" && ["الأحد", "الاثنين", "الثلاثاء", "الأربعاء", "الخميس", "الجمعة", "السبت"].includes(day)
-          ))))
-          && (entry.day === undefined || (
-            typeof entry.day === "string"
-            && ["الأحد", "الاثنين", "الثلاثاء", "الأربعاء", "الخميس", "الجمعة", "السبت"].includes(entry.day)
-          ))
-          && ["section", "instructor", "room", "location"].every((field) => (
-            entry[field] === undefined || typeof entry[field] === "string"
-          ))
-        ))
-      ));
+      return (
+        isRecord(value) &&
+        Object.entries(value).every(
+          ([semester, semesterEntries]) =>
+            SEMESTERS.includes(semester) &&
+            isRecord(semesterEntries) &&
+            Object.entries(semesterEntries).every(
+              ([id, entry]) =>
+                courseIds.has(id) &&
+                isRecord(entry) &&
+                typeof entry.startTime === "string" &&
+                /^([01]\d|2[0-3]):([0-5]\d)$/.test(entry.startTime) &&
+                typeof entry.endTime === "string" &&
+                /^([01]\d|2[0-3]):([0-5]\d)$/.test(entry.endTime) &&
+                (entry.days === undefined ||
+                  (Array.isArray(entry.days) &&
+                    entry.days.every(
+                      (day) =>
+                        typeof day === "string" &&
+                        [
+                          "الأحد",
+                          "الاثنين",
+                          "الثلاثاء",
+                          "الأربعاء",
+                          "الخميس",
+                          "الجمعة",
+                          "السبت",
+                        ].includes(day),
+                    ))) &&
+                (entry.day === undefined ||
+                  (typeof entry.day === "string" &&
+                    [
+                      "الأحد",
+                      "الاثنين",
+                      "الثلاثاء",
+                      "الأربعاء",
+                      "الخميس",
+                      "الجمعة",
+                      "السبت",
+                    ].includes(entry.day))) &&
+                ["section", "instructor", "room", "location"].every(
+                  (field) =>
+                    entry[field] === undefined ||
+                    typeof entry[field] === "string",
+                ),
+            ),
+        )
+      );
     }
+
     function isGrades(value: unknown): boolean {
-      return isRecord(value) && Object.entries(value).every(([id, grade]) => (
-        courseIds.has(id)
-        && typeof grade === "number"
-        && Number.isFinite(grade)
-        && (grade === -1 || (grade >= 0 && grade <= 100))
-      ));
+      return (
+        isRecord(value) &&
+        Object.entries(value).every(
+          ([id, grade]) =>
+            courseIds.has(id) &&
+            typeof grade === "number" &&
+            Number.isFinite(grade) &&
+            (grade === -1 || (grade >= 0 && grade <= 100)),
+        )
+      );
     }
+
     function isSemester(value: unknown): boolean {
       return typeof value === "string" && SEMESTERS.includes(value);
     }
+
     function isBoolean(value: unknown): boolean {
       return typeof value === "boolean";
     }
@@ -418,22 +502,24 @@ const ExportModal: React.FC<ExportModalProps> = ({
       >
         <div className="p-6 border-b border-gray-100 flex justify-between items-center bg-gray-50/50">
           <div>
-            <h2 id="export-modal-title" className="text-2xl font-black text-gray-800 flex items-center gap-3">
+            <h2
+              id="export-modal-title"
+              className="text-2xl font-black text-gray-800 flex items-center gap-3"
+            >
               <Download size={28} className="text-emerald-600" />
               تنزيل وتصدير الخطة
             </h2>
             <p className="text-gray-500 text-sm font-medium">
-              معاينة الخطة وتحميلها بملف PDF أو صورة عالية الجودة مباشرة
-              لجهازك
+              معاينة الخطة وتحميلها بملف PDF أو صورة عالية الجودة مباشرة لجهازك
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-3">
-            <input 
-              type="file" 
-              ref={fileInputRef} 
-              onChange={importFromJson} 
-              accept=".json" 
-              className="hidden" 
+            <input
+              type="file"
+              ref={fileInputRef}
+              onChange={importFromJson}
+              accept=".json"
+              className="hidden"
             />
             <button
               type="button"
@@ -453,12 +539,18 @@ const ExportModal: React.FC<ExportModalProps> = ({
               تصدير نسخة JSON
             </button>
             {importError && (
-              <p role="alert" className="basis-full text-sm font-bold text-red-600">
+              <p
+                role="alert"
+                className="basis-full text-sm font-bold text-red-600"
+              >
                 {importError}
               </p>
             )}
             {exportError && (
-              <p role="alert" className="basis-full text-sm font-bold text-red-600">
+              <p
+                role="alert"
+                className="basis-full text-sm font-bold text-red-600"
+              >
                 {exportError}
               </p>
             )}
@@ -537,9 +629,7 @@ const ExportModal: React.FC<ExportModalProps> = ({
                   <div className="text-xs opacity-70 uppercase tracking-widest font-black">
                     المعدل التراكمي
                   </div>
-                  <div className="text-2xl font-black">
-                    %{gpa.toFixed(2)}
-                  </div>
+                  <div className="text-2xl font-black">%{gpa.toFixed(2)}</div>
                 </div>
               )}
             </div>
@@ -552,7 +642,7 @@ const ExportModal: React.FC<ExportModalProps> = ({
                     إجمالي الخطة
                   </div>
                   <div className="text-xl font-black text-blue-900">
-                      {validPlannedCourses.length} مساقاً
+                    {validPlannedCourses.length} مساقاً
                   </div>
                 </div>
                 <div className="p-4 bg-emerald-50 border-2 border-emerald-200 rounded-2xl">
@@ -563,8 +653,7 @@ const ExportModal: React.FC<ExportModalProps> = ({
                     {courses
                       .filter(
                         (c) =>
-                          plannedCourses[c.id] &&
-                          completedCourses.has(c.id),
+                          plannedCourses[c.id] && completedCourses.has(c.id),
                       )
                       .reduce((sum, c) => sum + c.credits, 0)}{" "}
                     ساعة
@@ -578,8 +667,7 @@ const ExportModal: React.FC<ExportModalProps> = ({
                     {courses
                       .filter(
                         (c) =>
-                          plannedCourses[c.id] &&
-                          !completedCourses.has(c.id),
+                          plannedCourses[c.id] && !completedCourses.has(c.id),
                       )
                       .reduce((sum, c) => sum + c.credits, 0)}{" "}
                     ساعة
@@ -589,25 +677,27 @@ const ExportModal: React.FC<ExportModalProps> = ({
 
               <div className="space-y-8">
                 {SEMESTERS.map((semester) => {
-                  const semCourses = validPlannedCourses.flatMap(([courseId, plannedSemester]) => {
-                    if (plannedSemester !== semester) return [];
-                    const course = coursesById.get(courseId);
-                    return course ? [course] : [];
-                  });
+                  const semCourses = validPlannedCourses.flatMap(
+                    ([courseId, plannedSemester]) => {
+                      if (plannedSemester !== semester) return [];
+                      const course = coursesById.get(courseId);
+                      return course ? [course] : [];
+                    },
+                  );
                   if (semCourses.length === 0) return null;
 
                   return (
-                    <div key={semester} className="break-inside-avoid border-b-2 border-gray-300 pb-8 last:border-b-0">
+                    <div
+                      key={semester}
+                      className="break-inside-avoid border-b-2 border-gray-300 pb-8 last:border-b-0"
+                    >
                       <div className="flex items-center gap-4 mb-4">
                         <h3 className="text-lg font-black text-white bg-gray-900 px-6 py-2 rounded-xl shadow-lg">
                           {semester}
                         </h3>
                         <div className="h-0.5 flex-1 bg-gray-100"></div>
                         <div className="text-sm font-bold text-gray-400">
-                          {semCourses.reduce(
-                            (sum, c) => sum + c.credits,
-                            0,
-                          )}{" "}
+                          {semCourses.reduce((sum, c) => sum + c.credits, 0)}{" "}
                           ساعة معتمدة
                         </div>
                       </div>

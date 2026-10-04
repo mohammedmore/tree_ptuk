@@ -11,9 +11,9 @@ import { courses } from "../src/data";
 
 test("uses catalog availability as the single source of course offerings", () => {
   const expected = Object.fromEntries(
-    courses.flatMap((course) => (
-      course.availableSemesters ? [[course.id, course.availableSemesters]] : []
-    )),
+    courses.flatMap((course) =>
+      course.availableSemesters ? [[course.id, course.availableSemesters]] : [],
+    ),
   );
 
   assert.deepEqual(courseOfferingsByID, expected);

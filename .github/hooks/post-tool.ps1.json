@@ -1,0 +1,54 @@
+{
+  "version": 1,
+  "hooks": {
+    "postToolUse": [
+      {
+        "type": "command",
+        "bash": "npx prettier --write . && npx eslint --fix .",
+        "powershell": "npx prettier --write .; npx eslint --fix ."
+      }
+    ],
+    "userPromptSubmitted": [
+      {
+        "type": "command",
+        "bash": "git status --short",
+        "powershell": "git status --short"
+      }
+    ],
+    "preToolUse": [
+      {
+        "type": "command",
+        "bash": "echo '[HOOK] Executing tool action...'",
+        "powershell": "Write-Host '[HOOK] Executing tool action...'"
+      }
+    ],
+    "errorOccurred": [
+      {
+        "type": "command",
+        "bash": "echo \"[$(date)] Agent Error Encountered\" >> .github/hooks/agent-errors.log",
+        "powershell": "Add-Content -Path .github/hooks/agent-errors.log -Value \"[$(Get-Date)] Agent Error Encountered\""
+      }
+    ],
+    "sessionStart": [
+      {
+        "type": "command",
+        "bash": "git fetch --quiet",
+        "powershell": "git fetch --quiet"
+      }
+    ],
+    "sessionEnd": [
+      {
+        "type": "command",
+        "bash": "npx tsc --noEmit",
+        "powershell": "npx tsc --noEmit"
+      }
+    ],
+    "agentStop": [
+      {
+        "type": "command",
+        "bash": "echo '[HOOK] Agent stopped execution.'",
+        "powershell": "Write-Host '[HOOK] Agent stopped execution.'"
+      }
+    ]
+  }
+}

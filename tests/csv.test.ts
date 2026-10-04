@@ -6,7 +6,9 @@ test("parses quoted commas and escaped quotes across CRLF rows", () => {
   const csv = [
     ["رقم المادة", "اسم المادة", "التصنيف", "الساعات", "الحالة"],
     ["12140101", 'برمجة "متقدمة", 1', "متطلب تخصص", 3, "منجز"],
-  ].map((row) => row.map(escapeCsvValue).join(",")).join("\r\n");
+  ]
+    .map((row) => row.map(escapeCsvValue).join(","))
+    .join("\r\n");
 
   assert.deepEqual(parseCsvRows(csv), [
     ["رقم المادة", "اسم المادة", "التصنيف", "الساعات", "الحالة"],

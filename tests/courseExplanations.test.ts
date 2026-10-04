@@ -22,7 +22,11 @@ test("course details reflect completion and direct dependent courses", () => {
   assert.equal(detail.difficulty, 8);
   assert.match(detail.criticalityReason, /2 مواد/);
 
-  const completedDetail = getCourseDetails(course, [course, ...dependents], new Set([course.id]));
+  const completedDetail = getCourseDetails(
+    course,
+    [course, ...dependents],
+    new Set([course.id]),
+  );
   assert.equal(completedDetail.criticality, "low");
   assert.match(completedDetail.advice, /مكتمل/);
 });

@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { markCoursesCompleted, toggleCompletedCourse } from "../src/courseProgress";
+import {
+  markCoursesCompleted,
+  toggleCompletedCourse,
+} from "../src/courseProgress";
 
 test("toggling a course changes only that course and preserves the input set", () => {
   const completed = new Set(["prerequisite", "other"]);

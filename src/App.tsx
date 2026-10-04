@@ -33,8 +33,6 @@ import {
   MessageCircle,
   Map as MapIcon,
   LayoutList,
-  Moon,
-  Sun,
   Calculator,
   Link2,
 } from "lucide-react";
@@ -44,11 +42,7 @@ import { courses, Course, ScheduleEntry, categoryRequirements } from "./data";
 import { getLayoutedElements, cn } from "./utils";
 import { getCourseDetails } from "./courseExplanations";
 
-import {
-  courseCommonNames,
-  SEMESTERS,
-  TOTAL_CREDITS
-} from "./constants";
+import { courseCommonNames, SEMESTERS, TOTAL_CREDITS } from "./constants";
 import CourseNode from "./CourseNode";
 import ListView from "./ListView";
 import {
@@ -60,30 +54,65 @@ import {
 import { toggleCompletedCourse } from "./courseProgress";
 import { readAppStorageValue, serializeAppStorageValue } from "./appStorage";
 import { escapeCsvValue, parseCsvRows } from "./csv";
+import { ThemeStudio } from "./components/ThemeStudio";
+import { ThemeManager } from "./themeManager";
 
 const ExportModal = React.lazy(() => import("./components/ExportModal"));
-const ResetConfirmationModal = React.lazy(() => import("./components/ResetConfirmationModal"));
+const ResetConfirmationModal = React.lazy(
+  () => import("./components/ResetConfirmationModal"),
+);
 const SupportModal = React.lazy(() => import("./components/SupportModal"));
-const PlanningModeModal = React.lazy(() => import("./components/PlanningModeModal"));
-const CourseListModal = React.lazy(() => import("./components/CourseListModal"));
+const PlanningModeModal = React.lazy(
+  () => import("./components/PlanningModeModal"),
+);
+const CourseListModal = React.lazy(
+  () => import("./components/CourseListModal"),
+);
 const PlannerView = React.lazy(() => import("./components/PlannerView"));
-const GPAModal = React.lazy(() => import("./components/GPAModal").then((module) => ({ default: module.GPAModal })));
-const WeeklyScheduleModal = React.lazy(() => import("./components/WeeklyScheduleModal").then((module) => ({ default: module.WeeklyScheduleModal })));
-const ShareScheduleModal = React.lazy(() => import("./components/SharedScheduleModals").then((module) => ({ default: module.ShareScheduleModal })));
-const LoadScheduleModal = React.lazy(() => import("./components/SharedScheduleModals").then((module) => ({ default: module.LoadScheduleModal })));
-const SharedSchedulePreviewModal = React.lazy(() => import("./components/SharedScheduleModals").then((module) => ({ default: module.SharedSchedulePreviewModal })));
+const GPAModal = React.lazy(() =>
+  import("./components/GPAModal").then((module) => ({
+    default: module.GPAModal,
+  })),
+);
+const WeeklyScheduleModal = React.lazy(() =>
+  import("./components/WeeklyScheduleModal").then((module) => ({
+    default: module.WeeklyScheduleModal,
+  })),
+);
+const ShareScheduleModal = React.lazy(() =>
+  import("./components/SharedScheduleModals").then((module) => ({
+    default: module.ShareScheduleModal,
+  })),
+);
+const LoadScheduleModal = React.lazy(() =>
+  import("./components/SharedScheduleModals").then((module) => ({
+    default: module.LoadScheduleModal,
+  })),
+);
+const SharedSchedulePreviewModal = React.lazy(() =>
+  import("./components/SharedScheduleModals").then((module) => ({
+    default: module.SharedSchedulePreviewModal,
+  })),
+);
 const modalLoadingFallback = (
-  <div role="status" className="fixed inset-0 z-[120] flex items-center justify-center bg-white/80 font-bold text-slate-700 dark:bg-slate-950/80 dark:text-slate-200">
+  <div
+    role="status"
+    className="fixed inset-0 z-[120] flex items-center justify-center bg-white/80 font-bold text-slate-700 dark:bg-slate-950/80 dark:text-slate-200"
+  >
     جارٍ تحميل النافذة...
   </div>
 );
 const STORAGE_ISSUE_EVENT = "planner:storage-issue";
 let pendingStorageIssue: string | null = null;
+let storageIssueListenerReady = false;
+const themeManager = new ThemeManager();
 
 function reportStorageIssue(message: string): void {
-  pendingStorageIssue = message;
   if (typeof window !== "undefined") {
-    window.dispatchEvent(new CustomEvent(STORAGE_ISSUE_EVENT, { detail: message }));
+    if (!storageIssueListenerReady) pendingStorageIssue = message;
+    window.dispatchEvent(
+      new CustomEvent(STORAGE_ISSUE_EVENT, { detail: message }),
+    );
   }
 }
 
@@ -94,7 +123,11 @@ export const getPathForCourse = (nodeId: string, edges: Edge[]) => {
   const prerequisites = new Map<string, string[]>();
   const dependents = new Map<string, string[]>();
 
-  const addAdjacency = (adjacency: Map<string, string[]>, from: string, to: string) => {
+  const addAdjacency = (
+    adjacency: Map<string, string[]>,
+    from: string,
+    to: string,
+  ) => {
     const neighbors = adjacency.get(from);
     if (neighbors) neighbors.push(to);
     else adjacency.set(from, [to]);
@@ -124,7 +157,11 @@ export const getPathForCourse = (nodeId: string, edges: Edge[]) => {
   return {
     ancestors,
     descendants,
-    allPathNodeIds: new Set([nodeId, ...Array.from(ancestors), ...Array.from(descendants)]),
+    allPathNodeIds: new Set([
+      nodeId,
+      ...Array.from(ancestors),
+      ...Array.from(descendants),
+    ]),
   };
 };
 
@@ -134,7 +171,7 @@ const isCourseAvailable = (
   completed: Set<string>,
   categoryCredits: Record<string, number>,
   allCourses: Course[],
-  currentPlannedCourses: Set<string> = new Set() // New parameter for courses planned in the current semester
+  currentPlannedCourses: Set<string> = new Set(), // New parameter for courses planned in the current semester
 ): boolean => {
   if (completed.has(course.id)) return false;
 
@@ -148,17 +185,18 @@ const isCourseAvailable = (
   if (!prereqsMet) return false;
 
   // Check Co-requisites
-  if (!course.coPrerequisites || course.coPrerequisites.length === 0) return true;
+  if (!course.coPrerequisites || course.coPrerequisites.length === 0)
+    return true;
   return course.coPrerequisites.every((cpId) => {
     // A co-requisite is met if it's completed OR it's planned for the current semester
     if (completed.has(cpId) || currentPlannedCourses.has(cpId)) return true;
-    
+
     // The co-requisite itself must be available (its prerequisites must be met)
-    const cpCourse = allCourses.find(ac => ac.id === cpId);
+    const cpCourse = allCourses.find((ac) => ac.id === cpId);
     if (!cpCourse) return false; // Co-requisite course not found
-    
+
     // Check if the co-requisite's prerequisites are met (excluding itself if it's a co-requisite of itself, which shouldn't happen)
-    return cpCourse.prerequisites.every(p => completed.has(p));
+    return cpCourse.prerequisites.every((p) => completed.has(p));
   });
 };
 
@@ -178,7 +216,9 @@ function useLocalStorage<T>(key: string, initialValue: T) {
     try {
       window.localStorage.setItem(key, serializeAppStorageValue(storedValue));
     } catch (error) {
-      reportStorageIssue("تعذر حفظ التغييرات على هذا الجهاز. تحقّق من مساحة التخزين المتاحة في المتصفح.");
+      reportStorageIssue(
+        "تعذر حفظ التغييرات على هذا الجهاز. تحقّق من مساحة التخزين المتاحة في المتصفح.",
+      );
       console.error(`Unable to save localStorage key "${key}"`, error);
     }
   }, [key, storedValue]);
@@ -257,7 +297,13 @@ const nodeTypes = {
   courseNode: CourseNode,
 };
 
-const CSV_HEADERS = ["رقم المادة", "اسم المادة", "التصنيف", "الساعات", "الحالة"];
+const CSV_HEADERS = [
+  "رقم المادة",
+  "اسم المادة",
+  "التصنيف",
+  "الساعات",
+  "الحالة",
+];
 
 function FlowComponent() {
   const [storageIssue, setStorageIssue] = useState<string | null>(null);
@@ -267,9 +313,11 @@ function FlowComponent() {
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [isDetailsOpen, setIsDetailsOpen] = useState(false);
   const [viewMode, setViewMode] = useState<"map" | "list">(() =>
-    window.matchMedia("(max-width: 639px)").matches ? "list" : "map"
+    window.matchMedia("(max-width: 639px)").matches ? "list" : "map",
   );
-  const [listGroupBy, setListGroupBy] = useState<"category" | "semester">("semester");
+  const [listGroupBy, setListGroupBy] = useState<"category" | "semester">(
+    "semester",
+  );
   const [pinnedCourseId, setPinnedCourseId] = useState<string | null>(null);
   const [completedCourses, setCompletedCourses] = useLocalStorage<Set<string>>(
     "completed_courses",
@@ -281,19 +329,18 @@ function FlowComponent() {
   const [weeklySchedule, setWeeklySchedule] = useLocalStorage<
     Record<string, Record<string, ScheduleEntry>>
   >("weekly_schedule", {});
-  const [selectedElectives, setSelectedElectives] = useLocalStorage<Record<string, string>>(
-    "selected_electives_map",
-    {
-      'univ_1': '13020001',
-      'univ_2': '13020009',
-      'univ_3': '13020026',
-      'spec_1': '12140416',
-      'spec_2': '12140549',
-      'spec_3': '12140505',
-      'spec_4': '12140510',
-      'spec_5': '12140526',
-    }
-  );
+  const [selectedElectives, setSelectedElectives] = useLocalStorage<
+    Record<string, string>
+  >("selected_electives_map", {
+    univ_1: "13020001",
+    univ_2: "13020009",
+    univ_3: "13020026",
+    spec_1: "12140416",
+    spec_2: "12140549",
+    spec_3: "12140505",
+    spec_4: "12140510",
+    spec_5: "12140526",
+  });
   const [isPlanningModeOpen, setIsPlanningModeOpen] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isPlannerOpen, setIsPlannerOpen] = useState(false);
@@ -310,14 +357,23 @@ function FlowComponent() {
     schedule: SharedScheduleSnapshot;
     viewCountWarning?: string;
   } | null>(null);
-  const sharedLinkAutoLoadRef = useRef(false);
-  const [currentPlanningSemester, setCurrentPlanningSemester] = useState<string | null>(null);
+  const sharedLinkAutoLoadPromiseRef = useRef<ReturnType<
+    typeof fetchScheduleByCode
+  > | null>(null);
+  const [currentPlanningSemester, setCurrentPlanningSemester] = useState<
+    string | null
+  >(null);
   const [isCourseListModalOpen, setIsCourseListModalOpen] = useState(false);
   const [isGPAModalOpen, setIsGPAModalOpen] = useState(false);
-  const [courseListTab, setCourseListTab] = useState<"available" | "completed" | "all">("available");
-  const [expandedCourseListCategories, setExpandedCourseListCategories] = useState<Record<string, boolean>>({});
+  const [courseListTab, setCourseListTab] = useState<
+    "available" | "completed" | "all"
+  >("available");
+  const [expandedCourseListCategories, setExpandedCourseListCategories] =
+    useState<Record<string, boolean>>({});
   const [hasHighGpa, setHasHighGpa] = useState(false);
-  const [expandedPlanningCategories, setExpandedPlanningCategories] = useState<Record<string, boolean>>({});
+  const [expandedPlanningCategories, setExpandedPlanningCategories] = useState<
+    Record<string, boolean>
+  >({});
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
   const [isSupportModalOpen, setIsSupportModalOpen] = useState(false);
   const [planningCourseId, setPlanningCourseId] = useState<string | null>(null);
@@ -341,19 +397,18 @@ function FlowComponent() {
     true,
   );
   // Removed showAllInMap state, it will be implicitly true
-  const [isDarkMode, setIsDarkMode] = useLocalStorage<boolean>(
-    "dark_mode",
-    false,
-  );
+  const [isDarkMode, setIsDarkMode] = useState(() => {
+    themeManager.initialize();
+    return themeManager.isDarkMode;
+  });
 
-  const [courseGrades, setCourseGrades] = useLocalStorage<Record<string, number>>(
-    "course_grades",
-    {}
-  );
+  const [courseGrades, setCourseGrades] = useLocalStorage<
+    Record<string, number>
+  >("course_grades", {});
 
   const [failedCourseIds, setFailedCourseIds] = useLocalStorage<string[]>(
     "failed_course_ids",
-    []
+    [],
   );
 
   useEffect(() => {
@@ -361,12 +416,16 @@ function FlowComponent() {
       const message = (event as CustomEvent<string>).detail;
       if (message) setStorageIssue(message);
     };
+    storageIssueListenerReady = true;
     window.addEventListener(STORAGE_ISSUE_EVENT, handleStorageIssue);
     if (pendingStorageIssue) {
       setStorageIssue(pendingStorageIssue);
       pendingStorageIssue = null;
     }
-    return () => window.removeEventListener(STORAGE_ISSUE_EVENT, handleStorageIssue);
+    return () => {
+      storageIssueListenerReady = false;
+      window.removeEventListener(STORAGE_ISSUE_EVENT, handleStorageIssue);
+    };
   }, []);
 
   const [hoveredCourseId, setHoveredCourseId] = useState<string | null>(null);
@@ -377,21 +436,21 @@ function FlowComponent() {
     return getPathForCourse(hoveredCourseId, layoutedEdges);
   }, [hoveredCourseId, layoutedEdges]);
 
-  useEffect(() => {
-    if (isDarkMode) {
-      document.documentElement.classList.add("dark");
-    } else {
-      document.documentElement.classList.remove("dark");
-    }
-  }, [isDarkMode]);
+  const handleThemeStateChange = (isDark: boolean) => {
+    setIsDarkMode(isDark);
+  };
   const { fitView, setCenter } = useReactFlow();
 
   useEffect(() => {
     if (viewMode !== "map") return;
     const frame = window.requestAnimationFrame(() => {
       const isMobile = window.matchMedia("(max-width: 639px)").matches;
-      void fitView({ padding: isMobile ? 0.12 : 0.05, duration: isMobile ? 0 : 500 })
-        .catch((error: unknown) => console.error("Unable to fit course map to view", error));
+      void fitView({
+        padding: isMobile ? 0.12 : 0.05,
+        duration: isMobile ? 0 : 500,
+      }).catch((error: unknown) =>
+        console.error("Unable to fit course map to view", error),
+      );
     });
     return () => window.cancelAnimationFrame(frame);
   }, [fitView, viewMode]);
@@ -420,6 +479,11 @@ function FlowComponent() {
     "plan_end_semester",
     "hide_past_semesters",
     "dark_mode",
+    "planner_theme",
+    "active_theme_type",
+    "active_preset_name",
+    "active_custom_tokens",
+    "user_saved_themes",
     "course_grades",
     "course_repeats",
     "failed_course_ids",
@@ -430,7 +494,9 @@ function FlowComponent() {
     try {
       localStorageKeys.forEach((key) => window.localStorage.removeItem(key));
     } catch (error) {
-      reportStorageIssue("تعذرت تهيئة الخطة لأن المتصفح منع حذف البيانات المحفوظة.");
+      reportStorageIssue(
+        "تعذرت تهيئة الخطة لأن المتصفح منع حذف البيانات المحفوظة.",
+      );
       console.error("Unable to reset local plan storage", error);
       setShowResetConfirm(false);
       return;
@@ -489,7 +555,9 @@ function FlowComponent() {
         ),
         courses: courses.map((course) => {
           const semester = plannedCourses[course.id] ?? "";
-          const entry = semester ? weeklySchedule[semester]?.[course.id] : undefined;
+          const entry = semester
+            ? weeklySchedule[semester]?.[course.id]
+            : undefined;
           return {
             courseId: course.id,
             courseCode: course.id,
@@ -519,7 +587,9 @@ function FlowComponent() {
       const code = await shareScheduleToCloud(snapshot);
       setShareCode(code);
     } catch (error) {
-      setShareError(error instanceof Error ? error.message : "تعذر إنشاء رابط المشاركة.");
+      setShareError(
+        error instanceof Error ? error.message : "تعذر إنشاء رابط المشاركة.",
+      );
     } finally {
       setShareLoading(false);
     }
@@ -545,7 +615,11 @@ function FlowComponent() {
       setLoadedSchedule(result);
       setIsLoadScheduleOpen(false);
     } catch (error) {
-      setLoadError(error instanceof Error ? error.message : "تعذر جلب الجدول. تحقق من الاتصال والرمز.");
+      setLoadError(
+        error instanceof Error
+          ? error.message
+          : "تعذر جلب الجدول. تحقق من الاتصال والرمز.",
+      );
       setIsLoadScheduleOpen(true);
     } finally {
       setLoadLoading(false);
@@ -558,8 +632,9 @@ function FlowComponent() {
     const { schedule } = loadedSchedule;
     const knownCourseIds = new Set(courses.map((course) => course.id));
     const importedPlans = Object.fromEntries(
-      Object.entries(schedule.plannedCourses)
-        .filter(([courseId]) => knownCourseIds.has(courseId)),
+      Object.entries(schedule.plannedCourses).filter(([courseId]) =>
+        knownCourseIds.has(courseId),
+      ),
     );
     const importedWeeklySchedule = Object.fromEntries(
       Object.entries(schedule.weeklySchedule).map(([semester, entries]) => [
@@ -577,13 +652,21 @@ function FlowComponent() {
 
     setPlannedCourses(importedPlans);
     setWeeklySchedule(importedWeeklySchedule);
-    setCompletedCourses(new Set(
-      schedule.completedCourses
-        .map((sharedCourse) => courses.find((course) => course.id === sharedCourse.courseCode)?.id)
-        .filter((courseId): courseId is string => !!courseId),
-    ));
+    setCompletedCourses(
+      new Set(
+        schedule.completedCourses
+          .map(
+            (sharedCourse) =>
+              courses.find((course) => course.id === sharedCourse.courseCode)
+                ?.id,
+          )
+          .filter((courseId): courseId is string => !!courseId),
+      ),
+    );
     setCourseGrades(schedule.courseGrades ?? {});
-    setFailedCourseIds((schedule.failedCourseIds ?? []).filter((id) => knownCourseIds.has(id)));
+    setFailedCourseIds(
+      (schedule.failedCourseIds ?? []).filter((id) => knownCourseIds.has(id)),
+    );
     if (schedule.selectedElectives) {
       setSelectedElectives(schedule.selectedElectives);
     }
@@ -591,7 +674,11 @@ function FlowComponent() {
       setPlanStartSemester(schedule.preferences.planStartSemester);
       setPlanEndSemester(schedule.preferences.planEndSemester);
       setHidePastSemesters(schedule.preferences.hidePastSemesters);
-      setIsDarkMode(schedule.preferences.darkMode);
+      const nextTheme = schedule.preferences.darkMode
+        ? "deep-navy"
+        : "warm-ivory";
+      themeManager.setTheme(nextTheme);
+      setIsDarkMode(themeManager.isDarkMode);
     }
     setLoadedSchedule(null);
   }, [
@@ -600,7 +687,6 @@ function FlowComponent() {
     setCourseGrades,
     setFailedCourseIds,
     setHidePastSemesters,
-    setIsDarkMode,
     setPlanEndSemester,
     setPlanStartSemester,
     setPlannedCourses,
@@ -609,21 +695,35 @@ function FlowComponent() {
   ]);
 
   useEffect(() => {
-    if (sharedLinkAutoLoadRef.current) return;
-    sharedLinkAutoLoadRef.current = true;
-
     const params = new URLSearchParams(window.location.search);
     const code = params.get("code") ?? params.get("s");
     if (!code) return;
 
+    let cancelled = false;
     setLoadLoading(true);
-    void fetchScheduleByCode(code)
-      .then(setLoadedSchedule)
-      .catch((error: unknown) => {
-        setLoadError(error instanceof Error ? error.message : "تعذر فتح رابط الجدول.");
+    const loadPromise =
+      sharedLinkAutoLoadPromiseRef.current ?? fetchScheduleByCode(code);
+    sharedLinkAutoLoadPromiseRef.current = loadPromise;
+
+    void (async () => {
+      try {
+        const schedule = await loadPromise;
+        if (cancelled) return;
+        setLoadedSchedule(schedule);
+      } catch (error: unknown) {
+        if (cancelled) return;
+        setLoadError(
+          error instanceof Error ? error.message : "تعذر فتح رابط الجدول.",
+        );
         setIsLoadScheduleOpen(true);
-      })
-      .finally(() => setLoadLoading(false));
+      } finally {
+        if (!cancelled) setLoadLoading(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const handleImportCsv = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -648,15 +748,19 @@ function FlowComponent() {
         try {
           rows = parseCsvRows(result);
         } catch (error) {
-          setCsvImportError(error instanceof Error ? error.message : "صيغة ملف CSV غير صالحة.");
+          setCsvImportError(
+            error instanceof Error ? error.message : "صيغة ملف CSV غير صالحة.",
+          );
           return;
         }
         const [header, ...records] = rows;
         if (
-          header?.length !== CSV_HEADERS.length
-          || header.some((value, index) => value.trim() !== CSV_HEADERS[index])
+          header?.length !== CSV_HEADERS.length ||
+          header.some((value, index) => value.trim() !== CSV_HEADERS[index])
         ) {
-          setCsvImportError("صيغة الملف غير مدعومة. استخدم ملف CSV المُصدّر من الموقع.");
+          setCsvImportError(
+            "صيغة الملف غير مدعومة. استخدم ملف CSV المُصدّر من الموقع.",
+          );
           return;
         }
 
@@ -665,12 +769,16 @@ function FlowComponent() {
         for (const row of records) {
           if (row.every((value) => value.trim() === "")) continue;
           if (row.length !== 5) {
-            setCsvImportError("أحد صفوف CSV لا يحتوي على الأعمدة الخمسة المطلوبة.");
+            setCsvImportError(
+              "أحد صفوف CSV لا يحتوي على الأعمدة الخمسة المطلوبة.",
+            );
             return;
           }
           const courseId = row[0].trim();
           if (!knownCourseIds.has(courseId)) {
-            setCsvImportError(`رقم المادة ${courseId || "(فارغ)"} غير موجود في المنهاج الحالي.`);
+            setCsvImportError(
+              `رقم المادة ${courseId || "(فارغ)"} غير موجود في المنهاج الحالي.`,
+            );
             return;
           }
           const status = row[4].trim();
@@ -681,10 +789,14 @@ function FlowComponent() {
           if (status === "منجز") importedCourseIds.add(courseId);
         }
 
-        setCompletedCourses((previous) => new Set([...previous, ...importedCourseIds]));
+        setCompletedCourses(
+          (previous) => new Set([...previous, ...importedCourseIds]),
+        );
         setCsvImportError(null);
       } catch (error) {
-        setCsvImportError(error instanceof Error ? error.message : "تعذّر استيراد ملف CSV.");
+        setCsvImportError(
+          error instanceof Error ? error.message : "تعذّر استيراد ملف CSV.",
+        );
         console.error("Unable to import CSV plan", error);
       }
     };
@@ -692,11 +804,16 @@ function FlowComponent() {
       setCsvImportError("تعذّرت قراءة الملف. تحقق من الملف ثم حاول مرة أخرى.");
       console.error("Unable to read CSV file", reader.error);
     };
-    reader.onabort = () => setCsvImportError("أُلغيت قراءة الملف قبل اكتمالها.");
+    reader.onabort = () =>
+      setCsvImportError("أُلغيت قراءة الملف قبل اكتمالها.");
     try {
       reader.readAsText(file);
     } catch (error) {
-      setCsvImportError(error instanceof Error ? error.message : "تعذّرت قراءة الملف. تحقق من الملف ثم حاول مرة أخرى.");
+      setCsvImportError(
+        error instanceof Error
+          ? error.message
+          : "تعذّرت قراءة الملف. تحقق من الملف ثم حاول مرة أخرى.",
+      );
       console.error("Unable to start reading CSV file", error);
     }
     if (fileInputRef.current) fileInputRef.current.value = "";
@@ -707,13 +824,9 @@ function FlowComponent() {
     const rows = courses.map((course) => {
       const isCompleted = completedCourses.has(course.id);
       const status = isCompleted ? "منجز" : "غير منجز";
-      return [
-        course.id,
-        course.name,
-        course.category,
-        course.credits,
-        status,
-      ].map(escapeCsvValue).join(",");
+      return [course.id, course.name, course.category, course.credits, status]
+        .map(escapeCsvValue)
+        .join(",");
     });
 
     // Add BOM for UTF-8 correctly opening in Excel
@@ -748,17 +861,23 @@ function FlowComponent() {
   const matchingSearchCourses = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
     if (!query) return [];
-    return courses.filter((course) => (
-      course.name.toLowerCase().includes(query)
-      || course.id.toLowerCase().includes(query)
-      || (courseCommonNames[course.id] ?? "").toLowerCase().includes(query)
-    ));
+    return courses.filter(
+      (course) =>
+        course.name.toLowerCase().includes(query) ||
+        course.id.toLowerCase().includes(query) ||
+        (courseCommonNames[course.id] ?? "").toLowerCase().includes(query),
+    );
   }, [searchQuery]);
 
   // Compute available courses
   const availableCourses = useMemo(() => {
     return courses.filter((course) =>
-      isCourseAvailable(course, completedCourses, completedCreditsPerCategory, courses)
+      isCourseAvailable(
+        course,
+        completedCourses,
+        completedCreditsPerCategory,
+        courses,
+      ),
     );
   }, [completedCourses, completedCreditsPerCategory, courses]);
   const availableCourseIds = useMemo(
@@ -769,14 +888,18 @@ function FlowComponent() {
   const groupedCourseList = useMemo(() => {
     let list: Course[];
     if (courseListTab === "available") list = availableCourses;
-    else if (courseListTab === "completed") list = activeCourses.filter((c) => completedCourses.has(c.id));
+    else if (courseListTab === "completed")
+      list = activeCourses.filter((c) => completedCourses.has(c.id));
     else list = courses; // Show all 123 courses in the "All" tab
 
-    return list.reduce((acc, course) => {
-      if (!acc[course.category]) acc[course.category] = [];
-      acc[course.category].push(course);
-      return acc;
-    }, {} as Record<string, Course[]>);
+    return list.reduce(
+      (acc, course) => {
+        if (!acc[course.category]) acc[course.category] = [];
+        acc[course.category].push(course);
+        return acc;
+      },
+      {} as Record<string, Course[]>,
+    );
   }, [courseListTab, availableCourses, activeCourses, completedCourses]);
 
   const completedCredits = useMemo(() => {
@@ -816,7 +939,9 @@ function FlowComponent() {
 
   const toggleCourseCompletion = useCallback(
     (courseId: string) => {
-      setCompletedCourses((previous) => toggleCompletedCourse(previous, courseId));
+      setCompletedCourses((previous) =>
+        toggleCompletedCourse(previous, courseId),
+      );
     },
     [setCompletedCourses],
   );
@@ -843,7 +968,9 @@ function FlowComponent() {
         void setCenter(node.position.x + 100, node.position.y + 50, {
           zoom: 1.5,
           duration: 800,
-        }).catch((error: unknown) => console.error("Unable to center map on course", error));
+        }).catch((error: unknown) =>
+          console.error("Unable to center map on course", error),
+        );
         setSelectedNodeId(id);
       }
       // Close sidebar on mobile but maybe not on desktop
@@ -857,7 +984,8 @@ function FlowComponent() {
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
-        if (document.querySelector('[role="dialog"][aria-modal="true"]')) return;
+        if (document.querySelector('[role="dialog"][aria-modal="true"]'))
+          return;
         setIsSidebarOpen(false);
         setSelectedNodeId(null);
       }
@@ -879,9 +1007,12 @@ function FlowComponent() {
 
     if (activeNodeId) {
       // استخراج المنطق لدالة getPathForCourse التي قمنا بتحسينها بالأعلى
-      const { ancestors: anc, descendants: des } = getPathForCourse(activeNodeId, layoutedEdges);
-      anc.forEach(id => ancestors.add(id));
-      des.forEach(id => descendants.add(id));
+      const { ancestors: anc, descendants: des } = getPathForCourse(
+        activeNodeId,
+        layoutedEdges,
+      );
+      anc.forEach((id) => ancestors.add(id));
+      des.forEach((id) => descendants.add(id));
 
       layoutedEdges.forEach((e) => {
         if (e.target === activeNodeId) {
@@ -915,8 +1046,8 @@ function FlowComponent() {
           // Dim all nodes except the active path
           opacity =
             n.id === activeNodeId ||
-              ancestors.has(n.id) ||
-              descendants.has(n.id)
+            ancestors.has(n.id) ||
+            descendants.has(n.id)
               ? 1
               : 0.15;
         }
@@ -1020,7 +1151,7 @@ function FlowComponent() {
     <div
       className={cn(
         "app-shell w-full h-dvh print:h-auto overflow-hidden print:overflow-visible flex flex-col font-sans p-0 sm:p-4 print:p-0 transition-colors duration-300",
-        isDarkMode ? "dark bg-[#0f172a]" : "bg-[#f3f4f6] print:bg-white"
+        isDarkMode ? "dark" : "",
       )}
       dir="rtl"
     >
@@ -1063,119 +1194,133 @@ function FlowComponent() {
             <div>
               <div className="mb-1">
                 <h1 className="flex items-center gap-2 text-sm sm:text-2xl font-extrabold text-slate-800 dark:text-slate-100">
-                  <BookOpen className="text-blue-600 dark:text-blue-400 hidden sm:block" size={24} />
+                  <BookOpen
+                    className="text-blue-600 dark:text-blue-400 hidden sm:block"
+                    size={24}
+                  />
                   خريطة المتطلبات الأكاديمية
                 </h1>
                 <div className="grid w-full grid-cols-3 gap-1.5 sm:flex sm:w-auto sm:flex-wrap sm:gap-2 sm:mt-1">
-                <button
-                  onClick={() => {
-                    setIsPlanningModeOpen(true);
-                    setSelectedNodeId(null);
-                    setIsDetailsOpen(false);
-                    setHoveredCourseId(null);
-                    setPlanningCourseId(null);
-                  }}
-                  className="flex min-h-10 items-center justify-center gap-1.5 px-1.5 sm:px-3 sm:py-1.5 text-[11px] sm:text-sm bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-700 hover:to-indigo-800 text-white rounded-xl transition-all duration-200 cursor-pointer shadow-lg shadow-indigo-200/50 dark:shadow-indigo-900/30 hover:shadow-xl hover:shadow-indigo-300/60 dark:hover:shadow-indigo-900/50 hover:-translate-y-0.5 font-extrabold"
-                >
-                  <MapIcon size={16} />
-                  وضع التخطيط
-                </button>
-                <button
-                  onClick={() => {
-                    setIsCourseListModalOpen(true);
-                    setSelectedNodeId(null);
-                    setIsDetailsOpen(false);
-                    setHoveredCourseId(null);
-                  }}
-                  className="flex min-h-10 items-center justify-center gap-1.5 px-1.5 sm:px-3 sm:py-1.5 text-[11px] sm:text-sm bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white rounded-xl transition-all duration-200 cursor-pointer shadow-lg shadow-blue-200/50 dark:shadow-blue-900/30 hover:shadow-xl hover:shadow-blue-300/60 dark:hover:shadow-blue-900/50 hover:-translate-y-0.5 font-extrabold"
-                >
-                  <LayoutList size={16} />
-                  قائمة المواد
-                </button>
-                <button
-                  onClick={() => {
-                    setIsGPAModalOpen(true);
-                    setSelectedNodeId(null);
-                    setIsDetailsOpen(false);
-                    setHoveredCourseId(null);
-                  }}
-                  className="flex min-h-10 items-center justify-center gap-1.5 px-1.5 sm:px-3 sm:py-1.5 text-[11px] sm:text-sm bg-gradient-to-r from-violet-600 to-violet-700 hover:from-violet-700 hover:to-violet-800 text-white rounded-xl transition-all duration-200 cursor-pointer shadow-lg shadow-violet-200/50 dark:shadow-violet-900/30 hover:shadow-xl hover:shadow-violet-300/60 dark:hover:shadow-violet-900/50 hover:-translate-y-0.5 font-extrabold"
-                >
-                  <Calculator size={16} />
-                  <span className="sm:hidden">المعدل</span>
-                  <span className="hidden sm:inline">المعدل والدرجات</span>
-                </button>
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setIsPlannerOpen(true);
-                    setSelectedNodeId(null);
-                    setIsDetailsOpen(false);
-                    setHoveredCourseId(null);
-                    setPlanningCourseId(null);
-                  }}
-                  className="flex min-h-10 items-center justify-center gap-1.5 px-1.5 sm:px-3 sm:py-1.5 text-[11px] sm:text-sm bg-gradient-to-r from-orange-400 to-orange-500 hover:from-orange-500 hover:to-orange-600 text-white dark:from-orange-500 dark:to-orange-600 dark:hover:from-orange-600 dark:hover:to-orange-700 rounded-xl transition-all duration-200 cursor-pointer shadow-lg shadow-orange-200/50 dark:shadow-orange-900/30 hover:shadow-xl hover:shadow-orange-300/60 dark:hover:shadow-orange-900/50 hover:-translate-y-0.5 font-extrabold"
-                >
-                  <CalendarDays size={14} className="sm:hidden" />
-                  <CalendarDays size={16} className="hidden sm:block" />
-                  <span className="sm:hidden">الخطة</span>
-                  <span className="hidden sm:inline">عرض الخطة</span>
-                </button>
-                <button
-                  onClick={() => setIsWeeklyScheduleOpen(true)}
-                  className="flex min-h-10 items-center justify-center gap-1.5 px-1.5 sm:px-3 sm:py-1.5 text-[11px] sm:text-sm bg-gradient-to-r from-cyan-500 to-cyan-600 hover:from-cyan-600 hover:to-cyan-700 text-white dark:from-cyan-600 dark:to-cyan-700 dark:hover:from-cyan-700 dark:hover:to-cyan-800 rounded-xl transition-all duration-200 cursor-pointer shadow-lg shadow-cyan-200/50 dark:shadow-cyan-900/30 hover:shadow-xl hover:shadow-cyan-300/60 dark:hover:shadow-cyan-900/50 hover:-translate-y-0.5 font-extrabold"
-                >
-                  <CalendarDays size={14} className="sm:hidden" />
-                  <CalendarDays size={16} className="hidden sm:block" />
-                  <span className="sm:hidden">الجدول</span>
-                  <span className="hidden sm:inline">الجدول الأسبوعي</span>
-                </button>
-                <button
-                  onClick={() => {
-                    setShareCode(null);
-                    setShareError(null);
-                    setIsShareScheduleOpen(true);
-                  }}
-                  className="flex min-h-10 items-center justify-center gap-1.5 px-1.5 sm:px-3 sm:py-1.5 text-[11px] sm:text-sm bg-violet-100 hover:bg-violet-200 text-violet-800 dark:bg-violet-900/50 dark:text-violet-300 dark:hover:bg-violet-800/60 rounded-xl transition-colors cursor-pointer shadow-sm font-bold"
-                  title="إنشاء رابط أو رمز QR لفتح الخطة على جهاز آخر"
-                >
-                  <Link2 size={15} />
-                  <span className="sm:hidden">مشاركة</span>
-                  <span className="hidden sm:inline">مشاركة / فتح على الجوال</span>
-                </button>
-                <button
-                  onClick={() => {
-                    setLoadError(null);
-                    setIsLoadScheduleOpen(true);
-                  }}
-                  className="flex min-h-10 items-center justify-center gap-1.5 px-1.5 sm:px-3 sm:py-1.5 text-[11px] sm:text-sm bg-gray-100 hover:bg-gray-200 text-gray-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700 rounded-xl transition-colors cursor-pointer shadow-sm font-bold"
-                  title="فتح خطة مشتركة باستخدام رمز أو رابط"
-                >
-                  <Search size={15} />
-                  <span className="sm:hidden">استرجاع</span>
-                  <span className="hidden sm:inline">استرجاع برمز</span>
-                </button>
+                  <button
+                    onClick={() => {
+                      setIsPlanningModeOpen(true);
+                      setSelectedNodeId(null);
+                      setIsDetailsOpen(false);
+                      setHoveredCourseId(null);
+                      setPlanningCourseId(null);
+                    }}
+                    className="flex min-h-10 items-center justify-center gap-1.5 px-1.5 sm:px-3 sm:py-1.5 text-[11px] sm:text-sm bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-700 hover:to-indigo-800 text-white rounded-xl transition-all duration-200 cursor-pointer shadow-lg shadow-indigo-200/50 dark:shadow-indigo-900/30 hover:shadow-xl hover:shadow-indigo-300/60 dark:hover:shadow-indigo-900/50 hover:-translate-y-0.5 font-extrabold"
+                  >
+                    <MapIcon size={16} />
+                    وضع التخطيط
+                  </button>
+                  <button
+                    onClick={() => {
+                      setIsCourseListModalOpen(true);
+                      setSelectedNodeId(null);
+                      setIsDetailsOpen(false);
+                      setHoveredCourseId(null);
+                    }}
+                    className="flex min-h-10 items-center justify-center gap-1.5 px-1.5 sm:px-3 sm:py-1.5 text-[11px] sm:text-sm bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white rounded-xl transition-all duration-200 cursor-pointer shadow-lg shadow-blue-200/50 dark:shadow-blue-900/30 hover:shadow-xl hover:shadow-blue-300/60 dark:hover:shadow-blue-900/50 hover:-translate-y-0.5 font-extrabold"
+                  >
+                    <LayoutList size={16} />
+                    قائمة المواد
+                  </button>
+                  <button
+                    onClick={() => {
+                      setIsGPAModalOpen(true);
+                      setSelectedNodeId(null);
+                      setIsDetailsOpen(false);
+                      setHoveredCourseId(null);
+                    }}
+                    className="flex min-h-10 items-center justify-center gap-1.5 px-1.5 sm:px-3 sm:py-1.5 text-[11px] sm:text-sm bg-gradient-to-r from-violet-600 to-violet-700 hover:from-violet-700 hover:to-violet-800 text-white rounded-xl transition-all duration-200 cursor-pointer shadow-lg shadow-violet-200/50 dark:shadow-violet-900/30 hover:shadow-xl hover:shadow-violet-300/60 dark:hover:shadow-violet-900/50 hover:-translate-y-0.5 font-extrabold"
+                  >
+                    <Calculator size={16} />
+                    <span className="sm:hidden">المعدل</span>
+                    <span className="hidden sm:inline">المعدل والدرجات</span>
+                  </button>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setIsPlannerOpen(true);
+                      setSelectedNodeId(null);
+                      setIsDetailsOpen(false);
+                      setHoveredCourseId(null);
+                      setPlanningCourseId(null);
+                    }}
+                    className="flex min-h-10 items-center justify-center gap-1.5 px-1.5 sm:px-3 sm:py-1.5 text-[11px] sm:text-sm bg-gradient-to-r from-orange-400 to-orange-500 hover:from-orange-500 hover:to-orange-600 text-white dark:from-orange-500 dark:to-orange-600 dark:hover:from-orange-600 dark:hover:to-orange-700 rounded-xl transition-all duration-200 cursor-pointer shadow-lg shadow-orange-200/50 dark:shadow-orange-900/30 hover:shadow-xl hover:shadow-orange-300/60 dark:hover:shadow-orange-900/50 hover:-translate-y-0.5 font-extrabold"
+                  >
+                    <CalendarDays size={14} className="sm:hidden" />
+                    <CalendarDays size={16} className="hidden sm:block" />
+                    <span className="sm:hidden">الخطة</span>
+                    <span className="hidden sm:inline">عرض الخطة</span>
+                  </button>
+                  <button
+                    onClick={() => setIsWeeklyScheduleOpen(true)}
+                    className="flex min-h-10 items-center justify-center gap-1.5 px-1.5 sm:px-3 sm:py-1.5 text-[11px] sm:text-sm bg-gradient-to-r from-cyan-500 to-cyan-600 hover:from-cyan-600 hover:to-cyan-700 text-white dark:from-cyan-600 dark:to-cyan-700 dark:hover:from-cyan-700 dark:hover:to-cyan-800 rounded-xl transition-all duration-200 cursor-pointer shadow-lg shadow-cyan-200/50 dark:shadow-cyan-900/30 hover:shadow-xl hover:shadow-cyan-300/60 dark:hover:shadow-cyan-900/50 hover:-translate-y-0.5 font-extrabold"
+                  >
+                    <CalendarDays size={14} className="sm:hidden" />
+                    <CalendarDays size={16} className="hidden sm:block" />
+                    <span className="sm:hidden">الجدول</span>
+                    <span className="hidden sm:inline">الجدول الأسبوعي</span>
+                  </button>
+                  <button
+                    onClick={() => {
+                      setShareCode(null);
+                      setShareError(null);
+                      setIsShareScheduleOpen(true);
+                    }}
+                    className="flex min-h-10 items-center justify-center gap-1.5 px-1.5 sm:px-3 sm:py-1.5 text-[11px] sm:text-sm bg-violet-100 hover:bg-violet-200 text-violet-800 dark:bg-violet-900/50 dark:text-violet-300 dark:hover:bg-violet-800/60 rounded-xl transition-colors cursor-pointer shadow-sm font-bold"
+                    title="إنشاء رابط أو رمز QR لفتح الخطة على جهاز آخر"
+                  >
+                    <Link2 size={15} />
+                    <span className="sm:hidden">مشاركة</span>
+                    <span className="hidden sm:inline">
+                      مشاركة / فتح على الجوال
+                    </span>
+                  </button>
+                  <button
+                    onClick={() => {
+                      setLoadError(null);
+                      setIsLoadScheduleOpen(true);
+                    }}
+                    className="flex min-h-10 items-center justify-center gap-1.5 px-1.5 sm:px-3 sm:py-1.5 text-[11px] sm:text-sm bg-gray-100 hover:bg-gray-200 text-gray-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700 rounded-xl transition-colors cursor-pointer shadow-sm font-bold"
+                    title="فتح خطة مشتركة باستخدام رمز أو رابط"
+                  >
+                    <Search size={15} />
+                    <span className="sm:hidden">استرجاع</span>
+                    <span className="hidden sm:inline">استرجاع برمز</span>
+                  </button>
 
-                <button
-                  onClick={() => setIsSupportModalOpen(true)}
-                  className="flex min-h-10 items-center justify-center gap-1.5 px-1.5 sm:px-3 sm:py-1.5 text-[11px] sm:text-sm bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700 text-white dark:from-emerald-600 dark:to-emerald-700 dark:hover:from-emerald-700 dark:hover:to-emerald-800 rounded-xl transition-all duration-200 cursor-pointer shadow-lg shadow-emerald-200/50 dark:shadow-emerald-900/30 hover:shadow-xl hover:shadow-emerald-300/60 dark:hover:shadow-emerald-900/50 hover:-translate-y-0.5 font-extrabold"
-                  title="الدعم والاقتراحات"
-                >
-                  <MessageCircle size={14} className="text-emerald-600 dark:text-emerald-400 sm:hidden" />
-                  <MessageCircle size={16} className="text-emerald-600 dark:text-emerald-400 hidden sm:block" />
-                  <span className="hidden sm:inline">الدعم والاقتراحات</span>
-                  <span className="sm:hidden">الدعم</span>
-                </button>
+                  <button
+                    onClick={() => setIsSupportModalOpen(true)}
+                    className="flex min-h-10 items-center justify-center gap-1.5 px-1.5 sm:px-3 sm:py-1.5 text-[11px] sm:text-sm bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700 text-white dark:from-emerald-600 dark:to-emerald-700 dark:hover:from-emerald-700 dark:hover:to-emerald-800 rounded-xl transition-all duration-200 cursor-pointer shadow-lg shadow-emerald-200/50 dark:shadow-emerald-900/30 hover:shadow-xl hover:shadow-emerald-300/60 dark:hover:shadow-emerald-900/50 hover:-translate-y-0.5 font-extrabold"
+                    title="الدعم والاقتراحات"
+                  >
+                    <MessageCircle
+                      size={14}
+                      className="text-emerald-600 dark:text-emerald-400 sm:hidden"
+                    />
+                    <MessageCircle
+                      size={16}
+                      className="text-emerald-600 dark:text-emerald-400 hidden sm:block"
+                    />
+                    <span className="hidden sm:inline">الدعم والاقتراحات</span>
+                    <span className="sm:hidden">الدعم</span>
+                  </button>
                 </div>
               </div>
               <p className="text-[10px] sm:text-sm text-gray-600 dark:text-slate-400 uppercase font-bold flex items-center gap-2">
                 تخصص هندسة أنظمة الحاسوب{" "}
-                <span className="w-1.5 h-1.5 rounded-full bg-gradient-to-r from-blue-500 to-indigo-500"></span> جامعة
-                فلسطين التقنية - خضوري (PTUK)
+                <span className="w-1.5 h-1.5 rounded-full bg-gradient-to-r from-blue-500 to-indigo-500"></span>{" "}
+                جامعة فلسطين التقنية - خضوري (PTUK)
               </p>
               <div className="mt-2 hidden sm:flex items-center gap-2 text-[10px] font-extrabold text-amber-700 dark:text-amber-300 bg-gradient-to-r from-amber-100 to-orange-100 dark:from-amber-900/30 dark:to-orange-900/30 px-4 py-1.5 rounded-xl border border-amber-200 dark:border-amber-800/50 shadow-md shadow-amber-200/30 dark:shadow-amber-900/20 w-fit animate-in fade-in slide-in-from-right-2 duration-500">
                 <Pin size={12} className="rotate-25" />
-                <span>ملاحظة: عند تثبيت المادة، يظهر كامل المسار المعتمد عليها والمتطلبات السابقة.</span>
+                <span>
+                  ملاحظة: عند تثبيت المادة، يظهر كامل المسار المعتمد عليها
+                  والمتطلبات السابقة.
+                </span>
               </div>
             </div>
           </div>
@@ -1206,30 +1351,33 @@ function FlowComponent() {
                   dir="rtl"
                 >
                   {matchingSearchCourses.map((c) => (
-                      <button
-                        type="button"
-                        key={c.id}
-                        className="w-full text-right px-4 py-3 hover:bg-blue-50 dark:hover:bg-slate-700 text-sm border-b border-gray-50 dark:border-slate-750 last:border-0 transition-colors flex justify-between items-center cursor-pointer"
-                        onClick={() => {
-                          focusNode(c.id);
-                          setSearchQuery("");
-                        }}
-                      >
-                        <span className="font-semibold text-gray-800 dark:text-slate-200 flex items-center gap-1.5 flex-wrap">
-                          <span>{c.name}</span>
-                          {courseCommonNames[c.id] && (
-                            <span className="text-[10px] bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 px-1.5 py-0.5 rounded border border-blue-150 dark:border-blue-800 font-bold">
-                              {courseCommonNames[c.id]}
-                            </span>
-                          )}
-                        </span>
-                        <span className="text-[10px] bg-gray-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-gray-500 dark:text-slate-500 font-mono shrink-0">
-                          {c.id}
-                        </span>
-                      </button>
+                    <button
+                      type="button"
+                      key={c.id}
+                      className="w-full text-right px-4 py-3 hover:bg-blue-50 dark:hover:bg-slate-700 text-sm border-b border-gray-50 dark:border-slate-750 last:border-0 transition-colors flex justify-between items-center cursor-pointer"
+                      onClick={() => {
+                        focusNode(c.id);
+                        setSearchQuery("");
+                      }}
+                    >
+                      <span className="font-semibold text-gray-800 dark:text-slate-200 flex items-center gap-1.5 flex-wrap">
+                        <span>{c.name}</span>
+                        {courseCommonNames[c.id] && (
+                          <span className="text-[10px] bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 px-1.5 py-0.5 rounded border border-blue-150 dark:border-blue-800 font-bold">
+                            {courseCommonNames[c.id]}
+                          </span>
+                        )}
+                      </span>
+                      <span className="text-[10px] bg-gray-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-gray-500 dark:text-slate-500 font-mono shrink-0">
+                        {c.id}
+                      </span>
+                    </button>
                   ))}
                   {matchingSearchCourses.length === 0 && (
-                    <p role="status" className="p-4 text-center text-sm text-gray-500">
+                    <p
+                      role="status"
+                      className="p-4 text-center text-sm text-gray-500"
+                    >
                       لا توجد نتائج
                     </p>
                   )}
@@ -1245,7 +1393,7 @@ function FlowComponent() {
                   "flex items-center justify-center gap-1.5 px-2 sm:px-3 py-1 text-[11px] sm:text-xs font-bold rounded-lg transition-all cursor-pointer",
                   viewMode === "map"
                     ? "bg-white dark:bg-slate-700 text-blue-600 dark:text-blue-400 shadow-sm"
-                    : "text-gray-500 dark:text-slate-400 hover:text-gray-850 dark:hover:text-slate-200"
+                    : "text-gray-500 dark:text-slate-400 hover:text-gray-850 dark:hover:text-slate-200",
                 )}
                 title="عرض الخريطة التفاعلية"
               >
@@ -1259,7 +1407,7 @@ function FlowComponent() {
                   "flex items-center justify-center gap-1.5 px-2 sm:px-3 py-1 text-[11px] sm:text-xs font-bold rounded-lg transition-all cursor-pointer",
                   viewMode === "list"
                     ? "bg-white dark:bg-slate-700 text-blue-600 dark:text-blue-400 shadow-sm"
-                    : "text-gray-500 dark:text-slate-400 hover:text-gray-850"
+                    : "text-gray-500 dark:text-slate-400 hover:text-gray-850",
                 )}
                 title="عرض المواد في قوائم عمودية"
               >
@@ -1269,14 +1417,10 @@ function FlowComponent() {
               </button>
             </div>
 
-            {/* زر المود الليلي */}
-            <button
-              onClick={() => setIsDarkMode(!isDarkMode)}
-              className="flex items-center justify-center w-11 h-11 rounded-xl bg-white dark:bg-slate-800 hover:bg-gray-100 dark:hover:bg-slate-700 border border-gray-200 dark:border-slate-700 cursor-pointer shadow-sm transition-colors text-gray-600 dark:text-yellow-400 shrink-0"
-              title={isDarkMode ? "الوضع المضيء" : "الوضع المظلم"}
-            >
-              {isDarkMode ? <Sun size={18} /> : <Moon size={18} />}
-            </button>
+            <ThemeStudio
+              manager={themeManager}
+              onThemeStateChange={handleThemeStateChange}
+            />
 
             <button
               onClick={handleReset}
@@ -1298,7 +1442,9 @@ function FlowComponent() {
                 {/* الشريط البرتقالي: يمثل المنجز + المخطط له كخلفية متصلة */}
                 <div
                   className="absolute right-0 top-0 h-full bg-orange-400 rounded-full transition-all duration-1000 ease-out"
-                  style={{ width: `${progressPercentage + plannedPercentage}%` }}
+                  style={{
+                    width: `${progressPercentage + plannedPercentage}%`,
+                  }}
                 ></div>
                 {/* الشريط الأزرق: يركب فوق البرتقالي ليمثل المنجز فقط */}
                 <div
@@ -1328,140 +1474,203 @@ function FlowComponent() {
         >
           <>
             {viewMode === "map" && (
-            <div className="absolute inset-0">
-              <ReactFlow
-                nodes={nodes}
-                edges={edges}
-                onNodesChange={onNodesChange}
-                onEdgesChange={onEdgesChange}
-                onNodeClick={onNodeClick}
-                onPaneClick={onPaneClick}
-                nodeTypes={nodeTypes}
-                onlyRenderVisibleElements
-                nodeExtent={nodeExtent}
-                translateExtent={nodeExtent}
-                elevateNodesOnSelect={false}
-                minZoom={0.05}
-                maxZoom={1.5}
-                attributionPosition="bottom-left"
-              >
-                <Background color={isDarkMode ? "#334155" : "#e5e7eb"} gap={20} size={2} />
-                <Controls
-                  className="bg-white dark:bg-slate-800 dark:border-slate-700 shadow-md rounded-md border border-gray-200 dark:text-white overflow-hidden"
-                  showInteractive={false}
-                  showFitView={true}
-                />
-              </ReactFlow>
+              <div className="absolute inset-0">
+                <ReactFlow
+                  nodes={nodes}
+                  edges={edges}
+                  onNodesChange={onNodesChange}
+                  onEdgesChange={onEdgesChange}
+                  onNodeClick={onNodeClick}
+                  onPaneClick={onPaneClick}
+                  nodeTypes={nodeTypes}
+                  onlyRenderVisibleElements
+                  nodeExtent={nodeExtent}
+                  translateExtent={nodeExtent}
+                  elevateNodesOnSelect={false}
+                  minZoom={0.05}
+                  maxZoom={1.5}
+                  attributionPosition="bottom-left"
+                >
+                  <Background
+                    color={isDarkMode ? "#334155" : "#e5e7eb"}
+                    gap={20}
+                    size={2}
+                  />
+                  <Controls
+                    className="bg-white dark:bg-slate-800 dark:border-slate-700 shadow-md rounded-md border border-gray-200 dark:text-white overflow-hidden"
+                    showInteractive={false}
+                    showFitView={true}
+                  />
+                </ReactFlow>
 
-              {/* Selected Course Prereq/Dependent Info Box */}
-              {selectedNodeId && (() => {
-                const selCourse = courses.find((c) => c.id === selectedNodeId);
-                if (!selCourse) return null;
-                const prereqs = selCourse.prerequisites || [];
-                const dependents = courses.filter((c) => c.prerequisites.includes(selectedNodeId)).map((c) => c.id);
-                return (
-                  <div
-                    className="absolute top-2 left-2 sm:top-6 sm:left-6 bg-white dark:bg-slate-800 p-2.5 sm:p-4 rounded-xl shadow-xl border border-gray-200 dark:border-slate-700 flex flex-col gap-2 z-10 w-[calc(100vw-1rem)] max-w-70 sm:w-70 max-h-[60vh] sm:max-h-[70vh] overflow-y-auto"
-                    dir="rtl"
-                  >
-                    <div className="flex items-center justify-between gap-2 pb-2 border-b border-gray-100 dark:border-slate-700">
-                      <div className="text-[11px] font-black text-blue-600 dark:text-blue-400 font-mono">{selCourse.id}</div>
-                      <button
-                        onClick={() => setSelectedNodeId(null)}
-                        className="text-gray-400 hover:text-gray-600 dark:hover:text-slate-200 text-xs"
-                        title="إغلاق"
-                      >✕</button>
-                    </div>
-                    <div className="text-[12px] font-bold text-gray-700 dark:text-slate-200 leading-tight">{selCourse.name}</div>
-
-                    <div className="mt-1">
-                      <div className="flex items-center justify-between mb-1">
-                        <span className="text-[11px] font-bold text-emerald-700 dark:text-emerald-400">المتطلبات السابقة</span>
-                        <span className="text-[10px] font-black bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300 px-1.5 py-0.5 rounded">{prereqs.length}</span>
-                      </div>
-                      {prereqs.length === 0 ? (
-                        <div className="text-[10px] text-gray-400">لا يوجد</div>
-                      ) : (
-                        <div className="flex flex-wrap gap-1">
-                          {prereqs.map((pid) => {
-                            const p = courses.find((c) => c.id === pid);
-                            return (
-                              <button
-                                key={pid}
-                                onClick={() => { setSelectedNodeId(pid); focusNode(pid); }}
-                                className="flex items-center gap-1.5 text-[10px] font-bold bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 px-2 py-1 rounded hover:bg-emerald-100 max-w-full transition-colors cursor-pointer group relative"
-                                title={`انقر للانتقال إلى ${p?.name || pid}`}
-                              >
-                                <span className="font-mono">{pid}</span>
-                                {p?.name && <span className="font-normal truncate">{p.name}</span>}
-                                <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="shrink-0 ml-0.5">
-                                  <path d="M7 17l9.2-9.2M17 17V7H7"/>
-                                </svg>
-                              </button>
-                            );
-                          })}
+                {/* Selected Course Prereq/Dependent Info Box */}
+                {selectedNodeId &&
+                  (() => {
+                    const selCourse = courses.find(
+                      (c) => c.id === selectedNodeId,
+                    );
+                    if (!selCourse) return null;
+                    const prereqs = selCourse.prerequisites || [];
+                    const dependents = courses
+                      .filter((c) => c.prerequisites.includes(selectedNodeId))
+                      .map((c) => c.id);
+                    return (
+                      <div
+                        className="absolute top-2 left-2 sm:top-6 sm:left-6 bg-white dark:bg-slate-800 p-2.5 sm:p-4 rounded-xl shadow-xl border border-gray-200 dark:border-slate-700 flex flex-col gap-2 z-10 w-[calc(100vw-1rem)] max-w-70 sm:w-70 max-h-[60vh] sm:max-h-[70vh] overflow-y-auto"
+                        dir="rtl"
+                      >
+                        <div className="flex items-center justify-between gap-2 pb-2 border-b border-gray-100 dark:border-slate-700">
+                          <div className="text-[11px] font-black text-blue-600 dark:text-blue-400 font-mono">
+                            {selCourse.id}
+                          </div>
+                          <button
+                            onClick={() => setSelectedNodeId(null)}
+                            className="text-gray-400 hover:text-gray-600 dark:hover:text-slate-200 text-xs"
+                            title="إغلاق"
+                          >
+                            ✕
+                          </button>
                         </div>
-                      )}
-                    </div>
-
-                    <div className="mt-1">
-                      <div className="flex items-center justify-between mb-1">
-                        <span className="text-[11px] font-bold text-indigo-700 dark:text-indigo-400">المواد التي تفتحها</span>
-                        <span className="text-[10px] font-black bg-indigo-100 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300 px-1.5 py-0.5 rounded">{dependents.length}</span>
-                      </div>
-                      {dependents.length === 0 ? (
-                        <div className="text-[10px] text-gray-400">لا يوجد</div>
-                      ) : (
-                        <div className="flex flex-wrap gap-1">
-                          {dependents.map((did) => {
-                            const p = courses.find((c) => c.id === did);
-                            return (
-                              <button
-                                key={did}
-                                onClick={() => { setSelectedNodeId(did); focusNode(did); }}
-                                className="flex items-center gap-1.5 text-[10px] font-bold bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 px-2 py-1 rounded hover:bg-indigo-100 max-w-full transition-colors cursor-pointer group relative"
-                                title={`انقر للانتقال إلى ${p?.name || did}`}
-                              >
-                                <span className="font-mono">{did}</span>
-                                {p?.name && <span className="font-normal truncate">{p.name}</span>}
-                                <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="shrink-0 ml-0.5">
-                                  <path d="M7 17l9.2-9.2M17 17V7H7"/>
-                                </svg>
-                              </button>
-                            );
-                          })}
+                        <div className="text-[12px] font-bold text-gray-700 dark:text-slate-200 leading-tight">
+                          {selCourse.name}
                         </div>
-                      )}
-                    </div>
-                  </div>
-                );
-              })()}
-            </div>
+
+                        <div className="mt-1">
+                          <div className="flex items-center justify-between mb-1">
+                            <span className="text-[11px] font-bold text-emerald-700 dark:text-emerald-400">
+                              المتطلبات السابقة
+                            </span>
+                            <span className="text-[10px] font-black bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300 px-1.5 py-0.5 rounded">
+                              {prereqs.length}
+                            </span>
+                          </div>
+                          {prereqs.length === 0 ? (
+                            <div className="text-[10px] text-gray-400">
+                              لا يوجد
+                            </div>
+                          ) : (
+                            <div className="flex flex-wrap gap-1">
+                              {prereqs.map((pid) => {
+                                const p = courses.find((c) => c.id === pid);
+                                return (
+                                  <button
+                                    key={pid}
+                                    onClick={() => {
+                                      setSelectedNodeId(pid);
+                                      focusNode(pid);
+                                    }}
+                                    className="flex items-center gap-1.5 text-[10px] font-bold bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 px-2 py-1 rounded hover:bg-emerald-100 max-w-full transition-colors cursor-pointer group relative"
+                                    title={`انقر للانتقال إلى ${p?.name || pid}`}
+                                  >
+                                    <span className="font-mono">{pid}</span>
+                                    {p?.name && (
+                                      <span className="font-normal truncate">
+                                        {p.name}
+                                      </span>
+                                    )}
+                                    <svg
+                                      xmlns="http://www.w3.org/2000/svg"
+                                      width="12"
+                                      height="12"
+                                      viewBox="0 0 24 24"
+                                      fill="none"
+                                      stroke="currentColor"
+                                      strokeWidth="2.5"
+                                      strokeLinecap="round"
+                                      strokeLinejoin="round"
+                                      className="shrink-0 ml-0.5"
+                                    >
+                                      <path d="M7 17l9.2-9.2M17 17V7H7" />
+                                    </svg>
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          )}
+                        </div>
+
+                        <div className="mt-1">
+                          <div className="flex items-center justify-between mb-1">
+                            <span className="text-[11px] font-bold text-indigo-700 dark:text-indigo-400">
+                              المواد التي تفتحها
+                            </span>
+                            <span className="text-[10px] font-black bg-indigo-100 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300 px-1.5 py-0.5 rounded">
+                              {dependents.length}
+                            </span>
+                          </div>
+                          {dependents.length === 0 ? (
+                            <div className="text-[10px] text-gray-400">
+                              لا يوجد
+                            </div>
+                          ) : (
+                            <div className="flex flex-wrap gap-1">
+                              {dependents.map((did) => {
+                                const p = courses.find((c) => c.id === did);
+                                return (
+                                  <button
+                                    key={did}
+                                    onClick={() => {
+                                      setSelectedNodeId(did);
+                                      focusNode(did);
+                                    }}
+                                    className="flex items-center gap-1.5 text-[10px] font-bold bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 px-2 py-1 rounded hover:bg-indigo-100 max-w-full transition-colors cursor-pointer group relative"
+                                    title={`انقر للانتقال إلى ${p?.name || did}`}
+                                  >
+                                    <span className="font-mono">{did}</span>
+                                    {p?.name && (
+                                      <span className="font-normal truncate">
+                                        {p.name}
+                                      </span>
+                                    )}
+                                    <svg
+                                      xmlns="http://www.w3.org/2000/svg"
+                                      width="12"
+                                      height="12"
+                                      viewBox="0 0 24 24"
+                                      fill="none"
+                                      stroke="currentColor"
+                                      strokeWidth="2.5"
+                                      strokeLinecap="round"
+                                      strokeLinejoin="round"
+                                      className="shrink-0 ml-0.5"
+                                    >
+                                      <path d="M7 17l9.2-9.2M17 17V7H7" />
+                                    </svg>
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })()}
+              </div>
             )}
             {viewMode === "list" && (
-            <ListView
-              activeCourses={activeCourses}
-              listGroupBy={listGroupBy}
-              setListGroupBy={setListGroupBy}
-              completedCourses={completedCourses}
-              availableCourses={availableCourses}
-              plannedCourses={plannedCourses}
-              pinnedCourseId={pinnedCourseId}
-              setPinnedCourseId={setPinnedCourseId}
-              pinnedPath={pinnedPath}
-              searchQuery={searchQuery}
-              toggleCourseCompletion={toggleCourseCompletion}
-              setPlanningCourseId={setPlanningCourseId}
-              setIsPlannerOpen={setIsPlannerOpen}
-              selectedElectives={selectedElectives}
-              setSelectedElectives={setSelectedElectives}
-              completedCreditsPerCategory={completedCreditsPerCategory}
-              courses={courses}
-              hoveredCourseId={hoveredCourseId}
-              setHoveredCourseId={setHoveredCourseId}
-              hoveredPath={hoveredPath}
-              onOpenDetails={openDetails}
-            />
+              <ListView
+                activeCourses={activeCourses}
+                listGroupBy={listGroupBy}
+                setListGroupBy={setListGroupBy}
+                completedCourses={completedCourses}
+                availableCourses={availableCourses}
+                plannedCourses={plannedCourses}
+                pinnedCourseId={pinnedCourseId}
+                setPinnedCourseId={setPinnedCourseId}
+                pinnedPath={pinnedPath}
+                searchQuery={searchQuery}
+                toggleCourseCompletion={toggleCourseCompletion}
+                setPlanningCourseId={setPlanningCourseId}
+                setIsPlannerOpen={setIsPlannerOpen}
+                selectedElectives={selectedElectives}
+                setSelectedElectives={setSelectedElectives}
+                completedCreditsPerCategory={completedCreditsPerCategory}
+                courses={courses}
+                hoveredCourseId={hoveredCourseId}
+                setHoveredCourseId={setHoveredCourseId}
+                hoveredPath={hoveredPath}
+                onOpenDetails={openDetails}
+              />
             )}
           </>
 
@@ -1469,7 +1678,7 @@ function FlowComponent() {
           <div
             className={cn(
               "absolute top-0 right-0 h-full bg-white/95 dark:bg-slate-900/95 backdrop-blur-md shadow-2xl border-l border-gray-200 dark:border-slate-800 transition-all duration-300 z-50 w-full sm:w-100 overflow-hidden flex flex-col",
-              (selectedNodeId && isDetailsOpen)
+              selectedNodeId && isDetailsOpen
                 ? "translate-x-0 opacity-100"
                 : "translate-x-full opacity-0 pointer-events-none",
             )}
@@ -1616,7 +1825,7 @@ function FlowComponent() {
                               ? "bg-red-50 text-red-600 border border-red-200 hover:bg-red-100"
                               : !isDisabled
                                 ? "bg-emerald-500 text-white hover:bg-emerald-600 shadow-emerald-500/20 shadow-md"
-                                  : "bg-gray-100 text-gray-400 cursor-not-allowed",
+                                : "bg-gray-100 text-gray-400 cursor-not-allowed",
                           )}
                           disabled={isDisabled}
                         >
@@ -1653,14 +1862,27 @@ function FlowComponent() {
 
                       {/* IVR Library Link Button */}
                       <a
-                        href={node.resourceLink || "https://ivr-team-ptuk.github.io/IVR-Library/"}
+                        href={
+                          node.resourceLink ||
+                          "https://ivr-team-ptuk.github.io/IVR-Library/"
+                        }
                         target="_blank"
                         rel="noopener noreferrer"
                         className="w-full py-3 rounded-xl font-bold flex items-center justify-center gap-2 transition-all shadow-sm bg-blue-50 text-blue-700 border border-blue-200 hover:bg-blue-100 dark:bg-blue-900/20 dark:text-blue-400 dark:border-blue-800 dark:hover:bg-blue-900/30"
                       >
-                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                          <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/>
-                          <polyline points="14 2 14 8 20 8"/>
+                        <svg
+                          xmlns="http://www.w3.org/2000/svg"
+                          width="16"
+                          height="16"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="2"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        >
+                          <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z" />
+                          <polyline points="14 2 14 8 20 8" />
                         </svg>
                         ملفات وملخصات المادة (IVR)
                       </a>
@@ -1864,7 +2086,9 @@ function FlowComponent() {
                             <div className="flex flex-col gap-2">
                               {categoryCourses.map((course) => {
                                 const isComp = completedCourses.has(course.id);
-                                const isAvail = availableCourseIds.has(course.id);
+                                const isAvail = availableCourseIds.has(
+                                  course.id,
+                                );
                                 return (
                                   <div
                                     key={course.id}
@@ -1970,20 +2194,27 @@ function FlowComponent() {
                       الساعات المنجزة
                     </span>
                     <div className="text-lg font-black flex items-center justify-end gap-1">
-                      <span className="text-blue-600 dark:text-blue-400">{completedCredits}</span>{" "}
+                      <span className="text-blue-600 dark:text-blue-400">
+                        {completedCredits}
+                      </span>{" "}
                       {plannedCredits > 0 && (
                         <span className="text-orange-500 dark:text-orange-400 text-sm break-keep whitespace-nowrap">
                           + {plannedCredits}
                         </span>
                       )}{" "}
-                      / <span className="text-gray-500 dark:text-slate-500 text-sm">{TOTAL_CREDITS}</span>
+                      /{" "}
+                      <span className="text-gray-500 dark:text-slate-500 text-sm">
+                        {TOTAL_CREDITS}
+                      </span>
                     </div>
                   </div>
                   <div className="w-full h-3 bg-gray-100 dark:bg-slate-800 rounded-full overflow-hidden relative">
                     {/* الشريط البرتقالي: يمثل المنجز + المخطط له كخلفية متصلة */}
                     <div
                       className="absolute right-0 top-0 h-full bg-orange-400 rounded-full transition-all duration-1000 ease-out"
-                      style={{ width: `${progressPercentage + plannedPercentage}%` }}
+                      style={{
+                        width: `${progressPercentage + plannedPercentage}%`,
+                      }}
                     ></div>
                     {/* الشريط الأزرق: يركب فوق البرتقالي ليمثل المنجز فقط */}
                     <div
@@ -2033,140 +2264,190 @@ function FlowComponent() {
           )}
         </div>
         {/* Reset Confirmation Modal */}
-        {showResetConfirm && <React.Suspense fallback={modalLoadingFallback}><ResetConfirmationModal
-          showResetConfirm={showResetConfirm}
-          onClose={() => setShowResetConfirm(false)}
-          onConfirm={confirmReset}
-        /></React.Suspense>}
+        {showResetConfirm && (
+          <React.Suspense fallback={modalLoadingFallback}>
+            <ResetConfirmationModal
+              showResetConfirm={showResetConfirm}
+              onClose={() => setShowResetConfirm(false)}
+              onConfirm={confirmReset}
+            />
+          </React.Suspense>
+        )}
 
         {/* Support / Technical Assistance and feedback Modal */}
-        {isSupportModalOpen && <React.Suspense fallback={modalLoadingFallback}><SupportModal
-          isSupportModalOpen={isSupportModalOpen}
-          onClose={() => setIsSupportModalOpen(false)}
-        /></React.Suspense>}
+        {isSupportModalOpen && (
+          <React.Suspense fallback={modalLoadingFallback}>
+            <SupportModal
+              isSupportModalOpen={isSupportModalOpen}
+              onClose={() => setIsSupportModalOpen(false)}
+            />
+          </React.Suspense>
+        )}
 
         {/* Export Modal */}
-        {isExportModalOpen && <React.Suspense fallback={modalLoadingFallback}><ExportModal
-          isExportModalOpen={isExportModalOpen}
-          onClose={() => setIsExportModalOpen(false)}
-          completedCredits={completedCredits}
-          plannedCourses={plannedCourses}
-          completedCourses={completedCourses}
-          courses={courses}
-          courseGrades={courseGrades}
-          weeklySchedule={weeklySchedule}
-          selectedElectives={selectedElectives}
-          failedCourseIds={failedCourseIds}
-          planStartSemester={planStartSemester}
-          planEndSemester={planEndSemester}
-          hidePastSemesters={hidePastSemesters}
-          darkMode={isDarkMode}
-        /></React.Suspense>}
+        {isExportModalOpen && (
+          <React.Suspense fallback={modalLoadingFallback}>
+            <ExportModal
+              isExportModalOpen={isExportModalOpen}
+              onClose={() => setIsExportModalOpen(false)}
+              completedCredits={completedCredits}
+              plannedCourses={plannedCourses}
+              completedCourses={completedCourses}
+              courses={courses}
+              courseGrades={courseGrades}
+              weeklySchedule={weeklySchedule}
+              selectedElectives={selectedElectives}
+              failedCourseIds={failedCourseIds}
+              planStartSemester={planStartSemester}
+              planEndSemester={planEndSemester}
+              hidePastSemesters={hidePastSemesters}
+              darkMode={isDarkMode}
+            />
+          </React.Suspense>
+        )}
 
         {/* Planning Mode Modal */}
-        {isPlanningModeOpen && <React.Suspense fallback={modalLoadingFallback}><PlanningModeModal
-          isPlanningModeOpen={isPlanningModeOpen}
-          onClose={() => { setIsPlanningModeOpen(false); setCurrentPlanningSemester(null); setExpandedPlanningCategories({}); }}
-          currentPlanningSemester={currentPlanningSemester}
-          setCurrentPlanningSemester={setCurrentPlanningSemester}
-          completedCourses={completedCourses}
-          plannedCourses={plannedCourses}
-          setPlannedCourses={setPlannedCourses}
-          courses={courses}
-          isCourseAvailable={isCourseAvailable}
-          completedCreditsPerCategory={completedCreditsPerCategory}
-          hasHighGpa={hasHighGpa}
-          setHasHighGpa={setHasHighGpa}
-          expandedPlanningCategories={expandedPlanningCategories}
-          setExpandedPlanningCategories={setExpandedPlanningCategories}
-          setIsPlannerOpen={setIsPlannerOpen}
-        /></React.Suspense>}
+        {isPlanningModeOpen && (
+          <React.Suspense fallback={modalLoadingFallback}>
+            <PlanningModeModal
+              isPlanningModeOpen={isPlanningModeOpen}
+              onClose={() => {
+                setIsPlanningModeOpen(false);
+                setCurrentPlanningSemester(null);
+                setExpandedPlanningCategories({});
+              }}
+              currentPlanningSemester={currentPlanningSemester}
+              setCurrentPlanningSemester={setCurrentPlanningSemester}
+              completedCourses={completedCourses}
+              plannedCourses={plannedCourses}
+              setPlannedCourses={setPlannedCourses}
+              courses={courses}
+              isCourseAvailable={isCourseAvailable}
+              completedCreditsPerCategory={completedCreditsPerCategory}
+              hasHighGpa={hasHighGpa}
+              setHasHighGpa={setHasHighGpa}
+              expandedPlanningCategories={expandedPlanningCategories}
+              setExpandedPlanningCategories={setExpandedPlanningCategories}
+              setIsPlannerOpen={setIsPlannerOpen}
+            />
+          </React.Suspense>
+        )}
 
         {/* Course List Modal */}
-        {isCourseListModalOpen && <React.Suspense fallback={modalLoadingFallback}><CourseListModal
-          isCourseListModalOpen={isCourseListModalOpen}
-          onClose={() => { setIsCourseListModalOpen(false); setExpandedCourseListCategories({}); }}
-          courseListTab={courseListTab}
-          setCourseListTab={setCourseListTab}
-          availableCourses={availableCourses}
-          completedCourses={completedCourses}
-          activeCourses={activeCourses}
-          groupedCourseList={groupedCourseList}
-          expandedCourseListCategories={expandedCourseListCategories}
-          setExpandedCourseListCategories={setExpandedCourseListCategories}
-          focusNode={focusNode}
-          toggleCourseCompletion={toggleCourseCompletion}
-          setPlanningCourseId={setPlanningCourseId}
-          setIsPlannerOpen={setIsPlannerOpen}
-          completedCreditsPerCategory={completedCreditsPerCategory}
-          plannedCourses={plannedCourses}
-        /></React.Suspense>}
+        {isCourseListModalOpen && (
+          <React.Suspense fallback={modalLoadingFallback}>
+            <CourseListModal
+              isCourseListModalOpen={isCourseListModalOpen}
+              onClose={() => {
+                setIsCourseListModalOpen(false);
+                setExpandedCourseListCategories({});
+              }}
+              courseListTab={courseListTab}
+              setCourseListTab={setCourseListTab}
+              availableCourses={availableCourses}
+              completedCourses={completedCourses}
+              activeCourses={activeCourses}
+              groupedCourseList={groupedCourseList}
+              expandedCourseListCategories={expandedCourseListCategories}
+              setExpandedCourseListCategories={setExpandedCourseListCategories}
+              focusNode={focusNode}
+              toggleCourseCompletion={toggleCourseCompletion}
+              setPlanningCourseId={setPlanningCourseId}
+              setIsPlannerOpen={setIsPlannerOpen}
+              completedCreditsPerCategory={completedCreditsPerCategory}
+              plannedCourses={plannedCourses}
+            />
+          </React.Suspense>
+        )}
 
         {/* Planner View Modal */}
-        {isPlannerOpen && <React.Suspense fallback={modalLoadingFallback}><PlannerView
-          isPlannerOpen={isPlannerOpen}
-          onClose={() => setIsPlannerOpen(false)}
-          plannedCourses={plannedCourses}
-          setPlannedCourses={setPlannedCourses}
-          completedCourses={completedCourses}
-          setCompletedCourses={setCompletedCourses}
-          planStartSemester={planStartSemester}
-          setPlanStartSemester={setPlanStartSemester}
-          planEndSemester={planEndSemester}
-          setPlanEndSemester={setPlanEndSemester}
-          hidePastSemesters={hidePastSemesters}
-          setHidePastSemesters={setHidePastSemesters}
-          planningCourseId={planningCourseId}
-          setPlanningCourseId={setPlanningCourseId}
-          completedCredits={completedCredits}
-          plannedCredits={plannedCredits}
-          completedCreditsPerCategory={completedCreditsPerCategory}
-          plannedCreditsPerCategory={plannedCreditsPerCategory}
-          setIsExportModalOpen={setIsExportModalOpen}
-          onOpenPlanningMode={() => setIsPlanningModeOpen(true)}
-          toggleCourseCompletion={toggleCourseCompletion}
-        /></React.Suspense>}
+        {isPlannerOpen && (
+          <React.Suspense fallback={modalLoadingFallback}>
+            <PlannerView
+              isPlannerOpen={isPlannerOpen}
+              onClose={() => setIsPlannerOpen(false)}
+              plannedCourses={plannedCourses}
+              setPlannedCourses={setPlannedCourses}
+              completedCourses={completedCourses}
+              setCompletedCourses={setCompletedCourses}
+              planStartSemester={planStartSemester}
+              setPlanStartSemester={setPlanStartSemester}
+              planEndSemester={planEndSemester}
+              setPlanEndSemester={setPlanEndSemester}
+              hidePastSemesters={hidePastSemesters}
+              setHidePastSemesters={setHidePastSemesters}
+              planningCourseId={planningCourseId}
+              setPlanningCourseId={setPlanningCourseId}
+              completedCredits={completedCredits}
+              completedCreditsPerCategory={completedCreditsPerCategory}
+              plannedCreditsPerCategory={plannedCreditsPerCategory}
+              setIsExportModalOpen={setIsExportModalOpen}
+              onOpenPlanningMode={() => setIsPlanningModeOpen(true)}
+              toggleCourseCompletion={toggleCourseCompletion}
+            />
+          </React.Suspense>
+        )}
         {/* GPAModal */}
-        {isGPAModalOpen && <React.Suspense fallback={modalLoadingFallback}><GPAModal
-          isOpen={isGPAModalOpen}
-          onClose={() => setIsGPAModalOpen(false)}
-          courses={courses}
-          completedCourses={completedCourses}
-          courseGrades={courseGrades}
-          setCourseGrades={setCourseGrades}
-          failedCourseIds={new Set(failedCourseIds)}
-          setFailedCourseIds={(ids) => setFailedCourseIds(Array.from(ids))}
-        /></React.Suspense>}
-        {isWeeklyScheduleOpen && <React.Suspense fallback={modalLoadingFallback}><WeeklyScheduleModal
-          isOpen={isWeeklyScheduleOpen}
-          onClose={() => setIsWeeklyScheduleOpen(false)}
-          plannedCourses={plannedCourses}
-          courses={courses}
-          weeklySchedule={weeklySchedule}
-          setWeeklySchedule={setWeeklySchedule}
-        /></React.Suspense>}
-        {isShareScheduleOpen && <React.Suspense fallback={modalLoadingFallback}><ShareScheduleModal
-          isOpen={isShareScheduleOpen}
-          onClose={() => setIsShareScheduleOpen(false)}
-          code={shareCode}
-          loading={shareLoading}
-          error={shareError}
-          onCreate={() => void handleCreateSharedLink()}
-        /></React.Suspense>}
-        {isLoadScheduleOpen && <React.Suspense fallback={modalLoadingFallback}><LoadScheduleModal
-          isOpen={isLoadScheduleOpen}
-          onClose={() => setIsLoadScheduleOpen(false)}
-          loading={loadLoading}
-          error={loadError}
-          onLoad={handleLoadSharedSchedule}
-        /></React.Suspense>}
-        {loadedSchedule && <React.Suspense fallback={modalLoadingFallback}><SharedSchedulePreviewModal
-          schedule={loadedSchedule?.schedule ?? null}
-          code={loadedSchedule?.code ?? null}
-          warning={loadedSchedule?.viewCountWarning}
-          onClose={() => setLoadedSchedule(null)}
-          onApply={applySharedSchedule}
-        /></React.Suspense>}
+        {isGPAModalOpen && (
+          <React.Suspense fallback={modalLoadingFallback}>
+            <GPAModal
+              isOpen={isGPAModalOpen}
+              onClose={() => setIsGPAModalOpen(false)}
+              courses={courses}
+              completedCourses={completedCourses}
+              courseGrades={courseGrades}
+              setCourseGrades={setCourseGrades}
+              failedCourseIds={new Set(failedCourseIds)}
+              setFailedCourseIds={(ids) => setFailedCourseIds(Array.from(ids))}
+            />
+          </React.Suspense>
+        )}
+        {isWeeklyScheduleOpen && (
+          <React.Suspense fallback={modalLoadingFallback}>
+            <WeeklyScheduleModal
+              isOpen={isWeeklyScheduleOpen}
+              onClose={() => setIsWeeklyScheduleOpen(false)}
+              plannedCourses={plannedCourses}
+              courses={courses}
+              weeklySchedule={weeklySchedule}
+              setWeeklySchedule={setWeeklySchedule}
+            />
+          </React.Suspense>
+        )}
+        {isShareScheduleOpen && (
+          <React.Suspense fallback={modalLoadingFallback}>
+            <ShareScheduleModal
+              isOpen={isShareScheduleOpen}
+              onClose={() => setIsShareScheduleOpen(false)}
+              code={shareCode}
+              loading={shareLoading}
+              error={shareError}
+              onCreate={() => void handleCreateSharedLink()}
+            />
+          </React.Suspense>
+        )}
+        {isLoadScheduleOpen && (
+          <React.Suspense fallback={modalLoadingFallback}>
+            <LoadScheduleModal
+              isOpen={isLoadScheduleOpen}
+              onClose={() => setIsLoadScheduleOpen(false)}
+              loading={loadLoading}
+              error={loadError}
+              onLoad={handleLoadSharedSchedule}
+            />
+          </React.Suspense>
+        )}
+        {loadedSchedule && (
+          <React.Suspense fallback={modalLoadingFallback}>
+            <SharedSchedulePreviewModal
+              schedule={loadedSchedule?.schedule ?? null}
+              code={loadedSchedule?.code ?? null}
+              warning={loadedSchedule?.viewCountWarning}
+              onClose={() => setLoadedSchedule(null)}
+              onApply={applySharedSchedule}
+            />
+          </React.Suspense>
+        )}
       </div>
     </div>
   );

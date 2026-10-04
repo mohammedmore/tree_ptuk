@@ -16,15 +16,20 @@ const ResetConfirmationModal: React.FC<ResetConfirmationModalProps> = ({
   if (!showResetConfirm) return null;
 
   return (
-    <BaseModal isOpen={showResetConfirm} onClose={onClose} title="تهيئة البيانات" maxWidth="max-w-sm">
+    <BaseModal
+      isOpen={showResetConfirm}
+      onClose={onClose}
+      title="تهيئة البيانات"
+      maxWidth="max-w-sm"
+    >
       <div className="p-6" dir="rtl">
         <div className="flex items-center gap-3 mb-4 text-red-600">
           <Trash2 size={24} aria-hidden="true" />
           <p className="text-sm font-bold">إجراء لا يمكن التراجع عنه</p>
         </div>
         <p className="text-gray-650 dark:text-slate-300 font-medium text-sm mb-6 leading-relaxed">
-          هل أنت متأكد من مسح كافة بيانات المواد المنجزة؟ هذا الإجراء لا
-          يمكن التراجع عنه.
+          هل أنت متأكد من مسح كافة بيانات المواد المنجزة؟ هذا الإجراء لا يمكن
+          التراجع عنه.
         </p>
         <div className="flex gap-3">
           <button

@@ -13,11 +13,12 @@ function isSemesterType(value: string): value is SemesterType {
   return SEMESTER_TYPES.some((type) => type === value);
 }
 
-export const courseOfferingsByID: Record<string, SemesterType[]> = Object.fromEntries(
-  courses.flatMap((course): [string, SemesterType[]][] => (
-    course.availableSemesters ? [[course.id, course.availableSemesters]] : []
-  )),
-);
+export const courseOfferingsByID: Record<string, SemesterType[]> =
+  Object.fromEntries(
+    courses.flatMap((course): [string, SemesterType[]][] =>
+      course.availableSemesters ? [[course.id, course.availableSemesters]] : [],
+    ),
+  );
 
 /**
  * دالة للحصول على فترات الطرح لمادة معينة
@@ -25,7 +26,7 @@ export const courseOfferingsByID: Record<string, SemesterType[]> = Object.fromEn
  * @returns مصفوفة الفترات المتاحة أو undefined إذا لم تُحدد فترات محددة
  */
 export const getAvailableSemesters = (
-  courseId: string
+  courseId: string,
 ): SemesterType[] | undefined => {
   return Object.hasOwn(courseOfferingsByID, courseId)
     ? courseOfferingsByID[courseId]
@@ -40,7 +41,7 @@ export const getAvailableSemesters = (
  */
 export const isCourseAvailableInSemester = (
   courseId: string,
-  semesterType: string
+  semesterType: string,
 ): boolean => {
   if (!isSemesterType(semesterType)) return false;
   const available = getAvailableSemesters(courseId);
@@ -65,18 +66,16 @@ export const getSemesterType = (semesterName: string): SemesterType | null => {
  * @param semesterType نوع الفصل
  * @returns النص العربي
  */
-export const translateSemesterType = (
-  semesterType: SemesterType
-): string => {
+export const translateSemesterType = (semesterType: SemesterType): string => {
   switch (semesterType) {
-    case 'first':
-      return 'الفصل الأول';
-    case 'second':
-      return 'الفصل الثاني';
-    case 'summer':
-      return 'الصيفي';
+    case "first":
+      return "الفصل الأول";
+    case "second":
+      return "الفصل الثاني";
+    case "summer":
+      return "الصيفي";
     default:
-      return 'غير محدد';
+      return "غير محدد";
   }
 };
 
@@ -85,12 +84,14 @@ export const translateSemesterType = (
  * @param offerings مصفوفة فترات الطرح
  * @returns نص عربي يصف فترات الطرح
  */
-export const formatOfferings = (offerings?: readonly SemesterType[]): string => {
-  if (!offerings) return 'جميع الفصول';
-  if (offerings.length === 0) return 'لم تُحدد فترات';
+export const formatOfferings = (
+  offerings?: readonly SemesterType[],
+): string => {
+  if (!offerings) return "جميع الفصول";
+  if (offerings.length === 0) return "لم تُحدد فترات";
 
   const translated = offerings.map((s) => translateSemesterType(s));
-  if (translated.length === 3) return 'جميع الفصول';
+  if (translated.length === 3) return "جميع الفصول";
   if (translated.length === 2) {
     return `${translated[0]} و${translated[1]}`;
   }

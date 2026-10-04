@@ -1,13 +1,13 @@
-import dagre from 'dagre';
-import { Position, type Node, type Edge } from '@xyflow/react';
-import { type ClassValue, clsx } from 'clsx';
-import { twMerge } from 'tailwind-merge';
+import dagre from "dagre";
+import { Position, type Node, type Edge } from "@xyflow/react";
+import { type ClassValue, clsx } from "clsx";
+import { twMerge } from "tailwind-merge";
 
 export function cn(...inputs: ClassValue[]): string {
   return twMerge(clsx(inputs));
 }
 
-type LayoutDirection = 'LR' | 'RL' | 'TB' | 'BT';
+type LayoutDirection = "LR" | "RL" | "TB" | "BT";
 
 interface LayoutedElements {
   nodes: Node[];
@@ -17,7 +17,7 @@ interface LayoutedElements {
 export const getLayoutedElements = (
   nodes: Node[],
   edges: Edge[],
-  direction: LayoutDirection = 'RL',
+  direction: LayoutDirection = "RL",
 ): LayoutedElements => {
   const nodeIds = new Set<string>();
   for (const node of nodes) {
@@ -29,7 +29,9 @@ export const getLayoutedElements = (
 
   for (const edge of edges) {
     if (!nodeIds.has(edge.source) || !nodeIds.has(edge.target)) {
-      throw new Error(`Cannot layout edge "${edge.id}" because its source or target node is missing.`);
+      throw new Error(
+        `Cannot layout edge "${edge.id}" because its source or target node is missing.`,
+      );
     }
   }
 
@@ -57,21 +59,22 @@ export const getLayoutedElements = (
 
   dagre.layout(dagreGraph);
 
-  const isHorizontal = direction === 'LR' || direction === 'RL';
-  const targetPosition = direction === 'LR'
-    ? Position.Left
-    : direction === 'RL'
-      ? Position.Right
-      : direction === 'TB'
-        ? Position.Top
-        : Position.Bottom;
-  const sourcePosition = direction === 'LR'
-    ? Position.Right
-    : direction === 'RL'
+  const targetPosition =
+    direction === "LR"
       ? Position.Left
-      : direction === 'TB'
-        ? Position.Bottom
-        : Position.Top;
+      : direction === "RL"
+        ? Position.Right
+        : direction === "TB"
+          ? Position.Top
+          : Position.Bottom;
+  const sourcePosition =
+    direction === "LR"
+      ? Position.Right
+      : direction === "RL"
+        ? Position.Left
+        : direction === "TB"
+          ? Position.Bottom
+          : Position.Top;
 
   const newNodes = nodes.map((node): Node => {
     const { x, y } = dagreGraph.node(node.id) as { x: number; y: number };

@@ -1,5 +1,16 @@
 import React from "react";
-import { X, CalendarDays, Trash2, CircleCheckBig, Download, Sparkles, PieChart, ChevronDown, ChevronUp, AlertTriangle } from "lucide-react";
+import {
+  X,
+  CalendarDays,
+  Trash2,
+  CircleCheckBig,
+  Download,
+  Sparkles,
+  PieChart,
+  ChevronDown,
+  ChevronUp,
+  AlertTriangle,
+} from "lucide-react";
 import { cn } from "../utils";
 import type { Course } from "../data";
 import { courses } from "../data";
@@ -12,7 +23,9 @@ interface PlannerViewProps {
   isPlannerOpen: boolean;
   onClose: () => void;
   plannedCourses: Record<string, string>;
-  setPlannedCourses: React.Dispatch<React.SetStateAction<Record<string, string>>>;
+  setPlannedCourses: React.Dispatch<
+    React.SetStateAction<Record<string, string>>
+  >;
   completedCourses: Set<string>;
   setCompletedCourses: React.Dispatch<React.SetStateAction<Set<string>>>;
   planStartSemester: string;
@@ -24,7 +37,6 @@ interface PlannerViewProps {
   planningCourseId: string | null;
   setPlanningCourseId: (id: string | null) => void;
   completedCredits: number;
-  plannedCredits: number;
   completedCreditsPerCategory: Record<string, number>;
   plannedCreditsPerCategory: Record<string, number>;
   setIsExportModalOpen: React.Dispatch<React.SetStateAction<boolean>>;
@@ -48,14 +60,14 @@ const PlannerView: React.FC<PlannerViewProps> = ({
   planningCourseId,
   setPlanningCourseId,
   completedCredits,
-  plannedCredits,
   completedCreditsPerCategory,
   plannedCreditsPerCategory,
   setIsExportModalOpen,
   onOpenPlanningMode,
   toggleCourseCompletion,
 }) => {
-  const [plannerSelectedCourse, setPlannerSelectedCourse] = React.useState<Course | null>(null);
+  const [plannerSelectedCourse, setPlannerSelectedCourse] =
+    React.useState<Course | null>(null);
   const [isRescheduling, setIsRescheduling] = React.useState(false);
   const [showStats, setShowStats] = React.useState(false);
 
@@ -145,7 +157,10 @@ const PlannerView: React.FC<PlannerViewProps> = ({
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 sm:gap-4 mb-4 sm:mb-6 shrink-0">
-          <h2 id="planner-view-title" className="text-lg sm:text-2xl font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
+          <h2
+            id="planner-view-title"
+            className="text-lg sm:text-2xl font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2"
+          >
             <CalendarDays className="text-blue-700 dark:text-blue-400" />
             الخطة الفصلية
           </h2>
@@ -156,12 +171,17 @@ const PlannerView: React.FC<PlannerViewProps> = ({
               onClick={() => setShowStats(!showStats)}
               className={cn(
                 "min-h-10 flex items-center justify-center gap-1 sm:gap-2 px-2 sm:px-4 py-1.5 sm:py-2 border rounded-lg transition-colors font-bold text-[11px] sm:text-sm",
-                showStats 
+                showStats
                   ? "bg-blue-700 text-white border-blue-700 hover:bg-blue-800"
-                  : "bg-white text-slate-700 border-slate-200 dark:bg-slate-800 dark:text-slate-200 dark:border-slate-600 hover:bg-slate-50 dark:hover:bg-slate-700"
+                  : "bg-white text-slate-700 border-slate-200 dark:bg-slate-800 dark:text-slate-200 dark:border-slate-600 hover:bg-slate-50 dark:hover:bg-slate-700",
               )}
             >
-              <PieChart size={16} className={showStats ? "text-white" : "text-gray-500 dark:text-slate-400"} />
+              <PieChart
+                size={16}
+                className={
+                  showStats ? "text-white" : "text-gray-500 dark:text-slate-400"
+                }
+              />
               {showStats ? "إخفاء الإحصائيات" : "عرض الإحصائيات الذكية"}
               {showStats ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
             </button>
@@ -189,9 +209,8 @@ const PlannerView: React.FC<PlannerViewProps> = ({
           {/* Stats Dashboard Section */}
           {showStats && (
             <div className="mb-6 animate-in slide-in-from-top-4 duration-300">
-              <StatsDashboard 
+              <StatsDashboard
                 completedCredits={completedCredits}
-                plannedCredits={plannedCredits}
                 totalCredits={TOTAL_CREDITS}
                 completedCreditsPerCategory={completedCreditsPerCategory}
                 plannedCreditsPerCategory={plannedCreditsPerCategory}
@@ -274,7 +293,9 @@ const PlannerView: React.FC<PlannerViewProps> = ({
           {allSemestersEmpty ? (
             <div className="flex flex-col items-center justify-center text-gray-500 dark:text-slate-400 p-12 text-center bg-gradient-to-br from-gray-50 to-slate-100 dark:from-slate-950/40 dark:to-slate-900/40 rounded-2xl border border-gray-200 dark:border-slate-800 shadow-xl">
               <Sparkles size={48} className="mb-4 text-orange-400" />
-              <p className="text-lg font-extrabold mb-2">لا توجد مواد مخططة بعد!</p>
+              <p className="text-lg font-extrabold mb-2">
+                لا توجد مواد مخططة بعد!
+              </p>
               <p className="text-sm mb-4">
                 ابدأ بإنشاء خطتك الأكاديمية من خلال وضع التخطيط.
               </p>
@@ -323,15 +344,11 @@ const PlannerView: React.FC<PlannerViewProps> = ({
               <div className="flex gap-4 min-w-max">
                 {SEMESTERS.filter((sem) => {
                   if (hidePastSemesters) {
-                    return (
-                      SEMESTERS.indexOf(sem) >=
-                      planStartIndex
-                    );
+                    return SEMESTERS.indexOf(sem) >= planStartIndex;
                   }
                   return true;
                 }).map((sem) => {
-                  const isPastSem =
-                    SEMESTERS.indexOf(sem) < planStartIndex;
+                  const isPastSem = SEMESTERS.indexOf(sem) < planStartIndex;
                   const semCourses = Object.entries(plannedCourses)
                     .filter(([, semester]) => semester === sem)
                     .flatMap(([id]) => {
@@ -357,8 +374,8 @@ const PlannerView: React.FC<PlannerViewProps> = ({
                               ? "cursor-pointer hover:bg-gradient-to-r hover:from-orange-100 hover:to-amber-100 dark:hover:from-orange-950/30 dark:hover:to-amber-950/30 bg-gradient-to-r from-orange-50/50 to-amber-50/50 dark:from-orange-950/10 dark:to-amber-950/10"
                               : "bg-gradient-to-r from-gray-50 to-slate-50 dark:from-slate-900/60 dark:to-slate-800/60",
                           !!planningCourseId &&
-                          !isPastSem &&
-                          "border-orange-200 dark:border-orange-900/50",
+                            !isPastSem &&
+                            "border-orange-200 dark:border-orange-900/50",
                         )}
                         onClick={() => {
                           if (planningCourseId && !isPastSem) {
@@ -385,10 +402,7 @@ const PlannerView: React.FC<PlannerViewProps> = ({
                             )}
                           </h3>
                           <span className="text-[10px] bg-gradient-to-r from-white to-gray-50 dark:from-slate-800 dark:to-slate-700 border border-gray-200 dark:border-slate-700 text-gray-500 dark:text-slate-400 px-2.5 py-1 rounded-full font-extrabold shadow-sm">
-                            {semCourses.reduce(
-                              (sum, c) => sum + c.credits,
-                              0,
-                            )}{" "}
+                            {semCourses.reduce((sum, c) => sum + c.credits, 0)}{" "}
                             س.م
                           </span>
                         </div>
@@ -416,24 +430,24 @@ const PlannerView: React.FC<PlannerViewProps> = ({
                             {semCourses.some(
                               (c) => !completedCourses.has(c.id),
                             ) && (
-                                <button
-                                  type="button"
-                                  aria-label={`تحديد جميع مواد ${sem} كمكتملة`}
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    setCompletedCourses((prev) => {
-                                      return markCoursesCompleted(
-                                        prev,
-                                        semCourses.map((course) => course.id),
-                                      );
-                                    });
-                                  }}
-                                  className="min-h-9 min-w-9 sm:min-h-0 sm:min-w-0 opacity-100 sm:opacity-0 sm:group-hover/header:opacity-100 p-2 sm:p-1 bg-gradient-to-r from-emerald-50 to-emerald-100 text-emerald-600 hover:from-emerald-100 hover:to-emerald-200 hover:text-emerald-700 rounded-xl transition-all duration-200 shadow-md shadow-emerald-200/30 dark:from-emerald-950/30 dark:to-emerald-900/30 dark:text-emerald-400 dark:hover:from-emerald-900/40 dark:hover:to-emerald-800/40 dark:hover:text-emerald-300 border border-emerald-200 dark:border-emerald-800/50"
-                                  title="إنجاز كل مواد الفصل"
-                                >
-                                  <CircleCheckBig size={14} />
-                                </button>
-                              )}
+                              <button
+                                type="button"
+                                aria-label={`تحديد جميع مواد ${sem} كمكتملة`}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setCompletedCourses((prev) => {
+                                    return markCoursesCompleted(
+                                      prev,
+                                      semCourses.map((course) => course.id),
+                                    );
+                                  });
+                                }}
+                                className="min-h-9 min-w-9 sm:min-h-0 sm:min-w-0 opacity-100 sm:opacity-0 sm:group-hover/header:opacity-100 p-2 sm:p-1 bg-gradient-to-r from-emerald-50 to-emerald-100 text-emerald-600 hover:from-emerald-100 hover:to-emerald-200 hover:text-emerald-700 rounded-xl transition-all duration-200 shadow-md shadow-emerald-200/30 dark:from-emerald-950/30 dark:to-emerald-900/30 dark:text-emerald-400 dark:hover:from-emerald-900/40 dark:hover:to-emerald-800/40 dark:hover:text-emerald-300 border border-emerald-200 dark:border-emerald-800/50"
+                                title="إنجاز كل مواد الفصل"
+                              >
+                                <CircleCheckBig size={14} />
+                              </button>
+                            )}
                           </div>
                         )}
                       </div>
@@ -470,8 +484,12 @@ const PlannerView: React.FC<PlannerViewProps> = ({
                                     {c.id}
                                   </span>
                                   {planWarnings[c.id] && !isCompleted && (
-                                    <span title={planWarnings[c.id].join('\n')}>
-                                      <AlertTriangle size={12} className="text-amber-500" aria-hidden="true" />
+                                    <span title={planWarnings[c.id].join("\n")}>
+                                      <AlertTriangle
+                                        size={12}
+                                        className="text-amber-500"
+                                        aria-hidden="true"
+                                      />
                                     </span>
                                   )}
                                 </div>
@@ -530,9 +548,8 @@ const PlannerView: React.FC<PlannerViewProps> = ({
                             className="w-full mt-2 py-3 border-2 border-dashed border-orange-300 dark:border-orange-700 text-orange-600 dark:text-orange-400 hover:border-orange-400 dark:hover:border-orange-600 hover:bg-gradient-to-r hover:from-orange-50 hover:to-amber-50 dark:hover:from-orange-950/20 dark:hover:to-amber-950/20 rounded-xl text-sm font-extrabold transition-all duration-200 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 hover:shadow-md"
                           >
                             + أضف{" "}
-                            {
-                              coursesById.get(planningCourseId)?.name ?? planningCourseId
-                            }{" "}
+                            {coursesById.get(planningCourseId)?.name ??
+                              planningCourseId}{" "}
                             هنا
                           </button>
                         )}

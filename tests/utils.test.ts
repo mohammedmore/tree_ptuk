@@ -10,7 +10,9 @@ const createNodes = (): Node[] => [
 
 test("lays out graph nodes without mutating inputs and preserves edges", () => {
   const nodes = createNodes();
-  const edges: Edge[] = [{ id: "first-second", source: "first", target: "second" }];
+  const edges: Edge[] = [
+    { id: "first-second", source: "first", target: "second" },
+  ];
   const originalNodes = structuredClone(nodes);
   const originalEdges = structuredClone(edges);
 
@@ -27,9 +29,17 @@ test("lays out graph nodes without mutating inputs and preserves edges", () => {
 test("rejects duplicate node ids and edges with missing endpoints", () => {
   const duplicateNodes = createNodes();
   duplicateNodes[1].id = duplicateNodes[0].id;
-  assert.throws(() => getLayoutedElements(duplicateNodes, []), /duplicate node id/);
+  assert.throws(
+    () => getLayoutedElements(duplicateNodes, []),
+    /duplicate node id/,
+  );
 
   const nodes = createNodes();
-  const missingEndpoint: Edge[] = [{ id: "missing-edge", source: "missing", target: "second" }];
-  assert.throws(() => getLayoutedElements(nodes, missingEndpoint), /source or target node is missing/);
+  const missingEndpoint: Edge[] = [
+    { id: "missing-edge", source: "missing", target: "second" },
+  ];
+  assert.throws(
+    () => getLayoutedElements(nodes, missingEndpoint),
+    /source or target node is missing/,
+  );
 });

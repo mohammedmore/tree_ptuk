@@ -55,14 +55,16 @@ export const ShareScheduleModal: React.FC<ShareScheduleModalProps> = ({
       margin: 2,
       errorCorrectionLevel: "M",
       color: { dark: "#0f172a", light: "#ffffff" },
-    }).then((canvas) => {
-      if (!cancelled) container.appendChild(canvas);
-    }).catch((error: unknown) => {
-      if (!cancelled) {
-        console.error("Unable to generate shared schedule QR code", error);
-        setQrError("تعذر إنشاء رمز QR. يمكنك نسخ الرابط واستخدامه مباشرة.");
-      }
-    });
+    })
+      .then((canvas) => {
+        if (!cancelled) container.appendChild(canvas);
+      })
+      .catch((error: unknown) => {
+        if (!cancelled) {
+          console.error("Unable to generate shared schedule QR code", error);
+          setQrError("تعذر إنشاء رمز QR. يمكنك نسخ الرابط واستخدامه مباشرة.");
+        }
+      });
     return () => {
       cancelled = true;
       container.replaceChildren();
@@ -107,16 +109,29 @@ export const ShareScheduleModal: React.FC<ShareScheduleModalProps> = ({
           setCopySuccess("تم النسخ إلى الحافظة.");
           return;
         } catch (fallbackError) {
-          setCopyError(fallbackError instanceof Error ? fallbackError.message : "تعذر النسخ. حدد النص وانسخه يدوياً.");
+          setCopyError(
+            fallbackError instanceof Error
+              ? fallbackError.message
+              : "تعذر النسخ. حدد النص وانسخه يدوياً.",
+          );
           return;
         }
       }
-      setCopyError(error instanceof Error ? error.message : "تعذر النسخ. حدد النص وانسخه يدوياً.");
+      setCopyError(
+        error instanceof Error
+          ? error.message
+          : "تعذر النسخ. حدد النص وانسخه يدوياً.",
+      );
     }
   };
 
   return (
-    <BaseModal isOpen={isOpen} onClose={onClose} title="مشاركة الجدول" maxWidth="max-w-md">
+    <BaseModal
+      isOpen={isOpen}
+      onClose={onClose}
+      title="مشاركة الجدول"
+      maxWidth="max-w-md"
+    >
       <div className="p-5 space-y-4 text-center" dir="rtl">
         <p className="text-sm text-gray-600 dark:text-slate-300">
           أنشئ رمزاً ورابطاً لفتح نسخة من خطتك والجدول الأسبوعي على أي جهاز.
@@ -128,17 +143,41 @@ export const ShareScheduleModal: React.FC<ShareScheduleModalProps> = ({
             disabled={loading}
             className="w-full rounded-xl bg-blue-600 px-4 py-3 font-black text-white transition-colors hover:bg-blue-700 disabled:opacity-60"
           >
-            {loading ? <LoaderCircle className="mx-auto animate-spin" size={20} /> : "إنشاء رابط مشاركة"}
+            {loading ? (
+              <LoaderCircle className="mx-auto animate-spin" size={20} />
+            ) : (
+              "إنشاء رابط مشاركة"
+            )}
           </button>
         )}
-        {error && <p role="alert" className="rounded-lg bg-red-50 p-3 text-sm font-bold text-red-700">{error}</p>}
-        {copyError && <p role="alert" className="text-sm font-bold text-red-700">{copyError}</p>}
-        {copySuccess && <p role="status" className="text-sm font-bold text-emerald-700">{copySuccess}</p>}
+        {error && (
+          <p
+            role="alert"
+            className="rounded-lg bg-red-50 p-3 text-sm font-bold text-red-700"
+          >
+            {error}
+          </p>
+        )}
+        {copyError && (
+          <p role="alert" className="text-sm font-bold text-red-700">
+            {copyError}
+          </p>
+        )}
+        {copySuccess && (
+          <p role="status" className="text-sm font-bold text-emerald-700">
+            {copySuccess}
+          </p>
+        )}
         {code && (
           <>
             <div className="rounded-2xl border border-gray-200 bg-gray-50 p-4 dark:border-slate-700 dark:bg-slate-800">
-              <p className="mb-2 text-xs font-bold text-gray-500 dark:text-slate-400">رمز الاسترجاع</p>
-              <div className="font-mono text-3xl font-black tracking-[0.2em] text-slate-900 dark:text-white" dir="ltr">
+              <p className="mb-2 text-xs font-bold text-gray-500 dark:text-slate-400">
+                رمز الاسترجاع
+              </p>
+              <div
+                className="font-mono text-3xl font-black tracking-[0.2em] text-slate-900 dark:text-white"
+                dir="ltr"
+              >
                 {code.slice(0, 4)} - {code.slice(4)}
               </div>
               <button
@@ -170,13 +209,21 @@ export const ShareScheduleModal: React.FC<ShareScheduleModalProps> = ({
             <div className="mx-auto flex min-h-52 w-52 items-center justify-center rounded-xl border border-gray-100 bg-white p-2 dark:border-slate-700">
               <div ref={qrContainerRef} role="img" aria-label="رمز QR للرابط" />
               {qrError && (
-                <div role="status" className="space-y-2 text-center text-xs font-bold text-gray-500">
+                <div
+                  role="status"
+                  className="space-y-2 text-center text-xs font-bold text-gray-500"
+                >
                   <QrCode className="mx-auto" size={36} />
                   <p>{qrError}</p>
                 </div>
               )}
             </div>
-            <button type="button" onClick={onCreate} disabled={loading} className="text-xs font-bold text-blue-600 hover:underline">
+            <button
+              type="button"
+              onClick={onCreate}
+              disabled={loading}
+              className="text-xs font-bold text-blue-600 hover:underline"
+            >
               إنشاء رمز جديد
             </button>
           </>
@@ -212,13 +259,27 @@ export const LoadScheduleModal: React.FC<LoadScheduleModalProps> = ({
   const handleSubmit = (event: React.FormEvent) => {
     event.preventDefault();
     const normalizedCode = normalizeScheduleCode(code);
-    if (/^[A-HJ-KM-NP-Z2-9]{8}$/.test(normalizedCode)) void onLoad(normalizedCode);
+    if (/^[A-HJ-KM-NP-Z2-9]{8}$/.test(normalizedCode))
+      void onLoad(normalizedCode);
   };
 
   return (
-    <BaseModal isOpen={isOpen} onClose={onClose} title="استرجاع جدول برمز" maxWidth="max-w-md">
-      <form onSubmit={handleSubmit} aria-busy={loading} className="space-y-4 p-5 text-right" dir="rtl">
-        <label htmlFor="shared-schedule-code" className="block text-sm font-bold text-gray-700 dark:text-slate-200">
+    <BaseModal
+      isOpen={isOpen}
+      onClose={onClose}
+      title="استرجاع جدول برمز"
+      maxWidth="max-w-md"
+    >
+      <form
+        onSubmit={handleSubmit}
+        aria-busy={loading}
+        className="space-y-4 p-5 text-right"
+        dir="rtl"
+      >
+        <label
+          htmlFor="shared-schedule-code"
+          className="block text-sm font-bold text-gray-700 dark:text-slate-200"
+        >
           أدخل الرمز المكون من 8 خانات
         </label>
         <input
@@ -238,16 +299,33 @@ export const LoadScheduleModal: React.FC<LoadScheduleModalProps> = ({
           className="w-full rounded-xl border-2 border-gray-200 bg-gray-50 px-4 py-3 text-center font-mono text-2xl font-black tracking-widest outline-none focus:border-blue-500 dark:border-slate-700 dark:bg-slate-800"
           aria-describedby="shared-schedule-code-help"
         />
-        <p id="shared-schedule-code-help" className="text-xs text-gray-500 dark:text-slate-400">
+        <p
+          id="shared-schedule-code-help"
+          className="text-xs text-gray-500 dark:text-slate-400"
+        >
           يقبل الحقل الرمز مع شرطة أو مسافات؛ ستتم إزالة الفواصل تلقائياً.
         </p>
-        {error && <p role="alert" className="rounded-lg bg-red-50 p-3 text-sm font-bold text-red-700">{error}</p>}
+        {error && (
+          <p
+            role="alert"
+            className="rounded-lg bg-red-50 p-3 text-sm font-bold text-red-700"
+          >
+            {error}
+          </p>
+        )}
         <button
           type="submit"
-          disabled={loading || !/^[A-HJ-KM-NP-Z2-9]{8}$/.test(normalizeScheduleCode(code))}
+          disabled={
+            loading ||
+            !/^[A-HJ-KM-NP-Z2-9]{8}$/.test(normalizeScheduleCode(code))
+          }
           className="flex w-full items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-3 font-black text-white transition-colors hover:bg-blue-700 disabled:opacity-50"
         >
-          {loading ? <LoaderCircle className="animate-spin" size={18} /> : <Search size={18} />}
+          {loading ? (
+            <LoaderCircle className="animate-spin" size={18} />
+          ) : (
+            <Search size={18} />
+          )}
           جلب الجدول
         </button>
       </form>
@@ -263,24 +341,30 @@ interface SharedSchedulePreviewProps {
   onApply: () => void;
 }
 
-export const SharedSchedulePreviewModal: React.FC<SharedSchedulePreviewProps> = ({
-  schedule,
-  code,
-  warning,
-  onClose,
-  onApply,
-}) => {
-  const gradedCourses = schedule?.courses.filter((course) => {
-    const grade = course.grade ?? schedule.courseGrades?.[course.courseCode];
-    return (course.completed || course.failed)
-      && grade !== -1
-      && (typeof grade === "number" || course.failed);
-  }) ?? [];
-  const gradedCredits = gradedCourses.reduce((sum, course) => sum + course.credits, 0);
+export const SharedSchedulePreviewModal: React.FC<
+  SharedSchedulePreviewProps
+> = ({ schedule, code, warning, onClose, onApply }) => {
+  const gradedCourses =
+    schedule?.courses.filter((course) => {
+      const grade = course.grade ?? schedule.courseGrades?.[course.courseCode];
+      return (
+        (course.completed || course.failed) &&
+        grade !== -1 &&
+        (typeof grade === "number" || course.failed)
+      );
+    }) ?? [];
+  const gradedCredits = gradedCourses.reduce(
+    (sum, course) => sum + course.credits,
+    0,
+  );
   const weightedAverage = gradedCredits
-    ? gradedCourses.reduce((sum, course) => (
-      sum + (course.grade ?? schedule?.courseGrades?.[course.courseCode] ?? 0) * course.credits
-    ), 0) / gradedCredits
+    ? gradedCourses.reduce(
+        (sum, course) =>
+          sum +
+          (course.grade ?? schedule?.courseGrades?.[course.courseCode] ?? 0) *
+            course.credits,
+        0,
+      ) / gradedCredits
     : null;
 
   return (
@@ -293,12 +377,20 @@ export const SharedSchedulePreviewModal: React.FC<SharedSchedulePreviewProps> = 
       {schedule && (
         <div className="space-y-4 p-4 sm:p-6" dir="rtl">
           <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
-            <span className="font-bold text-emerald-700">تم تحميل الخطة عبر الرمز: {code}</span>
-            <span className="text-gray-500">{schedule.courses.length} مادة في المنهاج</span>
+            <span className="font-bold text-emerald-700">
+              تم تحميل الخطة عبر الرمز: {code}
+            </span>
+            <span className="text-gray-500">
+              {schedule.courses.length} مادة في المنهاج
+            </span>
           </div>
           {warning && (
-            <p role="status" className="rounded-lg bg-amber-50 p-3 text-sm font-bold text-amber-800">
-              تم جلب الخطة. {warning} شغّل ملف إصلاح دالة العدّاد في Supabase لتفعيل العداد.
+            <p
+              role="status"
+              className="rounded-lg bg-amber-50 p-3 text-sm font-bold text-amber-800"
+            >
+              تم جلب الخطة. {warning} شغّل ملف إصلاح دالة العدّاد في Supabase
+              لتفعيل العداد.
             </p>
           )}
           {schedule.version === 2 && (
@@ -307,11 +399,24 @@ export const SharedSchedulePreviewModal: React.FC<SharedSchedulePreviewProps> = 
                 ["المواد المنجزة", schedule.completedCourses.length],
                 ["المواد المخفقة", schedule.failedCourseIds?.length ?? 0],
                 ["المواد المخططة", Object.keys(schedule.plannedCourses).length],
-                ["المواد ذات العلامات", Object.keys(schedule.courseGrades ?? {}).length],
-                ["معدل العلامات", weightedAverage === null ? "—" : `${weightedAverage.toFixed(2)}%`],
+                [
+                  "المواد ذات العلامات",
+                  Object.keys(schedule.courseGrades ?? {}).length,
+                ],
+                [
+                  "معدل العلامات",
+                  weightedAverage === null
+                    ? "—"
+                    : `${weightedAverage.toFixed(2)}%`,
+                ],
               ].map(([label, value]) => (
-                <div key={label} className="rounded-xl bg-gray-50 p-3 text-center dark:bg-slate-800">
-                  <div className="text-xl font-black text-blue-600">{value}</div>
+                <div
+                  key={label}
+                  className="rounded-xl bg-gray-50 p-3 text-center dark:bg-slate-800"
+                >
+                  <div className="text-xl font-black text-blue-600">
+                    {value}
+                  </div>
                   <div className="text-xs font-bold text-gray-500">{label}</div>
                 </div>
               ))}
@@ -327,13 +432,19 @@ export const SharedSchedulePreviewModal: React.FC<SharedSchedulePreviewProps> = 
                 <article
                   key={`${course.courseCode}-${course.semester}-${index}`}
                   className="rounded-xl border border-gray-200 p-4 dark:border-slate-700"
-                  style={{ borderRightWidth: 5, borderRightColor: course.color || "#3b82f6" }}
+                  style={{
+                    borderRightWidth: 5,
+                    borderRightColor: course.color || "#3b82f6",
+                  }}
                 >
                   <div className="flex flex-wrap items-start justify-between gap-2">
                     <div>
-                      <h3 className="font-black text-gray-900 dark:text-white">{course.courseName}</h3>
+                      <h3 className="font-black text-gray-900 dark:text-white">
+                        {course.courseName}
+                      </h3>
                       <p className="mt-1 text-xs font-bold text-gray-500">
-                        {course.courseCode} · {course.credits} ساعات · {course.category}
+                        {course.courseCode} · {course.credits} ساعات ·{" "}
+                        {course.category}
                       </p>
                     </div>
                     <div className="flex flex-wrap gap-1">
@@ -354,7 +465,9 @@ export const SharedSchedulePreviewModal: React.FC<SharedSchedulePreviewProps> = 
                       )}
                       {course.grade !== null && course.grade !== undefined && (
                         <span className="rounded-lg bg-indigo-50 px-2 py-1 text-xs font-bold text-indigo-700">
-                          {course.grade === -1 ? "ناجح/راسب" : `العلامة: ${course.grade}`}
+                          {course.grade === -1
+                            ? "ناجح/راسب"
+                            : `العلامة: ${course.grade}`}
                         </span>
                       )}
                     </div>
@@ -363,7 +476,9 @@ export const SharedSchedulePreviewModal: React.FC<SharedSchedulePreviewProps> = 
                     <span>الفصل: {course.semester || "غير مخططة"}</span>
                     <span>الشعبة: {course.section || "—"}</span>
                     <span>الأيام: {course.days.join("، ") || "غير محدد"}</span>
-                    <span>الوقت: {course.startTime || "—"} - {course.endTime || "—"}</span>
+                    <span>
+                      الوقت: {course.startTime || "—"} - {course.endTime || "—"}
+                    </span>
                     <span>المدرس: {course.instructor || "غير محدد"}</span>
                     <span>القاعة: {course.room || "غير محددة"}</span>
                     {(course.prerequisites?.length ?? 0) > 0 && (
@@ -378,8 +493,10 @@ export const SharedSchedulePreviewModal: React.FC<SharedSchedulePreviewProps> = 
           )}
           {schedule.preferences && (
             <div className="rounded-xl bg-gray-50 p-3 text-xs font-bold text-gray-600 dark:bg-slate-800 dark:text-slate-300">
-              إعدادات الخطة: من {schedule.preferences.planStartSemester} إلى {schedule.preferences.planEndSemester}
-              {" · "}إخفاء الفصول السابقة: {schedule.preferences.hidePastSemesters ? "نعم" : "لا"}
+              إعدادات الخطة: من {schedule.preferences.planStartSemester} إلى{" "}
+              {schedule.preferences.planEndSemester}
+              {" · "}إخفاء الفصول السابقة:{" "}
+              {schedule.preferences.hidePastSemesters ? "نعم" : "لا"}
               {" · "}المظهر: {schedule.preferences.darkMode ? "داكن" : "فاتح"}
             </div>
           )}

@@ -15,8 +15,14 @@ function createSnapshot() {
 }
 
 test("rejects shared schedules without required planning data", () => {
-  const withoutPlannedCourses = { ...createSnapshot(), plannedCourses: undefined };
-  const withoutWeeklySchedule = { ...createSnapshot(), weeklySchedule: undefined };
+  const withoutPlannedCourses = {
+    ...createSnapshot(),
+    plannedCourses: undefined,
+  };
+  const withoutWeeklySchedule = {
+    ...createSnapshot(),
+    weeklySchedule: undefined,
+  };
 
   assert.equal(normalizeSharedScheduleSnapshot(withoutPlannedCourses), null);
   assert.equal(normalizeSharedScheduleSnapshot(withoutWeeklySchedule), null);
@@ -52,7 +58,8 @@ test("preserves legacy single-day weekly schedule entries", () => {
   };
 
   assert.deepEqual(
-    normalizeSharedScheduleSnapshot(snapshot)?.weeklySchedule.semester.course.days,
+    normalizeSharedScheduleSnapshot(snapshot)?.weeklySchedule.semester.course
+      .days,
     ["الأحد"],
   );
 });
