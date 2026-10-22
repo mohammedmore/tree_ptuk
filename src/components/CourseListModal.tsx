@@ -85,27 +85,27 @@ const CourseListModal: React.FC<CourseListModalProps> = ({
 
   return (
     <div
-      className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[110] flex items-center justify-center p-4"
+      className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[110] flex items-center justify-center p-2 sm:p-4"
       onClick={onClose}
     >
       <div
         role="dialog"
         aria-modal="true"
         aria-labelledby="course-list-modal-title"
-        className="bg-white dark:bg-slate-900 rounded-3xl p-0 w-full max-w-2xl shadow-2xl animate-in zoom-in-95 duration-300 relative overflow-hidden border border-gray-100 dark:border-slate-700 flex flex-col max-h-[90vh]"
+        className="bg-white dark:bg-slate-900 rounded-2xl sm:rounded-3xl p-0 w-full max-w-4xl shadow-2xl animate-in zoom-in-95 duration-300 relative overflow-hidden border border-gray-100 dark:border-slate-700 flex flex-col max-h-[calc(100dvh-1rem)] sm:max-h-[90vh]"
         dir="rtl"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="absolute top-0 right-0 left-0 h-1.5 bg-gradient-to-r from-blue-600 via-blue-500 to-indigo-500"></div>
 
         {/* Header */}
-        <div className="p-6 border-b border-gray-100 dark:border-slate-700 flex justify-between items-center bg-gray-50/50 dark:bg-slate-950/20 shrink-0">
+        <div className="p-4 sm:p-6 border-b border-gray-100 dark:border-slate-700 flex justify-between items-center bg-gray-50/50 dark:bg-slate-950/20 shrink-0">
           <h2
             id="course-list-modal-title"
-            className="text-xl font-black text-gray-800 dark:text-slate-100 flex items-center gap-3"
+            className="text-lg sm:text-xl font-black text-gray-800 dark:text-slate-100 flex items-center gap-2 sm:gap-3"
           >
-            <div className="bg-gradient-to-br from-blue-500 to-blue-600 p-2.5 rounded-2xl text-white shadow-lg shadow-blue-200 dark:shadow-none">
-              <LayoutList size={24} />
+            <div className="bg-gradient-to-br from-blue-500 to-blue-600 p-2 sm:p-2.5 rounded-xl sm:rounded-2xl text-white shadow-lg shadow-blue-200 dark:shadow-none">
+              <LayoutList size={22} />
             </div>
             <span>قائمة المواد</span>
           </h2>
@@ -113,9 +113,9 @@ const CourseListModal: React.FC<CourseListModalProps> = ({
             type="button"
             onClick={onClose}
             aria-label="إغلاق قائمة المواد"
-            className="p-2 text-gray-400 hover:bg-gray-100 dark:hover:bg-slate-800 rounded-full transition-colors"
+            className="min-h-11 min-w-11 flex items-center justify-center p-2 text-gray-400 hover:bg-gray-100 dark:hover:bg-slate-800 rounded-xl transition-colors"
           >
-            <X />
+            <X size={20} />
           </button>
         </div>
 
@@ -123,13 +123,13 @@ const CourseListModal: React.FC<CourseListModalProps> = ({
         <div
           role="group"
           aria-label="تصفية قائمة المواد"
-          className="flex border-b border-gray-100 dark:border-slate-700 px-6 pt-2 gap-6 bg-gray-50/30 dark:bg-slate-900/30 shrink-0"
+          className="flex border-b border-gray-100 dark:border-slate-700 px-3 sm:px-6 pt-2 gap-2 sm:gap-6 bg-gray-50/30 dark:bg-slate-900/30 shrink-0 overflow-x-auto custom-scrollbar"
         >
           <button
             type="button"
             aria-pressed={courseListTab === "available"}
             className={cn(
-              "pb-3 px-1 text-sm font-black border-b-2 transition-colors",
+              "pb-3 px-1 text-xs sm:text-sm font-black border-b-2 transition-colors whitespace-nowrap",
               courseListTab === "available"
                 ? "border-blue-500 text-blue-600 dark:text-blue-400"
                 : "border-transparent text-gray-400 dark:text-slate-400 hover:text-gray-600 dark:hover:text-slate-200",
@@ -142,7 +142,7 @@ const CourseListModal: React.FC<CourseListModalProps> = ({
             type="button"
             aria-pressed={courseListTab === "completed"}
             className={cn(
-              "pb-3 px-1 text-sm font-black border-b-2 transition-colors",
+              "pb-3 px-1 text-xs sm:text-sm font-black border-b-2 transition-colors whitespace-nowrap",
               courseListTab === "completed"
                 ? "border-emerald-500 text-emerald-600 dark:text-emerald-400"
                 : "border-transparent text-gray-400 dark:text-slate-400 hover:text-gray-600 dark:hover:text-slate-200",
@@ -155,7 +155,7 @@ const CourseListModal: React.FC<CourseListModalProps> = ({
             type="button"
             aria-pressed={courseListTab === "all"}
             className={cn(
-              "pb-3 px-1 text-sm font-black border-b-2 transition-colors",
+              "pb-3 px-1 text-xs sm:text-sm font-black border-b-2 transition-colors whitespace-nowrap",
               courseListTab === "all"
                 ? "border-indigo-500 text-indigo-600 dark:text-indigo-400"
                 : "border-transparent text-gray-400 dark:text-slate-400 hover:text-gray-600 dark:hover:text-slate-200",
@@ -166,7 +166,7 @@ const CourseListModal: React.FC<CourseListModalProps> = ({
           </button>
         </div>
 
-        <div className="p-6 overflow-y-auto flex-1 scrollbar-thin">
+        <div className="p-3 sm:p-6 overflow-y-auto flex-1 custom-scrollbar">
           <div className="space-y-4">
             {/* Search Bar */}
             <div className="relative">
@@ -274,13 +274,6 @@ const CourseListModal: React.FC<CourseListModalProps> = ({
                         >
                           {items.map((c) => {
                             const isComp = completedCourses.has(c.id);
-                            const req = categoryRequirements[c.category] || 999;
-                            const comp =
-                              completedCreditsPerCategory[c.category] || 0;
-                            const isGroupCompleted = comp >= req;
-                            const isElective = c.category.includes("اختياري");
-                            const isLocked =
-                              isGroupCompleted && isElective && !isComp;
 
                             return (
                               <div
@@ -319,25 +312,19 @@ const CourseListModal: React.FC<CourseListModalProps> = ({
                                       }
                                       onClick={(e) => {
                                         e.stopPropagation();
-                                        if (!isLocked)
-                                          toggleCourseCompletion(c.id);
+                                        toggleCourseCompletion(c.id);
                                       }}
                                       className={cn(
                                         "p-1.5 rounded-lg transition-colors",
                                         isComp
                                           ? "text-red-500 bg-red-50 dark:bg-red-900/20"
                                           : "text-emerald-500 bg-emerald-50 dark:bg-emerald-900/20",
-                                        isLocked &&
-                                          "opacity-50 cursor-not-allowed",
                                       )}
                                       title={
                                         isComp
                                           ? "إلغاء الإنجاز"
-                                          : isLocked
-                                            ? "المجموعة مكتملة"
-                                            : "تحديد كمنجز"
+                                          : "تحديد كمنجز"
                                       }
-                                      disabled={isLocked}
                                     >
                                       {isComp ? (
                                         <Trash2 size={14} />

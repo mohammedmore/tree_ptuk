@@ -13,6 +13,12 @@ import { BaseModal } from "./BaseModal";
 import type { Course } from "../data";
 import { cn } from "../utils";
 import { TOTAL_CREDITS } from "../constants";
+import {
+  isRemedialCourse,
+  calculateGPA,
+  calculateDegreeCredits,
+  calculateRemainingCredits,
+} from "../courseProgress";
 
 function groupCoursesByCategory(courses: Course[]): Map<string, Course[]> {
   const grouped = new Map<string, Course[]>();
@@ -82,14 +88,13 @@ export const GPAModal: React.FC<GPAModalProps> = ({
     [courses],
   );
 
+  const totalCompletedCredits = React.useMemo(() => {
+    return calculateDegreeCredits(courses, completedCourses);
+  }, [courses, completedCourses]);
+
   const remainingCredits = React.useMemo(() => {
-    const earnedCredits = courses
-      .filter(
-        (c) => completedCourses.has(c.id) && (courseGrades[c.id] || 0) !== -1,
-      )
-      .reduce((sum, c) => sum + c.credits, 0);
-    return TOTAL_CREDITS - earnedCredits;
-  }, [courses, completedCourses, courseGrades]);
+    return calculateRemainingCredits(totalCompletedCredits, TOTAL_CREDITS);
+  }, [totalCompletedCredits]);
 
   const requiredAverage = React.useMemo(() => {
     if (targetGPA === "" || targetGPA <= 0 || remainingCredits <= 0)
@@ -100,6 +105,7 @@ export const GPAModal: React.FC<GPAModalProps> = ({
     courses.forEach((c) => {
       if (
         completedCourses.has(c.id) &&
+        !isRemedialCourse(c) &&
         courseGrades[c.id] > 0 &&
         courseGrades[c.id] !== -1
       ) {
@@ -162,94 +168,25 @@ export const GPAModal: React.FC<GPAModalProps> = ({
     );
   }, [combinedCourseList, searchQuery]);
 
-  const calculateGPA = (
-    grades: Record<string, number>,
-    includeHypothetical = false,
-  ) => {
-    let totalPoints = 0;
-    let totalCredits = 0;
-
-    combinedCourseList.forEach((course) => {
-      let grade = grades[course.id] ?? 0;
-
-      // "What-if" logic for courses already in the list:
-      // Condition: course grade must be <= 75 to allow what-if logic
-      if (
-        includeHypothetical &&
-        whatIfGrades[course.id] > 0 &&
-        !(courseGrades[course.id] > 75)
-      ) {
-        grade = whatIfGrades[course.id];
-      }
-
-      // We count the course if it has a grade > 0 OR if it's explicitly in the failed list
-      // Note: grade 0 is also a grade that should be counted in credits.
-      // But we need to distinguish between "no grade entered" and "grade is 0".
-      const hasGradeEntry =
-        Object.prototype.hasOwnProperty.call(grades, course.id) ||
-        (includeHypothetical &&
-          Object.prototype.hasOwnProperty.call(whatIfGrades, course.id));
-
-      if (hasGradeEntry || failedCourseIds.has(course.id)) {
-        // Exclude "Pass/Fail" (-1) from numeric GPA calculation
-        if (grade !== -1) {
-          if (grade > 0) {
-            totalPoints += grade * course.credits;
-          }
-          totalCredits += course.credits;
-        }
-      }
-    });
-
-    if (includeHypothetical) {
-      Object.entries(whatIfGrades).forEach(([id, grade]) => {
-        if (
-          !completedCourses.has(id) &&
-          !failedCourseIds.has(id) &&
-          grade > 0
-        ) {
-          const course = coursesById.get(id);
-          if (course) {
-            totalPoints += grade * course.credits;
-            totalCredits += course.credits;
-          }
-        }
-      });
-    }
-
-    return totalCredits === 0 ? 0 : totalPoints / totalCredits;
-  };
-
   const currentGPA = React.useMemo(
-    () => calculateGPA(courseGrades),
-    [
-      combinedCourseList,
-      courseGrades,
-      whatIfGrades,
-      failedCourseIds,
-      completedCourses,
-      coursesById,
-    ],
+    () => calculateGPA(courses, courseGrades, completedCourses, failedCourseIds),
+    [courses, courseGrades, completedCourses, failedCourseIds],
   );
 
   const whatIfGPA = React.useMemo(() => {
-    const combinedGrades = { ...courseGrades, ...whatIfGrades };
-    return calculateGPA(combinedGrades, true);
-  }, [
-    combinedCourseList,
-    courseGrades,
-    whatIfGrades,
-    failedCourseIds,
-    completedCourses,
-    coursesById,
-  ]);
+    return calculateGPA(
+      courses,
+      courseGrades,
+      completedCourses,
+      failedCourseIds,
+      whatIfGrades,
+      true,
+    );
+  }, [courses, courseGrades, completedCourses, failedCourseIds, whatIfGrades]);
 
-  const totalCompletedCredits = combinedCourseList.reduce(
-    (sum, c) => sum + (completedCourses.has(c.id) ? c.credits : 0),
-    0,
-  );
   const creditsWithGrades = combinedCourseList
     .filter((c) => {
+      if (isRemedialCourse(c)) return false;
       const grade = courseGrades[c.id];
       return (grade !== undefined && grade >= 0) || failedCourseIds.has(c.id);
     })
@@ -259,6 +196,7 @@ export const GPAModal: React.FC<GPAModalProps> = ({
     <BaseModal
       isOpen={isOpen}
       onClose={onClose}
+      maxWidth="max-w-5xl"
       title={
         <div className="flex items-center gap-3">
           <div className="p-2 bg-indigo-100 dark:bg-indigo-900/30 rounded-xl text-indigo-600 dark:text-indigo-400">
@@ -273,9 +211,9 @@ export const GPAModal: React.FC<GPAModalProps> = ({
         </div>
       }
     >
-      <div className="p-6 space-y-8" dir="rtl">
+      <div className="p-3 sm:p-6 space-y-4 sm:space-y-8" dir="rtl">
         {/* GPA Summary Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3 sm:gap-4">
           <div className="bg-linear-to-br from-indigo-600 to-blue-700 dark:from-indigo-900 dark:to-blue-900 p-6 rounded-3xl text-white shadow-lg shadow-indigo-200 dark:shadow-none relative overflow-hidden">
             <div className="absolute top-0 right-0 p-4 opacity-10">
               <TrendingUp size={80} />

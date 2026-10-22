@@ -144,14 +144,14 @@ const DynamicCourseDetailsModal: React.FC<DynamicCourseDetailsModalProps> = ({
 
   return (
     <div
-      className="fixed inset-0 bg-gray-900/60 backdrop-blur-sm z-[110] flex items-center justify-center p-4"
+      className="fixed inset-0 bg-gray-900/60 backdrop-blur-sm z-[110] flex items-center justify-center p-2 sm:p-4"
       onClick={closeModal}
     >
       <div
         role="dialog"
         aria-modal="true"
         aria-labelledby="planner-course-details-title"
-        className="bg-white dark:bg-slate-900 rounded-3xl border border-gray-200 dark:border-slate-800 shadow-2xl w-full max-w-lg p-6 flex flex-col gap-3.5 relative animate-in zoom-in-95 duration-200 text-right font-sans max-h-[90vh] overflow-y-auto"
+        className="bg-white dark:bg-slate-900 rounded-2xl sm:rounded-3xl border border-gray-200 dark:border-slate-800 shadow-2xl w-full max-w-lg p-4 sm:p-6 flex flex-col gap-3.5 relative animate-in zoom-in-95 duration-200 text-right font-sans max-h-[calc(100dvh-1rem)] sm:max-h-[90vh] overflow-y-auto custom-scrollbar"
         dir="rtl"
         onClick={(event) => event.stopPropagation()}
       >
@@ -159,7 +159,7 @@ const DynamicCourseDetailsModal: React.FC<DynamicCourseDetailsModalProps> = ({
           type="button"
           aria-label="إغلاق تفاصيل المادة"
           onClick={closeModal}
-          className="absolute top-4 left-4 p-2 text-gray-400 hover:bg-gray-100 dark:hover:bg-slate-800 rounded-full transition-colors"
+          className="absolute top-3 left-3 sm:top-4 sm:left-4 min-h-11 min-w-11 flex items-center justify-center p-2 text-gray-400 hover:bg-gray-100 dark:hover:bg-slate-800 rounded-full transition-colors cursor-pointer"
         >
           <X size={18} />
         </button>
@@ -458,7 +458,7 @@ const DynamicCourseDetailsModal: React.FC<DynamicCourseDetailsModalProps> = ({
               toggleCourseCompletion(plannerSelectedCourse.id);
             }}
             className={cn(
-              "flex-1 py-3 rounded-xl font-bold text-xs flex items-center justify-center gap-2 transition-all shadow-sm border-0",
+              "flex-1 min-h-11 py-3 rounded-xl font-bold text-xs flex items-center justify-center gap-2 transition-all shadow-sm border-0 cursor-pointer",
               isComp
                 ? "bg-red-50 dark:bg-red-950/40 text-red-650 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/30"
                 : "bg-emerald-500 text-white hover:bg-emerald-600 shadow-emerald-500/20 shadow-md disabled:opacity-50",

@@ -1,6 +1,44 @@
-const COURSES_API_URL = "http://localhost:3001/api/courses";
+import { courses as fallbackCourses } from "../data";
+import { normalizeDayKey } from "./scheduleSolver";
+
+const DEFAULT_API_URL = "http://localhost:3001/api/courses";
+const STORAGE_CACHE_KEY = "ptuk_catalog_courses_cache";
+
+function getApiUrl() {
+  const env =
+    typeof import.meta !== "undefined" && import.meta.env
+      ? import.meta.env
+      : undefined;
+  const proc = typeof process !== "undefined" ? process.env : undefined;
+
+  const direct = env?.VITE_API_URL || proc?.VITE_API_URL;
+  if (direct) return direct;
+
+  const base = env?.VITE_API_BASE_URL || proc?.VITE_API_BASE_URL;
+  if (base) {
+    return `${base.replace(/\/+$/, "")}/api/courses`;
+  }
+
+  return DEFAULT_API_URL;
+}
 
 let coursesCache;
+let isOfflineFallbackActive = false;
+
+/**
+ * Returns true if the most recent courses were loaded from local storage or static fallback.
+ * @returns {boolean}
+ */
+export function isOfflineCatalog() {
+  return isOfflineFallbackActive;
+}
+
+/**
+ * Clears the in-memory cache so subsequent calls re-fetch or re-evaluate.
+ */
+export function clearCoursesCache() {
+  coursesCache = undefined;
+}
 
 function isRecord(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -34,7 +72,14 @@ function parseBlock(block) {
       "Invalid course response: a schedule block has invalid times or days.",
     );
   }
-  return { days: block.days, start, end };
+  const normalizedDays = block.days
+    .map(normalizeDayKey)
+    .filter(Boolean);
+  return {
+    days: normalizedDays.length > 0 ? normalizedDays : block.days,
+    start,
+    end,
+  };
 }
 
 function parseSection(section) {
@@ -93,6 +138,42 @@ function parseCourses(payload) {
   return entries.map(parseCourse);
 }
 
+function saveToLocalStorage(data) {
+  try {
+    if (typeof window !== "undefined" && window.localStorage) {
+      window.localStorage.setItem(STORAGE_CACHE_KEY, JSON.stringify(data));
+    }
+  } catch {
+    // Ignore quota or privacy mode errors
+  }
+}
+
+function loadFromLocalStorage() {
+  try {
+    if (typeof window !== "undefined" && window.localStorage) {
+      const raw = window.localStorage.getItem(STORAGE_CACHE_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        const courses = parseCourses(parsed);
+        if (courses.length > 0) return courses;
+      }
+    }
+  } catch {
+    // Ignore corrupted cache
+  }
+  return null;
+}
+
+function getStaticFallbackCourses() {
+  return fallbackCourses.map((course) => ({
+    id: course.id,
+    name: course.name,
+    type: course.category,
+    category: course.category,
+    sections: [],
+  }));
+}
+
 function normalizeSearchText(value) {
   return String(value)
     .normalize("NFKC")
@@ -105,21 +186,52 @@ function normalizeSearchText(value) {
 }
 
 async function loadCourses() {
-  const response = await fetch(COURSES_API_URL, {
-    headers: { Accept: "application/json" },
-  });
-  if (!response.ok) {
-    throw new Error(`تعذر تحميل المساقات (HTTP ${response.status}).`);
+  const url = getApiUrl();
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 6000);
+    const response = await fetch(url, {
+      headers: { Accept: "application/json" },
+      signal: controller.signal,
+    });
+    clearTimeout(timeout);
+
+    if (!response.ok) {
+      throw new Error(`تعذر تحميل المساقات (HTTP ${response.status}).`);
+    }
+    const data = await response.json();
+    const courses = parseCourses(data);
+    if (courses.length > 0) {
+      saveToLocalStorage(courses);
+      isOfflineFallbackActive = false;
+      return courses;
+    }
+    throw new Error("لم يتم العثور على مساقات في الاستجابة.");
+  } catch (fetchError) {
+    // Attempt graceful fallback
+    const cached = loadFromLocalStorage();
+    if (cached && cached.length > 0) {
+      isOfflineFallbackActive = true;
+      return cached;
+    }
+
+    const fallback = getStaticFallbackCourses();
+    if (fallback.length > 0) {
+      isOfflineFallbackActive = true;
+      return fallback;
+    }
+
+    throw fetchError;
   }
-  return parseCourses(await response.json());
 }
 
 /**
  * Gets all available courses and retains the resolved list in memory.
+ * @param {boolean} [forceRefresh=false]
  * @returns {Promise<import("./scheduleSolver").CatalogCourse[]>}
  */
-export function fetchCourses() {
-  if (!coursesCache) {
+export function fetchCourses(forceRefresh = false) {
+  if (forceRefresh || !coursesCache) {
     coursesCache = loadCourses().catch((error) => {
       coursesCache = undefined;
       throw error;
@@ -175,7 +287,19 @@ export async function fetchCoursesByCodes(codes) {
   const seen = new Set();
   return codes.flatMap((code) => {
     const normalizedCode = String(code).trim();
-    const course = coursesByCode.get(normalizedCode);
+    let course = coursesByCode.get(normalizedCode);
+    if (!course) {
+      const staticMatch = fallbackCourses.find((c) => c.id === normalizedCode);
+      if (staticMatch) {
+        course = {
+          id: staticMatch.id,
+          name: staticMatch.name,
+          type: staticMatch.category,
+          category: staticMatch.category,
+          sections: [],
+        };
+      }
+    }
     if (!course || seen.has(normalizedCode)) return [];
     seen.add(normalizedCode);
     return [course];

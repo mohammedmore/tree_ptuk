@@ -12,7 +12,7 @@
     "lint": "tsc --noEmit",
     "sync": "node scripts/autoSync.js",
     "sync:schedule": "node scripts/localAutoSync.js",
-    "test": "node --import tsx --test tests/courseProgress.test.ts tests/appStorage.test.ts tests/csv.test.ts tests/sharedSchedules.test.ts tests/courseOfferings.test.ts tests/utils.test.ts tests/courseExplanations.test.ts"
+    "test": "node --import tsx --test tests/courseProgress.test.ts tests/appStorage.test.ts tests/csv.test.ts tests/sharedSchedules.test.ts tests/courseOfferings.test.ts tests/utils.test.ts tests/courseExplanations.test.ts tests/scheduleSolver.test.ts tests/courseService.test.ts tests/backendApi.test.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.117.2",

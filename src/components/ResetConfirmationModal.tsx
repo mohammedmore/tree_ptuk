@@ -35,14 +35,14 @@ const ResetConfirmationModal: React.FC<ResetConfirmationModalProps> = ({
           <button
             type="button"
             onClick={onClose}
-            className="flex-1 py-2.5 px-4 bg-gray-100 hover:bg-gray-200 text-gray-700 dark:bg-slate-800 dark:hover:bg-slate-700 dark:text-slate-200 text-sm font-bold rounded-xl transition-colors"
+            className="flex-1 min-h-11 py-2.5 px-4 bg-gray-100 hover:bg-gray-200 text-gray-700 dark:bg-slate-800 dark:hover:bg-slate-700 dark:text-slate-200 text-sm font-bold rounded-xl transition-colors cursor-pointer"
           >
             إلغاء
           </button>
           <button
             type="button"
             onClick={onConfirm}
-            className="flex-1 py-2.5 px-4 bg-red-600 hover:bg-red-700 text-white text-sm font-bold rounded-xl transition-colors shadow-md shadow-red-200"
+            className="flex-1 min-h-11 py-2.5 px-4 bg-red-600 hover:bg-red-700 text-white text-sm font-bold rounded-xl transition-colors shadow-md shadow-red-200 cursor-pointer"
           >
             تأكيد الحذف
           </button>

@@ -153,3 +153,33 @@ test("rejects unsupported storage schema versions and reports the issue", () => 
   assert.deepEqual(value, new Set(["existing"]));
   assert.equal(issues.length, 1);
 });
+
+test("normalizes single-digit hours by padding with leading zero", () => {
+  assert.deepEqual(
+    normalizeAppStorageValue(
+      "weekly_schedule",
+      {
+        "السنة الأولى - الفصل الأول": {
+          "12140101": {
+            startTime: "8:30",
+            endTime: "9:45",
+            days: ["الأحد"],
+          },
+        },
+      },
+      {},
+    ),
+    {
+      "السنة الأولى - الفصل الأول": {
+        "12140101": {
+          startTime: "08:30",
+          endTime: "09:45",
+          days: ["الأحد"],
+          section: "",
+          instructor: "",
+          room: "",
+        },
+      },
+    },
+  );
+});

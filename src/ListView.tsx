@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { memo, useMemo, useState } from "react";
 import {
   LayoutList,
   Pin,
@@ -64,7 +64,7 @@ interface ListViewProps {
   hoveredPath: CoursePath | null;
 }
 
-export default function ListView({
+function ListView({
   activeCourses,
   listGroupBy,
   setListGroupBy,
@@ -265,7 +265,7 @@ export default function ListView({
       <div
         key={slotId || course.id}
         className={cn(
-          "course-list-card bg-white dark:bg-slate-800 p-3 rounded-xl border transition-all duration-300 flex flex-col gap-2 relative group hover:shadow-lg",
+          "course-list-card cv-auto bg-white dark:bg-slate-800 p-3 rounded-xl border transition-all duration-300 flex flex-col gap-2 relative group hover:shadow-lg",
           cardBorder,
         )}
         style={{ opacity: cardOpacity }} // Apply opacity
@@ -604,7 +604,7 @@ export default function ListView({
           return (
             <div
               key={cat.key}
-              className="w-full sm:w-72 max-w-75 shrink-0 bg-white dark:bg-slate-800 border border-gray-150 dark:border-slate-700/60 rounded-2xl flex flex-col shadow-sm overflow-hidden"
+              className="w-full max-w-full sm:w-72 sm:max-w-75 shrink-0 bg-white dark:bg-slate-800 border border-gray-150 dark:border-slate-700/60 rounded-2xl flex flex-col shadow-sm overflow-hidden"
             >
               {/* Header - Clickable on mobile for accordion */}
               <div
@@ -704,3 +704,5 @@ export default function ListView({
     </div>
   );
 }
+
+export default memo(ListView);

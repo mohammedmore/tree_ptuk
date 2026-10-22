@@ -1,4 +1,3 @@
-@import url("https://fonts.googleapis.com/css2?family=Noto+Sans+Arabic:wght@400;500;600;700;800&display=swap");
 @import "tailwindcss";
 @import "./themes.css";
 @import "./theme-studio.css";
@@ -439,4 +438,10 @@ body {
   .space-y-12 > div {
     page-break-inside: avoid;
   }
+}
+
+/* Optimization: Skip rendering and layout calculation for off-screen list cards */
+.cv-auto {
+  content-visibility: auto;
+  contain-intrinsic-size: 0 90px;
 }

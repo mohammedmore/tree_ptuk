@@ -141,7 +141,7 @@ export const ShareScheduleModal: React.FC<ShareScheduleModalProps> = ({
             type="button"
             onClick={onCreate}
             disabled={loading}
-            className="w-full rounded-xl bg-blue-600 px-4 py-3 font-black text-white transition-colors hover:bg-blue-700 disabled:opacity-60"
+            className="w-full min-h-11 rounded-xl bg-blue-600 px-4 py-3 font-black text-white transition-colors hover:bg-blue-700 disabled:opacity-60 cursor-pointer"
           >
             {loading ? (
               <LoaderCircle className="mx-auto animate-spin" size={20} />
@@ -184,7 +184,7 @@ export const ShareScheduleModal: React.FC<ShareScheduleModalProps> = ({
                 type="button"
                 onClick={() => void copyText(code)}
                 aria-label="نسخ رمز الاسترجاع"
-                className="mt-3 inline-flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-bold dark:border-slate-600 dark:bg-slate-700"
+                className="mt-3 inline-flex min-h-11 items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-bold dark:border-slate-600 dark:bg-slate-700 cursor-pointer hover:bg-gray-50 transition-colors"
               >
                 <Copy size={15} /> نسخ الرمز
               </button>
@@ -195,13 +195,13 @@ export const ShareScheduleModal: React.FC<ShareScheduleModalProps> = ({
                 aria-label="رابط مشاركة الجدول"
                 value={shareUrl}
                 dir="ltr"
-                className="min-w-0 flex-1 rounded-lg border border-gray-200 bg-gray-50 px-3 text-left text-xs dark:border-slate-700 dark:bg-slate-800"
+                className="min-w-0 flex-1 min-h-11 rounded-lg border border-gray-200 bg-gray-50 px-3 text-left text-xs dark:border-slate-700 dark:bg-slate-800"
               />
               <button
                 type="button"
                 onClick={() => void copyText(shareUrl)}
                 aria-label="نسخ الرابط"
-                className="flex shrink-0 items-center gap-1 rounded-lg bg-blue-600 px-3 text-xs font-bold text-white"
+                className="flex shrink-0 min-h-11 items-center gap-1 rounded-lg bg-blue-600 px-3 text-xs font-bold text-white cursor-pointer hover:bg-blue-700 transition-colors"
               >
                 <Link2 size={16} /> نسخ الرابط
               </button>
@@ -319,7 +319,7 @@ export const LoadScheduleModal: React.FC<LoadScheduleModalProps> = ({
             loading ||
             !/^[A-HJ-KM-NP-Z2-9]{8}$/.test(normalizeScheduleCode(code))
           }
-          className="flex w-full items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-3 font-black text-white transition-colors hover:bg-blue-700 disabled:opacity-50"
+          className="flex w-full min-h-11 items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-3 font-black text-white transition-colors hover:bg-blue-700 disabled:opacity-50 cursor-pointer"
         >
           {loading ? (
             <LoaderCircle className="animate-spin" size={18} />
@@ -504,14 +504,14 @@ export const SharedSchedulePreviewModal: React.FC<
             <button
               type="button"
               onClick={onClose}
-              className="flex flex-1 items-center justify-center gap-2 rounded-xl border border-gray-300 px-4 py-3 font-black text-gray-700 dark:border-slate-600 dark:text-slate-200"
+              className="flex flex-1 min-h-11 items-center justify-center gap-2 rounded-xl border border-gray-300 px-4 py-3 font-black text-gray-700 dark:border-slate-600 dark:text-slate-200 cursor-pointer hover:bg-gray-50 dark:hover:bg-slate-800 transition-colors"
             >
               <X size={17} /> إغلاق
             </button>
             <button
               type="button"
               onClick={onApply}
-              className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-3 font-black text-white hover:bg-blue-700"
+              className="flex flex-1 min-h-11 items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-3 font-black text-white hover:bg-blue-700 cursor-pointer transition-colors"
             >
               استبدال خطتي بهذه الخطة
             </button>

@@ -1,4 +1,148 @@
-const KNOWN_DAYS = ["سب", "أح", "اث", "ثلا", "ار", "خمـ"];
+export const KNOWN_DAYS = ["سب", "أح", "اث", "ثلا", "ار", "خمـ"];
+
+export const DAY_NAMES_MAP = {
+  سب: "السبت",
+  أح: "الأحد",
+  اث: "الاثنين",
+  ثلا: "الثلاثاء",
+  ار: "الأربعاء",
+  "خمـ": "الخميس",
+  جم: "الجمعة",
+};
+
+/**
+ * Standardizes Arabic and English day strings into the canonical day keys used by the schedule engine:
+ * "سب", "أح", "اث", "ثلا", "ار", "خمـ", or "جم".
+ * Accepts single characters (س, ح, ن, ث, ر, خ, ج), short codes, and full names.
+ * @param {unknown} value
+ * @returns {string | null}
+ */
+export function normalizeDayKey(value) {
+  if (typeof value !== "string" && typeof value !== "number") return null;
+  const str = String(value).trim();
+  if (!str) return null;
+
+  if (KNOWN_DAYS.includes(str) || str === "جم") return str;
+
+  const clean = str
+    .toLowerCase()
+    .replace(/[أإآ]/g, "ا")
+    .replace(/ى/g, "ي")
+    .replace(/ة/g, "ه")
+    .replace(/ـ/g, "")
+    .trim();
+
+  // Saturday
+  if (
+    clean === "سب" ||
+    clean === "س" ||
+    clean === "سبت" ||
+    clean === "السبت" ||
+    clean === "sat" ||
+    clean === "saturday"
+  ) {
+    return "سب";
+  }
+
+  // Sunday
+  if (
+    clean === "اح" ||
+    clean === "ح" ||
+    clean === "احد" ||
+    clean === "الاحد" ||
+    clean === "sun" ||
+    clean === "sunday"
+  ) {
+    return "أح";
+  }
+
+  // Monday
+  if (
+    clean === "اث" ||
+    clean === "ن" ||
+    clean === "اثنين" ||
+    clean === "الاثنين" ||
+    clean === "mon" ||
+    clean === "monday"
+  ) {
+    return "اث";
+  }
+
+  // Tuesday
+  if (
+    clean === "ثلا" ||
+    clean === "ثل" ||
+    clean === "ثلاث" ||
+    clean === "ثلاثاء" ||
+    clean === "الثلاثاء" ||
+    clean === "ث" ||
+    clean === "tue" ||
+    clean === "tuesday"
+  ) {
+    return "ثلا";
+  }
+
+  // Wednesday
+  if (
+    clean === "ار" ||
+    clean === "ارب" ||
+    clean === "اربع" ||
+    clean === "اربعاء" ||
+    clean === "الاربعاء" ||
+    clean === "ر" ||
+    clean === "wed" ||
+    clean === "wednesday"
+  ) {
+    return "ار";
+  }
+
+  // Thursday
+  if (
+    clean === "خم" ||
+    clean === "خمي" ||
+    clean === "خميس" ||
+    clean === "الخميس" ||
+    clean === "خ" ||
+    clean === "thu" ||
+    clean === "thursday"
+  ) {
+    return "خمـ";
+  }
+
+  // Friday
+  if (
+    clean === "جم" ||
+    clean === "جمع" ||
+    clean === "جمعه" ||
+    clean === "الجمعه" ||
+    clean === "الجمعة" ||
+    clean === "ج" ||
+    clean === "fri" ||
+    clean === "friday"
+  ) {
+    return "جم";
+  }
+
+  if (clean.startsWith("السبت") || clean.startsWith("سبت")) return "سب";
+  if (clean.startsWith("الاحد") || clean.startsWith("احد")) return "أح";
+  if (clean.startsWith("الاثنين") || clean.startsWith("اثنين")) return "اث";
+  if (clean.startsWith("الثلاث") || clean.startsWith("ثلاث")) return "ثلا";
+  if (clean.startsWith("الاربع") || clean.startsWith("اربع")) return "ار";
+  if (clean.startsWith("الخميس") || clean.startsWith("خميس")) return "خمـ";
+  if (clean.startsWith("الجمع") || clean.startsWith("جمع")) return "جم";
+
+  return null;
+}
+
+/**
+ * Returns the full Arabic name for a day key.
+ * @param {unknown} value
+ * @returns {string}
+ */
+export function dayKeyToName(value) {
+  const key = normalizeDayKey(value);
+  return (key && DAY_NAMES_MAP[key]) || String(value ?? "");
+}
 
 function normalizeArabic(value) {
   return String(value ?? "")
@@ -14,32 +158,61 @@ function sectionBlocks(section) {
   return Array.isArray(section?.blocks) ? section.blocks : [];
 }
 
+function isValidBlock(block) {
+  return (
+    typeof block === "object" &&
+    block !== null &&
+    Array.isArray(block.days) &&
+    typeof block.start === "number" &&
+    Number.isFinite(block.start) &&
+    typeof block.end === "number" &&
+    Number.isFinite(block.end) &&
+    block.end > block.start
+  );
+}
+
 /**
  * Returns true when any block in the proposed section overlaps an assigned
- * section on at least one shared day.
+ * section on at least one shared day, or if candidate blocks conflict with themselves.
  */
 export function hasConflict(schedule, newSection) {
   const candidateBlocks = sectionBlocks(newSection);
   if (!Array.isArray(schedule) || candidateBlocks.length === 0) return true;
 
-  for (const selected of schedule) {
-    const assignedBlocks = sectionBlocks(selected?.section);
-    for (const assignedBlock of assignedBlocks) {
-      for (const candidateBlock of candidateBlocks) {
-        if (
-          !Number.isFinite(assignedBlock.start) ||
-          !Number.isFinite(assignedBlock.end) ||
-          !Number.isFinite(candidateBlock.start) ||
-          !Number.isFinite(candidateBlock.end) ||
-          assignedBlock.end <= assignedBlock.start ||
-          candidateBlock.end <= candidateBlock.start
-        ) {
-          return true;
-        }
+  // 1. Verify candidate blocks validity and detect self-conflicts within newSection
+  for (let i = 0; i < candidateBlocks.length; i++) {
+    const b1 = candidateBlocks[i];
+    if (!isValidBlock(b1)) return true;
+    const days1 = (b1.days ?? []).map(normalizeDayKey).filter(Boolean);
+    if (days1.length === 0) return true;
 
-        const sharedDay = assignedBlock.days?.some((day) =>
-          candidateBlock.days?.includes(day),
-        );
+    for (let j = i + 1; j < candidateBlocks.length; j++) {
+      const b2 = candidateBlocks[j];
+      if (!isValidBlock(b2)) return true;
+      const days2 = (b2.days ?? []).map(normalizeDayKey).filter(Boolean);
+      const sharedDay = days1.some((d) => days2.includes(d));
+      if (sharedDay && b1.start < b2.end && b2.start < b1.end) {
+        return true;
+      }
+    }
+  }
+
+  // 2. Check conflicts against all already-assigned sections in schedule
+  for (const selected of schedule) {
+    const assignedSection = selected?.section ?? selected;
+    const assignedBlocks = sectionBlocks(assignedSection);
+    for (const assignedBlock of assignedBlocks) {
+      if (!isValidBlock(assignedBlock)) return true;
+      const assignedDays = (assignedBlock.days ?? [])
+        .map(normalizeDayKey)
+        .filter(Boolean);
+      if (assignedDays.length === 0) continue;
+
+      for (const candidateBlock of candidateBlocks) {
+        const candidateDays = (candidateBlock.days ?? [])
+          .map(normalizeDayKey)
+          .filter(Boolean);
+        const sharedDay = assignedDays.some((day) => candidateDays.includes(day));
         if (
           sharedDay &&
           assignedBlock.start < candidateBlock.end &&
@@ -93,7 +266,9 @@ export function generateAllSchedules(courses = [], filters = {}) {
 
   const results = [];
   const current = [];
-  const offDays = new Set(filters.freeDays ?? []);
+  const offDays = new Set(
+    (filters.freeDays ?? []).map(normalizeDayKey).filter(Boolean),
+  );
   const { excludedSections, pinnedSections } =
     normalizeSectionConstraints(filters);
   const preference = filters.timePreference;
@@ -122,10 +297,13 @@ export function generateAllSchedules(courses = [], filters = {}) {
       if (sectionName.includes("مختلط")) continue;
       if (exclusions.has(sectionKey(section))) continue;
       if (pinned && sectionKey(section) !== pinned) continue;
+
       if (
-        (filters.freeDays ?? []).length > 0 &&
+        offDays.size > 0 &&
         sectionBlocks(section).some((block) =>
-          block.days?.some((day) => offDays.has(day)),
+          (block.days ?? [])
+            .map(normalizeDayKey)
+            .some((day) => day && offDays.has(day)),
         )
       ) {
         continue;
@@ -166,9 +344,13 @@ export function generateAllSchedules(courses = [], filters = {}) {
 function getBlockStats(schedule) {
   const byDay = Object.fromEntries(KNOWN_DAYS.map((day) => [day, []]));
   for (const item of schedule) {
-    for (const block of sectionBlocks(item.section)) {
-      for (const day of block.days ?? []) {
-        (byDay[day] ??= []).push({ start: block.start, end: block.end });
+    const section = item?.section ?? item;
+    for (const block of sectionBlocks(section)) {
+      for (const rawDay of block.days ?? []) {
+        const day = normalizeDayKey(rawDay);
+        if (day && byDay[day]) {
+          byDay[day].push({ start: block.start, end: block.end });
+        }
       }
     }
   }
@@ -181,27 +363,33 @@ function getBlockStats(schedule) {
   const allEnds = [];
 
   for (const blocks of Object.values(byDay)) {
+    if (blocks.length === 0) continue;
+    maxClasses = Math.max(maxClasses, blocks.length);
+
     const orderedBlocks = [...blocks].sort(
       (first, second) => first.start - second.start,
     );
-    maxClasses = Math.max(maxClasses, orderedBlocks.length);
-    if (orderedBlocks.length === 0) continue;
 
-    const span =
-      orderedBlocks[orderedBlocks.length - 1].end - orderedBlocks[0].start;
-    const teaching = orderedBlocks.reduce(
-      (total, block) => total + block.end - block.start,
-      0,
-    );
-    totalGap += Math.max(0, span - teaching);
-    for (let index = 1; index < orderedBlocks.length; index += 1) {
-      maxGap = Math.max(
-        maxGap,
-        orderedBlocks[index].start - orderedBlocks[index - 1].end,
-      );
+    const currentStart = orderedBlocks[0].start;
+    let currentEnd = orderedBlocks[0].end;
+    let teachingTime = 0;
+
+    for (const b of orderedBlocks) {
+      teachingTime += Math.max(0, b.end - b.start);
     }
-    allStarts.push(orderedBlocks[0].start);
-    allEnds.push(orderedBlocks[orderedBlocks.length - 1].end);
+
+    for (let index = 1; index < orderedBlocks.length; index += 1) {
+      const nextBlock = orderedBlocks[index];
+      const gap = Math.max(0, nextBlock.start - currentEnd);
+      maxGap = Math.max(maxGap, gap);
+      currentEnd = Math.max(currentEnd, nextBlock.end);
+    }
+
+    const span = Math.max(0, currentEnd - currentStart);
+    totalGap += Math.max(0, span - teachingTime);
+
+    allStarts.push(currentStart);
+    allEnds.push(currentEnd);
   }
 
   return {
@@ -216,7 +404,10 @@ function getBlockStats(schedule) {
 }
 
 function toMinutes(value) {
-  const match = /^([01]\d|2[0-3]):([0-5]\d)$/.exec(value ?? "");
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return Math.round(value * 60);
+  }
+  const match = /^([0-1]?\d|2[0-3]):([0-5]\d)$/.exec(String(value ?? "").trim());
   return match ? Number(match[1]) * 60 + Number(match[2]) : null;
 }
 
@@ -226,74 +417,97 @@ function asDays(value) {
   return typeof value?.days === "string" ? [value.days] : [];
 }
 
-function hasMeetingConflict(candidate, assigned) {
-  const candidateStart = toMinutes(candidate.startTime);
-  const candidateEnd = toMinutes(candidate.endTime);
-  if (
-    candidateStart === null ||
-    candidateEnd === null ||
-    candidateEnd <= candidateStart
-  ) {
-    return true;
+function getMeetingBlocks(meeting) {
+  if (Array.isArray(meeting?.blocks) && meeting.blocks.length > 0) {
+    return meeting.blocks.flatMap((b) => {
+      const days = (b.days ?? []).map(normalizeDayKey).filter(Boolean);
+      const start = toMinutes(b.start ?? b.startTime);
+      const end = toMinutes(b.end ?? b.endTime);
+      if (days.length > 0 && start !== null && end !== null && end > start) {
+        return [{ days, start, end }];
+      }
+      return [];
+    });
   }
 
-  return assigned.some((entry) => {
-    const assignedStart = toMinutes(entry.startTime);
-    const assignedEnd = toMinutes(entry.endTime);
-    if (
-      assignedStart === null ||
-      assignedEnd === null ||
-      assignedEnd <= assignedStart
-    ) {
-      return true;
+  const start = toMinutes(meeting?.startTime ?? meeting?.start);
+  const end = toMinutes(meeting?.endTime ?? meeting?.end);
+  const days = asDays(meeting).map(normalizeDayKey).filter(Boolean);
+  if (start !== null && end !== null && end > start && days.length > 0) {
+    return [{ days, start, end }];
+  }
+  return [];
+}
+
+function hasMeetingConflict(candidate, assigned) {
+  const candidateBlocks = getMeetingBlocks(candidate);
+  if (candidateBlocks.length === 0) return true;
+
+  // 1. Self-conflict across candidate blocks
+  for (let i = 0; i < candidateBlocks.length; i++) {
+    const b1 = candidateBlocks[i];
+    for (let j = i + 1; j < candidateBlocks.length; j++) {
+      const b2 = candidateBlocks[j];
+      const sharedDay = b1.days.some((d) => b2.days.includes(d));
+      if (sharedDay && b1.start < b2.end && b2.start < b1.end) {
+        return true;
+      }
     }
-    return (
-      asDays(candidate).some((day) => asDays(entry).includes(day)) &&
-      candidateStart < assignedEnd &&
-      assignedStart < candidateEnd
+  }
+
+  // 2. Conflict with assigned meetings
+  return assigned.some((entry) => {
+    const entryBlocks = getMeetingBlocks(entry);
+    if (entryBlocks.length === 0) return true;
+
+    return candidateBlocks.some((cb) =>
+      entryBlocks.some(
+        (eb) =>
+          cb.days.some((day) => eb.days.includes(day)) &&
+          cb.start < eb.end &&
+          eb.start < cb.end,
+      ),
     );
   });
 }
 
 function normalizeCandidates(course, constraints) {
-  const offDays = new Set(constraints.offDays ?? []);
+  const offDays = new Set(
+    (constraints.offDays ?? []).map(normalizeDayKey).filter(Boolean),
+  );
   const startLimit = toMinutes(constraints.preferredStart);
   const endLimit = toMinutes(constraints.preferredEnd);
   const candidates = course.options ?? course.candidates ?? [];
 
   return candidates.filter((candidate) => {
-    const days = asDays(candidate);
-    const start = toMinutes(candidate.startTime);
-    const end = toMinutes(candidate.endTime);
-    return (
-      days.length > 0 &&
-      days.every((day) => !offDays.has(day)) &&
-      start !== null &&
-      end !== null &&
-      end > start &&
-      (startLimit === null || start >= startLimit) &&
-      (endLimit === null || end <= endLimit)
+    const blocks = getMeetingBlocks(candidate);
+    if (blocks.length === 0) return false;
+
+    const hasOffDay = blocks.some((b) =>
+      b.days.some((day) => offDays.has(day)),
+    );
+    if (hasOffDay) return false;
+
+    return blocks.every(
+      (b) =>
+        (startLimit === null || b.start >= startLimit) &&
+        (endLimit === null || b.end <= endLimit),
     );
   });
 }
 
 function getMeetingStats(schedule) {
-  const validTimes = schedule
-    .map((entry) => ({
-      start: toMinutes(entry.startTime),
-      end: toMinutes(entry.endTime),
-    }))
-    .filter(({ start, end }) => start !== null && end !== null && end > start);
-  const daySet = new Set(schedule.flatMap(asDays));
-  const totalMinutes = validTimes.reduce(
-    (total, { start, end }) => total + end - start,
+  const allBlocks = schedule.flatMap(getMeetingBlocks);
+  const daySet = new Set(allBlocks.flatMap((b) => b.days));
+  const totalMinutes = allBlocks.reduce(
+    (total, { start, end }) => total + (end - start),
     0,
   );
-  const earliest = validTimes.length
-    ? Math.min(...validTimes.map(({ start }) => start))
+  const earliest = allBlocks.length
+    ? Math.min(...allBlocks.map(({ start }) => start))
     : null;
-  const latest = validTimes.length
-    ? Math.max(...validTimes.map(({ end }) => end))
+  const latest = allBlocks.length
+    ? Math.max(...allBlocks.map(({ end }) => end))
     : null;
   const format = (minutes) =>
     minutes === null
@@ -334,8 +548,8 @@ export function solveSchedule(courses, constraints = {}) {
   const maxResults = Math.max(1, Math.min(100, constraints.maxResults ?? 16));
   const nodeLimit = Math.max(1, constraints.nodeLimit ?? 50000);
   const maxWorkDays = Number.isInteger(constraints.maxWorkDays)
-    ? Math.max(1, Math.min(5, constraints.maxWorkDays))
-    : 5;
+    ? Math.max(1, Math.min(6, constraints.maxWorkDays))
+    : 6;
   const prepared = (courses ?? [])
     .map((course) => ({
       course,
@@ -380,11 +594,12 @@ export function solveSchedule(courses, constraints = {}) {
         continue;
       }
 
+      const candidateBlocks = getMeetingBlocks(option);
       const days = new Set([
         ...assigned.flatMap(({ option: assignedOption }) =>
-          asDays(assignedOption),
+          getMeetingBlocks(assignedOption).flatMap((b) => b.days),
         ),
-        ...asDays(option),
+        ...candidateBlocks.flatMap((b) => b.days),
       ]);
       if (days.size > maxWorkDays) continue;
 

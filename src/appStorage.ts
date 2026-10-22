@@ -42,10 +42,10 @@ function normalizeWeeklySchedule(
       if (
         (entry.startTime !== undefined &&
           (typeof entry.startTime !== "string" ||
-            !/^([01]\d|2[0-3]):([0-5]\d)$/.test(entry.startTime))) ||
+            !/^([0-1]?\d|2[0-3]):([0-5]\d)$/.test(entry.startTime))) ||
         (entry.endTime !== undefined &&
           (typeof entry.endTime !== "string" ||
-            !/^([01]\d|2[0-3]):([0-5]\d)$/.test(entry.endTime))) ||
+            !/^([0-1]?\d|2[0-3]):([0-5]\d)$/.test(entry.endTime))) ||
         (entry.days !== undefined &&
           (!isStringArray(entry.days) ||
             (entry.day !== undefined && typeof entry.day !== "string"))) ||
@@ -68,8 +68,13 @@ function normalizeWeeklySchedule(
 
       schedule[semester][courseId] = {
         startTime:
-          typeof entry.startTime === "string" ? entry.startTime : "08:00",
-        endTime: typeof entry.endTime === "string" ? entry.endTime : "09:00",
+          typeof entry.startTime === "string"
+            ? entry.startTime.padStart(5, "0")
+            : "08:00",
+        endTime:
+          typeof entry.endTime === "string"
+            ? entry.endTime.padStart(5, "0")
+            : "09:00",
         days,
         section: typeof entry.section === "string" ? entry.section : "",
         instructor:

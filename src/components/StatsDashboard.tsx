@@ -3,6 +3,7 @@ import { PieChart, Target, CheckCircle2, ArrowUpRight } from "lucide-react";
 import { cn } from "../utils";
 import type { Course } from "../data";
 import { categoryRequirements } from "../data";
+import { REMEDIAL_CATEGORY, calculateRemainingCredits } from "../courseProgress";
 
 interface StatsDashboardProps {
   completedCredits: number;
@@ -28,12 +29,15 @@ const StatsDashboard: React.FC<StatsDashboardProps> = ({
   >(null);
 
   const categories = Object.keys(categoryRequirements);
+  const degreeCategories = categories.filter((cat) => cat !== REMEDIAL_CATEGORY);
 
-  const allCategoriesCompleted = categories.every(
-    (cat) =>
-      (completedCreditsPerCategory[cat] || 0) >= categoryRequirements[cat],
-  );
-  const allCategoriesPlanned = categories.every(
+  const allCategoriesCompleted =
+    degreeCategories.every(
+      (cat) =>
+        (completedCreditsPerCategory[cat] || 0) >= categoryRequirements[cat],
+    ) && completedCredits >= totalCredits;
+
+  const allCategoriesPlanned = degreeCategories.every(
     (cat) =>
       (completedCreditsPerCategory[cat] || 0) +
         (plannedCreditsPerCategory[cat] || 0) >=
@@ -88,8 +92,8 @@ const StatsDashboard: React.FC<StatsDashboardProps> = ({
           </div>
         </div>
 
-        <div className="flex gap-4 shrink-0">
-          <div className="text-center px-6 py-2 bg-white/50 dark:bg-slate-900/50 rounded-2xl border border-white dark:border-slate-700">
+        <div className="flex w-full sm:w-auto justify-around sm:justify-end gap-2 sm:gap-4 shrink-0">
+          <div className="flex-1 sm:flex-none text-center px-3 sm:px-6 py-2 bg-white/50 dark:bg-slate-900/50 rounded-2xl border border-white dark:border-slate-700">
             <div className="text-[10px] font-black text-gray-400 uppercase mb-1">
               إجمالي المنجز
             </div>
@@ -98,12 +102,12 @@ const StatsDashboard: React.FC<StatsDashboardProps> = ({
               <span className="text-xs text-gray-400">ساعة</span>
             </div>
           </div>
-          <div className="text-center px-6 py-2 bg-white/50 dark:bg-slate-900/50 rounded-2xl border border-white dark:border-slate-700">
+          <div className="flex-1 sm:flex-none text-center px-3 sm:px-6 py-2 bg-white/50 dark:bg-slate-900/50 rounded-2xl border border-white dark:border-slate-700">
             <div className="text-[10px] font-black text-gray-400 uppercase mb-1">
               المتبقي للتخرج
             </div>
             <div className="text-xl font-black text-orange-600 dark:text-orange-400">
-              {Math.max(0, totalCredits - completedCredits)}{" "}
+              {calculateRemainingCredits(completedCredits, totalCredits)}{" "}
               <span className="text-xs text-gray-400">ساعة</span>
             </div>
           </div>
@@ -143,9 +147,16 @@ const StatsDashboard: React.FC<StatsDashboardProps> = ({
             >
               <div className="flex justify-between items-start mb-3">
                 <div className="space-y-1">
-                  <h4 className="text-[11px] font-black text-gray-400 dark:text-slate-500 uppercase tracking-wider">
-                    {cat}
-                  </h4>
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <h4 className="text-[11px] font-black text-gray-400 dark:text-slate-500 uppercase tracking-wider">
+                      {cat}
+                    </h4>
+                    {cat === REMEDIAL_CATEGORY && (
+                      <span className="text-[9px] font-bold text-amber-600 bg-amber-50 dark:bg-amber-950/40 dark:text-amber-400 px-1.5 py-0.5 rounded">
+                        استدراكي
+                      </span>
+                    )}
+                  </div>
                   <div className="flex items-center gap-2">
                     <span className="text-xl font-black text-gray-800 dark:text-slate-100">
                       {completed}

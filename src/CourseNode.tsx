@@ -78,7 +78,6 @@ const CourseNode = ({ data, isConnectable }: NodeProps<CourseFlowNode>) => {
       className={containerClass}
       dir="rtl"
       onMouseEnter={() => data.onHoverStart?.()}
-      onMouseMove={() => data.onHoverMove?.()}
       onMouseLeave={() => data.onHoverEnd?.()}
     >
       <Handle
@@ -194,31 +193,25 @@ const CourseNode = ({ data, isConnectable }: NodeProps<CourseFlowNode>) => {
 const areCourseNodePropsEqual = (
   previous: NodeProps<CourseFlowNode>,
   next: NodeProps<CourseFlowNode>,
-) => {
-  const previousData = previous.data;
-  const nextData = next.data;
+): boolean => {
+  const p = previous.data;
+  const n = next.data;
   return (
     previous.id === next.id &&
     previous.selected === next.selected &&
     previous.isConnectable === next.isConnectable &&
-    previousData.id === nextData.id &&
-    previousData.label === nextData.label &&
-    previousData.credits === nextData.credits &&
-    previousData.seasonal === nextData.seasonal &&
-    previousData.availableSemesters === nextData.availableSemesters &&
-    previousData.isSelected === nextData.isSelected &&
-    previousData.isDirectPrereq === nextData.isDirectPrereq &&
-    previousData.isDirectDep === nextData.isDirectDep &&
-    previousData.isCompleted === nextData.isCompleted &&
-    previousData.isAvailable === nextData.isAvailable &&
-    previousData.isPlanned === nextData.isPlanned &&
-    previousData.opacity === nextData.opacity &&
-    previousData.toggleCompleted === nextData.toggleCompleted &&
-    previousData.showDetails === nextData.showDetails &&
-    previousData.onPlan === nextData.onPlan &&
-    previousData.onHoverStart === nextData.onHoverStart &&
-    previousData.onHoverMove === nextData.onHoverMove &&
-    previousData.onHoverEnd === nextData.onHoverEnd
+    p.id === n.id &&
+    p.label === n.label &&
+    p.credits === n.credits &&
+    p.seasonal === n.seasonal &&
+    p.availableSemesters === n.availableSemesters &&
+    p.isSelected === n.isSelected &&
+    p.isDirectPrereq === n.isDirectPrereq &&
+    p.isDirectDep === n.isDirectDep &&
+    p.isCompleted === n.isCompleted &&
+    p.isAvailable === n.isAvailable &&
+    p.isPlanned === n.isPlanned &&
+    p.opacity === n.opacity
   );
 };
 

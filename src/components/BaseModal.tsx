@@ -124,11 +124,11 @@ const ModalContent: React.FC<Omit<BaseModalProps, "isOpen">> = ({
           className,
         )}
       >
-        {title && (
-          <div className="p-4 sm:p-6 border-b border-slate-200 dark:border-slate-700 flex justify-between items-center bg-slate-50 dark:bg-slate-800/60 shrink-0">
+        {title ? (
+          <div className="p-3 sm:p-5 border-b border-slate-200 dark:border-slate-700 flex justify-between items-center bg-slate-50 dark:bg-slate-800/60 shrink-0">
             <h2
               id={titleId}
-              className="text-lg sm:text-xl font-bold text-slate-900 dark:text-slate-100"
+              className="text-base sm:text-xl font-bold text-slate-900 dark:text-slate-100"
             >
               {title}
             </h2>
@@ -137,13 +137,23 @@ const ModalContent: React.FC<Omit<BaseModalProps, "isOpen">> = ({
               type="button"
               onClick={onClose}
               aria-label="إغلاق النافذة"
-              className="p-2 text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white hover:bg-slate-200 dark:hover:bg-slate-700 rounded-lg transition-colors"
+              className="min-h-11 min-w-11 flex items-center justify-center p-2 text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white hover:bg-slate-200 dark:hover:bg-slate-700 rounded-xl transition-colors"
             >
               <X size={20} aria-hidden="true" />
             </button>
           </div>
+        ) : (
+          <button
+            ref={closeButtonRef}
+            type="button"
+            onClick={onClose}
+            aria-label="إغلاق النافذة"
+            className="absolute top-3 left-3 z-20 min-h-11 min-w-11 flex items-center justify-center p-2 text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white bg-white/90 dark:bg-slate-800/90 backdrop-blur-sm rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm transition-colors"
+          >
+            <X size={20} aria-hidden="true" />
+          </button>
         )}
-        <div className="overflow-y-auto flex-1">{children}</div>
+        <div className="overflow-y-auto flex-1 custom-scrollbar">{children}</div>
       </motion.div>
     </div>
   );

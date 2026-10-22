@@ -12,6 +12,8 @@ import { toPng } from "html-to-image";
 import { jsPDF } from "jspdf";
 import type { Course, ScheduleEntry } from "../data";
 import { SEMESTERS, TOTAL_CREDITS } from "../constants";
+import { isRemedialCourse, calculateGPA } from "../courseProgress";
+import { normalizeDayKey } from "../services/scheduleSolver";
 
 interface ExportModalProps {
   isExportModalOpen: boolean;
@@ -63,22 +65,14 @@ const ExportModal: React.FC<ExportModalProps> = ({
       coursesById.has(courseId) && SEMESTERS.includes(semester),
   );
 
+  const failedSet = React.useMemo(
+    () => new Set(failedCourseIds || []),
+    [failedCourseIds],
+  );
+
   const gpa = React.useMemo(() => {
-    let totalPoints = 0;
-    let totalCreditsWithGrades = 0;
-
-    Object.entries(courseGrades).forEach(([courseId, grade]) => {
-      if (!completedCourses.has(courseId)) return;
-      const course = coursesById.get(courseId);
-      if (course && grade > 0) {
-        totalPoints += grade * course.credits;
-        totalCreditsWithGrades += course.credits;
-      }
-    });
-
-    if (totalCreditsWithGrades === 0) return 0;
-    return totalPoints / totalCreditsWithGrades;
-  }, [courseGrades, completedCourses, coursesById]);
+    return calculateGPA(courses, courseGrades, completedCourses, failedSet);
+  }, [courses, courseGrades, completedCourses, failedSet]);
 
   React.useEffect(() => {
     if (!isExportModalOpen) return;
@@ -331,35 +325,19 @@ const ExportModal: React.FC<ExportModalProps> = ({
                 courseIds.has(id) &&
                 isRecord(entry) &&
                 typeof entry.startTime === "string" &&
-                /^([01]\d|2[0-3]):([0-5]\d)$/.test(entry.startTime) &&
+                /^([0-1]?\d|2[0-3]):([0-5]\d)$/.test(entry.startTime) &&
                 typeof entry.endTime === "string" &&
-                /^([01]\d|2[0-3]):([0-5]\d)$/.test(entry.endTime) &&
+                /^([0-1]?\d|2[0-3]):([0-5]\d)$/.test(entry.endTime) &&
                 (entry.days === undefined ||
                   (Array.isArray(entry.days) &&
                     entry.days.every(
                       (day) =>
                         typeof day === "string" &&
-                        [
-                          "الأحد",
-                          "الاثنين",
-                          "الثلاثاء",
-                          "الأربعاء",
-                          "الخميس",
-                          "الجمعة",
-                          "السبت",
-                        ].includes(day),
+                        normalizeDayKey(day) !== null,
                     ))) &&
                 (entry.day === undefined ||
                   (typeof entry.day === "string" &&
-                    [
-                      "الأحد",
-                      "الاثنين",
-                      "الثلاثاء",
-                      "الأربعاء",
-                      "الخميس",
-                      "الجمعة",
-                      "السبت",
-                    ].includes(entry.day))) &&
+                    normalizeDayKey(entry.day) !== null)) &&
                 ["section", "instructor", "room", "location"].every(
                   (field) =>
                     entry[field] === undefined ||
@@ -485,7 +463,7 @@ const ExportModal: React.FC<ExportModalProps> = ({
   return (
     <div
       className={cn(
-        "fixed inset-0 bg-gray-900/60 backdrop-blur-md z-[150] flex items-center justify-center p-4 transition-all duration-300",
+        "fixed inset-0 bg-gray-900/60 backdrop-blur-md z-[150] flex items-center justify-center p-2 sm:p-4 transition-all duration-300",
         isExportModalOpen
           ? "opacity-100 pointer-events-auto"
           : "opacity-0 pointer-events-none",
@@ -496,24 +474,24 @@ const ExportModal: React.FC<ExportModalProps> = ({
         role="dialog"
         aria-modal="true"
         aria-labelledby="export-modal-title"
-        className="bg-white rounded-3xl p-0 w-full max-w-6xl h-[90vh] shadow-2xl animate-in zoom-in-95 duration-300 flex flex-col overflow-hidden"
+        className="bg-white rounded-2xl sm:rounded-3xl p-0 w-full max-w-6xl max-h-[calc(100dvh-1rem)] sm:max-h-[90vh] h-full sm:h-[90vh] shadow-2xl animate-in zoom-in-95 duration-300 flex flex-col overflow-hidden"
         dir="rtl"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="p-6 border-b border-gray-100 flex justify-between items-center bg-gray-50/50">
+        <div className="p-3 sm:p-6 border-b border-gray-100 flex flex-col md:flex-row justify-between items-start md:items-center gap-3 sm:gap-4 bg-gray-50/50">
           <div>
             <h2
               id="export-modal-title"
-              className="text-2xl font-black text-gray-800 flex items-center gap-3"
+              className="text-xl sm:text-2xl font-black text-gray-800 flex items-center gap-3"
             >
               <Download size={28} className="text-emerald-600" />
               تنزيل وتصدير الخطة
             </h2>
-            <p className="text-gray-500 text-sm font-medium">
+            <p className="text-gray-500 text-xs sm:text-sm font-medium">
               معاينة الخطة وتحميلها بملف PDF أو صورة عالية الجودة مباشرة لجهازك
             </p>
           </div>
-          <div className="flex flex-wrap items-center gap-3">
+          <div className="flex flex-wrap items-center gap-2 sm:gap-3 w-full md:w-auto">
             <input
               type="file"
               ref={fileInputRef}
@@ -525,7 +503,7 @@ const ExportModal: React.FC<ExportModalProps> = ({
               type="button"
               aria-label="اختيار ملف نسخة احتياطية للاستيراد"
               onClick={() => fileInputRef.current?.click()}
-              className="bg-white text-gray-700 border border-gray-200 px-4 py-2.5 rounded-xl font-bold flex items-center gap-2 hover:bg-gray-50 transition-all"
+              className="min-h-11 bg-white text-gray-700 border border-gray-200 px-3 sm:px-4 py-2 sm:py-2.5 rounded-xl text-xs sm:text-sm font-bold flex items-center gap-2 hover:bg-gray-50 transition-all cursor-pointer"
             >
               <Sparkles size={18} className="text-blue-500" />
               استيراد نسخة
@@ -533,7 +511,7 @@ const ExportModal: React.FC<ExportModalProps> = ({
             <button
               type="button"
               onClick={exportToJson}
-              className="bg-white text-gray-700 border border-gray-200 px-4 py-2.5 rounded-xl font-bold flex items-center gap-2 hover:bg-gray-50 transition-all"
+              className="min-h-11 bg-white text-gray-700 border border-gray-200 px-3 sm:px-4 py-2 sm:py-2.5 rounded-xl text-xs sm:text-sm font-bold flex items-center gap-2 hover:bg-gray-50 transition-all cursor-pointer"
             >
               <Download size={18} className="text-gray-500" />
               تصدير نسخة JSON
@@ -559,7 +537,7 @@ const ExportModal: React.FC<ExportModalProps> = ({
               type="button"
               onClick={exportToImage}
               disabled={isExportLoading}
-              className="bg-indigo-600 text-white px-6 py-2.5 rounded-xl font-bold flex items-center gap-2 hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-200 disabled:opacity-50"
+              className="min-h-11 bg-indigo-600 text-white px-4 sm:px-6 py-2 sm:py-2.5 rounded-xl text-xs sm:text-sm font-bold flex items-center gap-2 hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-200 disabled:opacity-50 cursor-pointer"
             >
               {isExportLoading ? (
                 <Loader2 size={20} className="animate-spin" />
@@ -572,7 +550,7 @@ const ExportModal: React.FC<ExportModalProps> = ({
               type="button"
               onClick={exportToPdf}
               disabled={isExportLoading}
-              className="bg-emerald-600 text-white px-6 py-2.5 rounded-xl font-bold flex items-center gap-2 hover:bg-emerald-700 transition-all shadow-lg shadow-emerald-250 disabled:opacity-50"
+              className="min-h-11 bg-emerald-600 text-white px-4 sm:px-6 py-2 sm:py-2.5 rounded-xl text-xs sm:text-sm font-bold flex items-center gap-2 hover:bg-emerald-700 transition-all shadow-lg shadow-emerald-250 disabled:opacity-50 cursor-pointer"
             >
               {isExportLoading ? (
                 <Loader2 size={20} className="animate-spin" />
@@ -586,7 +564,7 @@ const ExportModal: React.FC<ExportModalProps> = ({
               type="button"
               aria-label="إغلاق نافذة التصدير"
               onClick={onClose}
-              className="p-2 text-gray-400 hover:bg-gray-100 rounded-full transition-colors"
+              className="min-h-11 min-w-11 flex items-center justify-center p-2 text-gray-400 hover:bg-gray-100 rounded-full transition-colors cursor-pointer"
             >
               <X size={24} />
             </button>
@@ -594,7 +572,7 @@ const ExportModal: React.FC<ExportModalProps> = ({
         </div>
 
         {/* Instructions for better results */}
-        <div className="bg-amber-50 border-b border-amber-100 px-6 py-2 text-[11px] text-amber-700 font-medium flex items-center gap-2">
+        <div className="bg-amber-50 border-b border-amber-100 px-4 sm:px-6 py-2 text-[11px] text-amber-700 font-medium flex items-center gap-2">
           <Sparkles size={14} />
           <span>
             نصيحة: إذا كنت تستخدم المتصفح داخل تطبيق آخر، يفضل "حفظ كصورة"
@@ -602,7 +580,7 @@ const ExportModal: React.FC<ExportModalProps> = ({
           </span>
         </div>
 
-        <div className="flex-1 overflow-y-auto p-12 bg-gray-50 print:p-0">
+        <div className="flex-1 overflow-y-auto p-3 sm:p-6 md:p-12 bg-gray-50 print:p-0 custom-scrollbar">
           <div
             id="study-plan-printable"
             className="max-w-5xl mx-auto border-2 border-gray-900 p-8 rounded-[2rem] relative bg-white shadow-2xl print:shadow-none"
@@ -653,7 +631,9 @@ const ExportModal: React.FC<ExportModalProps> = ({
                     {courses
                       .filter(
                         (c) =>
-                          plannedCourses[c.id] && completedCourses.has(c.id),
+                          plannedCourses[c.id] &&
+                          completedCourses.has(c.id) &&
+                          !isRemedialCourse(c.id),
                       )
                       .reduce((sum, c) => sum + c.credits, 0)}{" "}
                     ساعة
@@ -667,7 +647,9 @@ const ExportModal: React.FC<ExportModalProps> = ({
                     {courses
                       .filter(
                         (c) =>
-                          plannedCourses[c.id] && !completedCourses.has(c.id),
+                          plannedCourses[c.id] &&
+                          !completedCourses.has(c.id) &&
+                          !isRemedialCourse(c.id),
                       )
                       .reduce((sum, c) => sum + c.credits, 0)}{" "}
                     ساعة

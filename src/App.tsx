@@ -4,6 +4,7 @@ import React, {
   useEffect,
   useMemo,
   useRef,
+  useDeferredValue,
 } from "react";
 import {
   ReactFlow,
@@ -35,23 +36,62 @@ import {
   LayoutList,
   Calculator,
   Link2,
+  ChevronDown,
+  ChevronUp,
+  GraduationCap,
+  Layers,
 } from "lucide-react";
 import "@xyflow/react/dist/style.css";
-import { courses, Course, ScheduleEntry, categoryRequirements } from "./data";
+import {
+  courses as defaultCourses,
+  Course,
+  ScheduleEntry,
+  categoryRequirements as defaultCategoryRequirements,
+  coursesById as defaultCoursesById,
+  courseDependentsMap,
+} from "./data";
 
 import { getLayoutedElements, cn } from "./utils";
 import { getCourseDetails } from "./courseExplanations";
 
-import { courseCommonNames, SEMESTERS, TOTAL_CREDITS } from "./constants";
+import {
+  courseCommonNames,
+  SEMESTERS,
+  TOTAL_CREDITS as defaultTotalCredits,
+  getYearFromId,
+} from "./constants";
+import {
+  fetchMajorPlan,
+  getActiveMajorId,
+  setActiveMajorId,
+} from "./services/majorService";
+import {
+  fetchSyncStatus,
+  formatArabicSyncTime,
+  SyncStatus,
+} from "./services/syncService";
+import {
+  StudentSyncProfile,
+  getCachedStudentProfile,
+  clearStudentProfile,
+} from "./services/studentService";
+import { StudentLoginGate } from "./components/StudentLoginGate";
 import CourseNode from "./CourseNode";
-import ListView from "./ListView";
 import {
   fetchScheduleByCode,
   normalizeScheduleCode,
   shareScheduleToCloud,
   SharedScheduleSnapshot,
 } from "./sharedSchedules";
-import { toggleCompletedCourse } from "./courseProgress";
+import {
+  toggleCompletedCourse,
+  isCourseAvailable,
+  calculateDegreeCredits,
+  calculatePlannedCredits,
+  calculateProgressPercentage,
+  calculateRemainingCredits,
+  isRemedialCourse,
+} from "./courseProgress";
 import { readAppStorageValue, serializeAppStorageValue } from "./appStorage";
 import { escapeCsvValue, parseCsvRows } from "./csv";
 import { ThemeStudio } from "./components/ThemeStudio";
@@ -94,6 +134,17 @@ const SharedSchedulePreviewModal = React.lazy(() =>
     default: module.SharedSchedulePreviewModal,
   })),
 );
+const StudentPortalModal = React.lazy(() =>
+  import("./components/StudentPortalModal").then((module) => ({
+    default: module.StudentPortalModal,
+  })),
+);
+const MajorSelectorModal = React.lazy(() =>
+  import("./components/MajorSelectorModal").then((module) => ({
+    default: module.MajorSelectorModal,
+  })),
+);
+const ListView = React.lazy(() => import("./ListView"));
 const modalLoadingFallback = (
   <div
     role="status"
@@ -103,6 +154,7 @@ const modalLoadingFallback = (
   </div>
 );
 const STORAGE_ISSUE_EVENT = "planner:storage-issue";
+const EMPTY_GROUPED_COURSES: Record<string, Course[]> = {};
 let pendingStorageIssue: string | null = null;
 let storageIssueListenerReady = false;
 const themeManager = new ThemeManager();
@@ -116,8 +168,30 @@ function reportStorageIssue(message: string): void {
   }
 }
 
-// تحسين: تمرير الـ edges كمعامل لجعل الدالة نقية (Pure Function) وقابلة للاختبار
-export const getPathForCourse = (nodeId: string, edges: Edge[]) => {
+export interface CoursePathResult {
+  ancestors: Set<string>;
+  descendants: Set<string>;
+  allPathNodeIds: Set<string>;
+}
+
+const pathCache = new Map<string, CoursePathResult>();
+
+// تحسين: تمرير الـ edges كمعامل لجعل الدالة نقية وقابلة للاختبار مع التخزين المؤقت
+export const getPathForCourse = (
+  nodeId: string,
+  edges: Edge[],
+): CoursePathResult => {
+  if (!nodeId) {
+    return {
+      ancestors: new Set(),
+      descendants: new Set(),
+      allPathNodeIds: new Set(),
+    };
+  }
+
+  const cached = pathCache.get(nodeId);
+  if (cached) return cached;
+
   const ancestors = new Set<string>();
   const descendants = new Set<string>();
   const prerequisites = new Map<string, string[]>();
@@ -154,7 +228,7 @@ export const getPathForCourse = (nodeId: string, edges: Edge[]) => {
   collectReachable(prerequisites, ancestors);
   collectReachable(dependents, descendants);
 
-  return {
+  const result: CoursePathResult = {
     ancestors,
     descendants,
     allPathNodeIds: new Set([
@@ -163,42 +237,11 @@ export const getPathForCourse = (nodeId: string, edges: Edge[]) => {
       ...Array.from(descendants),
     ]),
   };
+
+  pathCache.set(nodeId, result);
+  return result;
 };
 
-// Helper function to unify availability logic across the app
-const isCourseAvailable = (
-  course: Course,
-  completed: Set<string>,
-  categoryCredits: Record<string, number>,
-  allCourses: Course[],
-  currentPlannedCourses: Set<string> = new Set(), // New parameter for courses planned in the current semester
-): boolean => {
-  if (completed.has(course.id)) return false;
-
-  // Check category requirements for electives
-  const req = categoryRequirements[course.category] || 999;
-  const comp = categoryCredits[course.category] || 0;
-  if (comp >= req && course.category.includes("اختياري")) return false;
-
-  // Check Prerequisites
-  const prereqsMet = course.prerequisites.every((p) => completed.has(p));
-  if (!prereqsMet) return false;
-
-  // Check Co-requisites
-  if (!course.coPrerequisites || course.coPrerequisites.length === 0)
-    return true;
-  return course.coPrerequisites.every((cpId) => {
-    // A co-requisite is met if it's completed OR it's planned for the current semester
-    if (completed.has(cpId) || currentPlannedCourses.has(cpId)) return true;
-
-    // The co-requisite itself must be available (its prerequisites must be met)
-    const cpCourse = allCourses.find((ac) => ac.id === cpId);
-    if (!cpCourse) return false; // Co-requisite course not found
-
-    // Check if the co-requisite's prerequisites are met (excluding itself if it's a co-requisite of itself, which shouldn't happen)
-    return cpCourse.prerequisites.every((p) => completed.has(p));
-  });
-};
 
 // Local storage hook
 function useLocalStorage<T>(key: string, initialValue: T) {
@@ -227,56 +270,56 @@ function useLocalStorage<T>(key: string, initialValue: T) {
 }
 
 // Generate nodes and edges
-const initialNodes: Node[] = courses.map((course) => ({
-  id: course.id,
-  type: "courseNode",
-  data: {
-    label: course.name,
+function buildGraphLayout(courseList: Course[]) {
+  const initialNodes: Node[] = courseList.map((course) => ({
     id: course.id,
-    credits: course.credits,
-    category: course.category,
-    commonName: courseCommonNames[course.id],
-    availableSemesters: course.availableSemesters,
-  },
-  position: { x: 0, y: 0 },
-}));
+    type: "courseNode",
+    data: {
+      label: course.name,
+      id: course.id,
+      credits: course.credits,
+      category: course.category,
+      commonName: courseCommonNames[course.id],
+      availableSemesters: course.availableSemesters,
+    },
+    position: { x: 0, y: 0 },
+  }));
 
-const initialEdges: Edge[] = [];
-courses.forEach((course) => {
-  course.prerequisites.forEach((prereqId) => {
-    initialEdges.push({
-      id: `${prereqId}-${course.id}`,
-      source: prereqId,
-      target: course.id,
-      animated: false,
-      style: { stroke: "#94a3b8", strokeWidth: 2 },
-      markerEnd: {
-        type: MarkerType.ArrowClosed,
-        color: "#94a3b8",
-      },
+  const initialEdges: Edge[] = [];
+  courseList.forEach((course) => {
+    course.prerequisites.forEach((prereqId) => {
+      initialEdges.push({
+        id: `${prereqId}-${course.id}`,
+        source: prereqId,
+        target: course.id,
+        animated: false,
+        style: { stroke: "#94a3b8", strokeWidth: 2 },
+        markerEnd: {
+          type: MarkerType.ArrowClosed,
+          color: "#94a3b8",
+        },
+      });
+    });
+    course.coPrerequisites?.forEach((coId) => {
+      initialEdges.push({
+        id: `${coId}-${course.id}`,
+        source: coId,
+        target: course.id,
+        animated: false,
+        label: "تزامني",
+        style: { stroke: "#94a3b8", strokeWidth: 2, strokeDasharray: "5,5" },
+        markerEnd: {
+          type: MarkerType.ArrowClosed,
+          color: "#94a3b8",
+        },
+      });
     });
   });
-  course.coPrerequisites?.forEach((coId) => {
-    initialEdges.push({
-      id: `${coId}-${course.id}`,
-      source: coId,
-      target: course.id,
-      animated: false,
-      label: "تزامني",
-      style: { stroke: "#94a3b8", strokeWidth: 2, strokeDasharray: "5,5" },
-      markerEnd: {
-        type: MarkerType.ArrowClosed,
-        color: "#94a3b8",
-      },
-    });
-  });
-});
 
-const { nodes: layoutedNodes, edges: layoutedEdges } = getLayoutedElements(
-  initialNodes,
-  initialEdges,
-  "RL", // Right to left
-);
+  return getLayoutedElements(initialNodes, initialEdges, "RL");
+}
+
+const { nodes: layoutedNodes, edges: layoutedEdges } = buildGraphLayout(defaultCourses);
 
 const graphExtent = layoutedNodes.reduce(
   (bounds, node) => ({
@@ -376,9 +419,39 @@ function FlowComponent() {
   >({});
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
   const [isSupportModalOpen, setIsSupportModalOpen] = useState(false);
+  const [currentStudent, setCurrentStudent] = useState<StudentSyncProfile | null>(
+    () => getCachedStudentProfile(),
+  );
+  const [isGuestMode, setIsGuestMode] = useState<boolean>(() => {
+    return Boolean(getCachedStudentProfile());
+  });
+  const [isStudentPortalOpen, setIsStudentPortalOpen] = useState(false);
+  const [isMajorSelectorOpen, setIsMajorSelectorOpen] = useState(false);
+  const [syncStatus, setSyncStatus] = useState<SyncStatus | null>(null);
+  const [activeMajorId, setActiveMajorIdState] = useState<string>(() =>
+    getActiveMajorId(),
+  );
+  const [activeMajorName, setActiveMajorName] =
+    useState<string>("هندسة أنظمة الحاسوب");
+  const [majorCourses, setMajorCourses] = useState<Course[]>(defaultCourses);
+  const [activeCategoryRequirements, setActiveCategoryRequirements] = useState<
+    Record<string, number>
+  >(defaultCategoryRequirements);
+  const [activeTotalCredits, setActiveTotalCredits] =
+    useState<number>(defaultTotalCredits);
+
+  const courses = majorCourses;
+  const coursesById = useMemo(
+    () => new Map(courses.map((course) => [course.id, course])),
+    [courses],
+  );
+  const categoryRequirements = activeCategoryRequirements;
+  const TOTAL_CREDITS = activeTotalCredits;
+
   const [planningCourseId, setPlanningCourseId] = useState<string | null>(null);
   const [showResetConfirm, setShowResetConfirm] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  const deferredSearchQuery = useDeferredValue(searchQuery);
   const [activeTab, setActiveTab] = useState<"available" | "completed" | "all">(
     "available",
   );
@@ -401,6 +474,31 @@ function FlowComponent() {
     themeManager.initialize();
     return themeManager.isDarkMode;
   });
+
+  const [isMobileActionsCollapsed, setIsMobileActionsCollapsed] =
+    useState<boolean>(() => {
+      if (typeof window === "undefined") return false;
+      try {
+        return (
+          window.localStorage.getItem("ptuk_mobile_actions_collapsed") === "true"
+        );
+      } catch {
+        return false;
+      }
+    });
+
+  const toggleMobileActions = useCallback(() => {
+    setIsMobileActionsCollapsed((prev) => {
+      const next = !prev;
+      try {
+        window.localStorage.setItem(
+          "ptuk_mobile_actions_collapsed",
+          String(next),
+        );
+      } catch {}
+      return next;
+    });
+  }, []);
 
   const [courseGrades, setCourseGrades] = useLocalStorage<
     Record<string, number>
@@ -657,8 +755,7 @@ function FlowComponent() {
         schedule.completedCourses
           .map(
             (sharedCourse) =>
-              courses.find((course) => course.id === sharedCourse.courseCode)
-                ?.id,
+              coursesById.get(sharedCourse.courseCode)?.id,
           )
           .filter((courseId): courseId is string => !!courseId),
       ),
@@ -693,6 +790,128 @@ function FlowComponent() {
     setSelectedElectives,
     setWeeklySchedule,
   ]);
+
+  const handleSelectMajor = useCallback(
+    async (majorId: string) => {
+      try {
+        const plan = await fetchMajorPlan(majorId);
+        setActiveMajorId(majorId);
+        setActiveMajorIdState(plan.id);
+        setActiveMajorName(plan.name);
+        setMajorCourses(plan.courses);
+        setActiveCategoryRequirements(plan.categoryRequirements);
+        setActiveTotalCredits(plan.totalCredits);
+        const { nodes: newNodes, edges: newEdges } = buildGraphLayout(
+          plan.courses,
+        );
+        setNodes(newNodes);
+        setEdges(newEdges);
+      } catch (err) {
+        console.error("Failed to load major plan:", err);
+      }
+    },
+    [setNodes, setEdges],
+  );
+
+  const handleLogoutStudent = useCallback(() => {
+    clearStudentProfile();
+    setCurrentStudent(null);
+    setIsGuestMode(false);
+  }, []);
+
+  const handleApplyStudentData = useCallback(
+    (profile: StudentSyncProfile) => {
+      setCurrentStudent(profile);
+      setIsGuestMode(true);
+
+      if (profile.planCourses && profile.planCourses.length > 0) {
+        setMajorCourses(profile.planCourses);
+        setActiveMajorIdState(profile.majorId || "cse");
+        setActiveMajorName(profile.majorName || "هندسة أنظمة الحاسوب");
+        if (profile.totalCredits) {
+          setActiveTotalCredits(profile.totalCredits);
+        }
+        if (profile.categoryRequirements) {
+          setActiveCategoryRequirements(profile.categoryRequirements);
+        }
+        const { nodes: newNodes, edges: newEdges } = buildGraphLayout(
+          profile.planCourses,
+        );
+        setNodes(newNodes);
+        setEdges(newEdges);
+      } else if (profile.majorId && profile.majorId !== activeMajorId) {
+        void handleSelectMajor(profile.majorId);
+      }
+
+      if (profile.passedCourseIds && profile.passedCourseIds.length > 0) {
+        setCompletedCourses(new Set(profile.passedCourseIds));
+      }
+
+      if (profile.enrolledCourses && profile.enrolledCourses.length > 0) {
+        setWeeklySchedule((prev) => {
+          const semesterKey = planStartSemester || SEMESTERS[0];
+          const nextSemesterSchedule = { ...(prev[semesterKey] || {}) };
+
+          for (const enrolled of profile.enrolledCourses!) {
+            const firstBlock = enrolled.blocks?.[0];
+            nextSemesterSchedule[enrolled.code] = {
+              startTime: firstBlock ? String(firstBlock.start) : "",
+              endTime: firstBlock ? String(firstBlock.end) : "",
+              days: firstBlock?.days || [],
+              section: enrolled.sec,
+              instructor: enrolled.instructor || "",
+              room: enrolled.room || "",
+              location: enrolled.building || "",
+            };
+          }
+
+          return {
+            ...prev,
+            [semesterKey]: nextSemesterSchedule,
+          };
+        });
+      }
+    },
+    [
+      activeMajorId,
+      handleSelectMajor,
+      planStartSemester,
+      setCompletedCourses,
+      setEdges,
+      setNodes,
+      setWeeklySchedule,
+    ],
+  );
+
+  useEffect(() => {
+    fetchSyncStatus()
+      .then((status) => setSyncStatus(status))
+      .catch(() => {});
+
+    const cachedStudent = getCachedStudentProfile();
+    if (cachedStudent) {
+      handleApplyStudentData(cachedStudent);
+      return;
+    }
+
+    const savedMajor = getActiveMajorId();
+    if (savedMajor && savedMajor !== "cse") {
+      fetchMajorPlan(savedMajor)
+        .then((plan) => {
+          setActiveMajorIdState(plan.id);
+          setActiveMajorName(plan.name);
+          setMajorCourses(plan.courses);
+          setActiveCategoryRequirements(plan.categoryRequirements);
+          setActiveTotalCredits(plan.totalCredits);
+          const { nodes: newNodes, edges: newEdges } = buildGraphLayout(
+            plan.courses,
+          );
+          setNodes(newNodes);
+          setEdges(newEdges);
+        })
+        .catch(() => {});
+    }
+  }, [handleApplyStudentData, setNodes, setEdges]);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -846,6 +1065,14 @@ function FlowComponent() {
     window.setTimeout(() => URL.revokeObjectURL(url), 0);
   };
 
+  const completedCredits = useMemo(() => {
+    return calculateDegreeCredits(activeCourses, completedCourses);
+  }, [completedCourses, activeCourses]);
+
+  const plannedCredits = useMemo(() => {
+    return calculatePlannedCredits(activeCourses, completedCourses, plannedCourses);
+  }, [completedCourses, plannedCourses, activeCourses]);
+
   const completedCreditsPerCategory = useMemo(() => {
     return activeCourses.reduce(
       (acc, course) => {
@@ -858,8 +1085,29 @@ function FlowComponent() {
     );
   }, [completedCourses, activeCourses]);
 
+  const plannedCreditsPerCategory = useMemo(() => {
+    return activeCourses.reduce(
+      (acc, course) => {
+        if (!completedCourses.has(course.id) && plannedCourses[course.id]) {
+          acc[course.category] = (acc[course.category] || 0) + course.credits;
+        }
+        return acc;
+      },
+      {} as Record<string, number>,
+    );
+  }, [plannedCourses, completedCourses, activeCourses]);
+
+  const progressPercentage = calculateProgressPercentage(
+    completedCredits,
+    TOTAL_CREDITS,
+  );
+  const plannedPercentage = calculateProgressPercentage(
+    plannedCredits,
+    TOTAL_CREDITS,
+  );
+
   const matchingSearchCourses = useMemo(() => {
-    const query = searchQuery.trim().toLowerCase();
+    const query = deferredSearchQuery.trim().toLowerCase();
     if (!query) return [];
     return courses.filter(
       (course) =>
@@ -867,25 +1115,24 @@ function FlowComponent() {
         course.id.toLowerCase().includes(query) ||
         (courseCommonNames[course.id] ?? "").toLowerCase().includes(query),
     );
-  }, [searchQuery]);
+  }, [deferredSearchQuery]);
 
   // Compute available courses
   const availableCourses = useMemo(() => {
     return courses.filter((course) =>
-      isCourseAvailable(
-        course,
-        completedCourses,
-        completedCreditsPerCategory,
-        courses,
-      ),
+      isCourseAvailable(course, completedCourses, courses, {
+        cumulativeEarnedCredits: completedCredits,
+        coreqMode: "permissive",
+      }),
     );
-  }, [completedCourses, completedCreditsPerCategory, courses]);
+  }, [completedCourses, courses, completedCredits]);
   const availableCourseIds = useMemo(
     () => new Set(availableCourses.map((course) => course.id)),
     [availableCourses],
   );
 
   const groupedCourseList = useMemo(() => {
+    if (!isCourseListModalOpen) return EMPTY_GROUPED_COURSES;
     let list: Course[];
     if (courseListTab === "available") list = availableCourses;
     else if (courseListTab === "completed")
@@ -900,42 +1147,13 @@ function FlowComponent() {
       },
       {} as Record<string, Course[]>,
     );
-  }, [courseListTab, availableCourses, activeCourses, completedCourses]);
-
-  const completedCredits = useMemo(() => {
-    return activeCourses.reduce((acc, course) => {
-      if (completedCourses.has(course.id)) {
-        return acc + course.credits;
-      }
-      return acc;
-    }, 0);
-  }, [completedCourses, activeCourses]);
-
-  const plannedCredits = useMemo(() => {
-    return activeCourses.reduce((acc, course) => {
-      if (!completedCourses.has(course.id) && plannedCourses[course.id]) {
-        return acc + course.credits;
-      }
-      return acc;
-    }, 0);
-  }, [completedCourses, plannedCourses, activeCourses]);
-
-  const plannedCreditsPerCategory = useMemo(() => {
-    return courses.reduce(
-      (acc, course) => {
-        if (!completedCourses.has(course.id) && plannedCourses[course.id]) {
-          acc[course.category] = (acc[course.category] || 0) + course.credits;
-        }
-        return acc;
-      },
-      {} as Record<string, number>,
-    );
-  }, [plannedCourses, completedCourses]);
-
-  const progressPercentage =
-    Math.round((completedCredits / TOTAL_CREDITS) * 100) || 0;
-  const plannedPercentage =
-    Math.round((plannedCredits / TOTAL_CREDITS) * 100) || 0;
+  }, [
+    isCourseListModalOpen,
+    courseListTab,
+    availableCourses,
+    activeCourses,
+    completedCourses,
+  ]);
 
   const toggleCourseCompletion = useCallback(
     (courseId: string) => {
@@ -1052,6 +1270,22 @@ function FlowComponent() {
               : 0.15;
         }
 
+        const prev = n.data as Record<string, unknown>;
+        if (
+          prev.isSelected === isSelected &&
+          prev.isAncestor === isAncestor &&
+          prev.isDescendant === isDescendant &&
+          prev.isDirectPrereq === isDirectPrereq &&
+          prev.isDirectDep === isDirectDep &&
+          prev.isCompleted === isCompleted &&
+          prev.isPlanned === isPlanned &&
+          prev.plannedSemester === plannedSemester &&
+          prev.isAvailable === isAvailable &&
+          prev.opacity === opacity
+        ) {
+          return n;
+        }
+
         return {
           ...n,
           hidden: false,
@@ -1067,29 +1301,47 @@ function FlowComponent() {
             plannedSemester,
             isAvailable,
             opacity,
-            toggleCompleted: () => toggleCourseCompletion(n.id),
-            showDetails: () => openDetails(n.id),
-            onPlan: () => {
-              setPlanningCourseId(n.id);
-              setIsPlannerOpen(true);
-            },
-            onHoverStart: () => setHoveredCourseId(n.id),
-            onHoverEnd: () => setHoveredCourseId(null),
+            toggleCompleted:
+              (prev.toggleCompleted as (() => void) | undefined) ||
+              (() => toggleCourseCompletion(n.id)),
+            showDetails:
+              (prev.showDetails as (() => void) | undefined) ||
+              (() => openDetails(n.id)),
+            onPlan:
+              (prev.onPlan as (() => void) | undefined) ||
+              (() => {
+                setPlanningCourseId(n.id);
+                setIsPlannerOpen(true);
+              }),
+            onHoverStart:
+              (prev.onHoverStart as (() => void) | undefined) ||
+              (() => setHoveredCourseId(n.id)),
+            onHoverEnd:
+              (prev.onHoverEnd as (() => void) | undefined) ||
+              (() => setHoveredCourseId(null)),
           },
         };
       }),
     );
 
     setEdges((eds) => {
-      return eds.map((e) => {
-        if (!activeNodeId) {
-          return {
-            ...e,
-            animated: false,
-            style: { stroke: "#94A3B8", strokeWidth: 2, opacity: 1 },
-            markerEnd: { type: MarkerType.ArrowClosed, color: "#94A3B8" },
-          };
+      if (!activeNodeId) {
+        if (
+          eds.length > 0 &&
+          eds[0].style?.stroke === "#94A3B8" &&
+          !eds[0].animated
+        ) {
+          return eds;
         }
+        return eds.map((e) => ({
+          ...e,
+          animated: false,
+          style: { stroke: "#94A3B8", strokeWidth: 2, opacity: 1 },
+          markerEnd: { type: MarkerType.ArrowClosed, color: "#94A3B8" },
+        }));
+      }
+
+      return eds.map((e) => {
 
         const isAncestorEdge =
           ancestors.has(e.source) &&
@@ -1189,18 +1441,51 @@ function FlowComponent() {
       )}
       <div className="print:hidden w-full h-full min-h-0 flex flex-col">
         {/* Header Section */}
-        <header className="flex flex-col xl:flex-row justify-between items-start xl:items-center mb-2 sm:mb-4 bg-white/90 dark:bg-slate-800/90 backdrop-blur-xl p-3 sm:p-6 rounded-b-none sm:rounded-2xl shadow-xl shadow-gray-200/50 dark:shadow-slate-900/50 border-b sm:border border-gray-200/50 dark:border-slate-700/50 z-10 shrink-0 gap-3 sm:gap-4 transition-all">
-          <div className="flex justify-between items-start w-full xl:w-auto gap-4">
-            <div>
+        <header className="flex flex-col 2xl:flex-row justify-between items-start 2xl:items-center mb-2 sm:mb-4 bg-white/90 dark:bg-slate-800/90 backdrop-blur-xl p-3 sm:p-6 rounded-b-none sm:rounded-2xl shadow-xl shadow-gray-200/50 dark:shadow-slate-900/50 border-b sm:border border-gray-200/50 dark:border-slate-700/50 z-10 shrink-0 gap-3 sm:gap-4 transition-all">
+          <div className="flex justify-between items-start w-full 2xl:w-auto gap-4">
+            <div className="w-full 2xl:w-auto">
               <div className="mb-1">
-                <h1 className="flex items-center gap-2 text-sm sm:text-2xl font-extrabold text-slate-800 dark:text-slate-100">
-                  <BookOpen
-                    className="text-blue-600 dark:text-blue-400 hidden sm:block"
-                    size={24}
-                  />
-                  خريطة المتطلبات الأكاديمية
-                </h1>
-                <div className="grid w-full grid-cols-3 gap-1.5 sm:flex sm:w-auto sm:flex-wrap sm:gap-2 sm:mt-1">
+                <div className="flex items-center justify-between gap-2">
+                  <h1 className="flex items-center gap-2 text-sm sm:text-2xl font-extrabold text-slate-800 dark:text-slate-100">
+                    <BookOpen
+                      className="text-blue-600 dark:text-blue-400 hidden sm:block"
+                      size={24}
+                    />
+                    خريطة المتطلبات الأكاديمية
+                  </h1>
+                  <button
+                    type="button"
+                    onClick={toggleMobileActions}
+                    className="sm:hidden flex items-center gap-1.5 px-2.5 py-1 text-xs font-bold text-slate-700 dark:text-slate-200 bg-slate-100 dark:bg-slate-700/80 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-xl transition-all cursor-pointer border border-slate-200 dark:border-slate-600 shrink-0 min-h-8 shadow-xs"
+                    aria-expanded={!isMobileActionsCollapsed}
+                    aria-label={
+                      isMobileActionsCollapsed
+                        ? "إظهار أزرار الإجراءات"
+                        : "تصغير وإخفاء أزرار الإجراءات"
+                    }
+                  >
+                    <span>{isMobileActionsCollapsed ? "إظهار الأزرار" : "تصغير الأزرار"}</span>
+                    {isMobileActionsCollapsed ? (
+                      <ChevronDown
+                        size={15}
+                        className="text-blue-600 dark:text-blue-400"
+                      />
+                    ) : (
+                      <ChevronUp
+                        size={15}
+                        className="text-slate-500 dark:text-slate-400"
+                      />
+                    )}
+                  </button>
+                </div>
+                <div
+                  className={cn(
+                    "grid w-full grid-cols-2 min-[420px]:grid-cols-4 sm:flex sm:w-auto sm:flex-wrap gap-1.5 sm:gap-2 sm:mt-1 transition-all duration-300 ease-in-out",
+                    isMobileActionsCollapsed
+                      ? "max-h-0 opacity-0 pointer-events-none -translate-y-2 overflow-hidden my-0 p-0 sm:max-h-none sm:opacity-100 sm:pointer-events-auto sm:translate-y-0 sm:my-auto"
+                      : "max-h-96 opacity-100 translate-y-0 mt-2 sm:mt-1",
+                  )}
+                >
                   <button
                     onClick={() => {
                       setIsPlanningModeOpen(true);
@@ -1209,7 +1494,7 @@ function FlowComponent() {
                       setHoveredCourseId(null);
                       setPlanningCourseId(null);
                     }}
-                    className="flex min-h-10 items-center justify-center gap-1.5 px-1.5 sm:px-3 sm:py-1.5 text-[11px] sm:text-sm bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-700 hover:to-indigo-800 text-white rounded-xl transition-all duration-200 cursor-pointer shadow-lg shadow-indigo-200/50 dark:shadow-indigo-900/30 hover:shadow-xl hover:shadow-indigo-300/60 dark:hover:shadow-indigo-900/50 hover:-translate-y-0.5 font-extrabold"
+                    className="flex min-h-11 items-center justify-center gap-1.5 px-1.5 sm:px-3 sm:py-1.5 text-[11px] sm:text-sm bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-700 hover:to-indigo-800 text-white rounded-xl transition-all duration-200 cursor-pointer shadow-lg shadow-indigo-200/50 dark:shadow-indigo-900/30 hover:shadow-xl hover:shadow-indigo-300/60 dark:hover:shadow-indigo-900/50 hover:-translate-y-0.5 font-extrabold"
                   >
                     <MapIcon size={16} />
                     وضع التخطيط
@@ -1221,7 +1506,7 @@ function FlowComponent() {
                       setIsDetailsOpen(false);
                       setHoveredCourseId(null);
                     }}
-                    className="flex min-h-10 items-center justify-center gap-1.5 px-1.5 sm:px-3 sm:py-1.5 text-[11px] sm:text-sm bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white rounded-xl transition-all duration-200 cursor-pointer shadow-lg shadow-blue-200/50 dark:shadow-blue-900/30 hover:shadow-xl hover:shadow-blue-300/60 dark:hover:shadow-blue-900/50 hover:-translate-y-0.5 font-extrabold"
+                    className="flex min-h-11 items-center justify-center gap-1.5 px-1.5 sm:px-3 sm:py-1.5 text-[11px] sm:text-sm bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white rounded-xl transition-all duration-200 cursor-pointer shadow-lg shadow-blue-200/50 dark:shadow-blue-900/30 hover:shadow-xl hover:shadow-blue-300/60 dark:hover:shadow-blue-900/50 hover:-translate-y-0.5 font-extrabold"
                   >
                     <LayoutList size={16} />
                     قائمة المواد
@@ -1233,7 +1518,7 @@ function FlowComponent() {
                       setIsDetailsOpen(false);
                       setHoveredCourseId(null);
                     }}
-                    className="flex min-h-10 items-center justify-center gap-1.5 px-1.5 sm:px-3 sm:py-1.5 text-[11px] sm:text-sm bg-gradient-to-r from-violet-600 to-violet-700 hover:from-violet-700 hover:to-violet-800 text-white rounded-xl transition-all duration-200 cursor-pointer shadow-lg shadow-violet-200/50 dark:shadow-violet-900/30 hover:shadow-xl hover:shadow-violet-300/60 dark:hover:shadow-violet-900/50 hover:-translate-y-0.5 font-extrabold"
+                    className="flex min-h-11 items-center justify-center gap-1.5 px-1.5 sm:px-3 sm:py-1.5 text-[11px] sm:text-sm bg-gradient-to-r from-violet-600 to-violet-700 hover:from-violet-700 hover:to-violet-800 text-white rounded-xl transition-all duration-200 cursor-pointer shadow-lg shadow-violet-200/50 dark:shadow-violet-900/30 hover:shadow-xl hover:shadow-violet-300/60 dark:hover:shadow-violet-900/50 hover:-translate-y-0.5 font-extrabold"
                   >
                     <Calculator size={16} />
                     <span className="sm:hidden">المعدل</span>
@@ -1248,7 +1533,7 @@ function FlowComponent() {
                       setHoveredCourseId(null);
                       setPlanningCourseId(null);
                     }}
-                    className="flex min-h-10 items-center justify-center gap-1.5 px-1.5 sm:px-3 sm:py-1.5 text-[11px] sm:text-sm bg-gradient-to-r from-orange-400 to-orange-500 hover:from-orange-500 hover:to-orange-600 text-white dark:from-orange-500 dark:to-orange-600 dark:hover:from-orange-600 dark:hover:to-orange-700 rounded-xl transition-all duration-200 cursor-pointer shadow-lg shadow-orange-200/50 dark:shadow-orange-900/30 hover:shadow-xl hover:shadow-orange-300/60 dark:hover:shadow-orange-900/50 hover:-translate-y-0.5 font-extrabold"
+                    className="flex min-h-11 items-center justify-center gap-1.5 px-1.5 sm:px-3 sm:py-1.5 text-[11px] sm:text-sm bg-gradient-to-r from-orange-400 to-orange-500 hover:from-orange-500 hover:to-orange-600 text-white dark:from-orange-500 dark:to-orange-600 dark:hover:from-orange-600 dark:hover:to-orange-700 rounded-xl transition-all duration-200 cursor-pointer shadow-lg shadow-orange-200/50 dark:shadow-orange-900/30 hover:shadow-xl hover:shadow-orange-300/60 dark:hover:shadow-orange-900/50 hover:-translate-y-0.5 font-extrabold"
                   >
                     <CalendarDays size={14} className="sm:hidden" />
                     <CalendarDays size={16} className="hidden sm:block" />
@@ -1257,7 +1542,7 @@ function FlowComponent() {
                   </button>
                   <button
                     onClick={() => setIsWeeklyScheduleOpen(true)}
-                    className="flex min-h-10 items-center justify-center gap-1.5 px-1.5 sm:px-3 sm:py-1.5 text-[11px] sm:text-sm bg-gradient-to-r from-cyan-500 to-cyan-600 hover:from-cyan-600 hover:to-cyan-700 text-white dark:from-cyan-600 dark:to-cyan-700 dark:hover:from-cyan-700 dark:hover:to-cyan-800 rounded-xl transition-all duration-200 cursor-pointer shadow-lg shadow-cyan-200/50 dark:shadow-cyan-900/30 hover:shadow-xl hover:shadow-cyan-300/60 dark:hover:shadow-cyan-900/50 hover:-translate-y-0.5 font-extrabold"
+                    className="flex min-h-11 items-center justify-center gap-1.5 px-1.5 sm:px-3 sm:py-1.5 text-[11px] sm:text-sm bg-gradient-to-r from-cyan-500 to-cyan-600 hover:from-cyan-600 hover:to-cyan-700 text-white dark:from-cyan-600 dark:to-cyan-700 dark:hover:from-cyan-700 dark:hover:to-cyan-800 rounded-xl transition-all duration-200 cursor-pointer shadow-lg shadow-cyan-200/50 dark:shadow-cyan-900/30 hover:shadow-xl hover:shadow-cyan-300/60 dark:hover:shadow-cyan-900/50 hover:-translate-y-0.5 font-extrabold"
                   >
                     <CalendarDays size={14} className="sm:hidden" />
                     <CalendarDays size={16} className="hidden sm:block" />
@@ -1270,7 +1555,7 @@ function FlowComponent() {
                       setShareError(null);
                       setIsShareScheduleOpen(true);
                     }}
-                    className="flex min-h-10 items-center justify-center gap-1.5 px-1.5 sm:px-3 sm:py-1.5 text-[11px] sm:text-sm bg-violet-100 hover:bg-violet-200 text-violet-800 dark:bg-violet-900/50 dark:text-violet-300 dark:hover:bg-violet-800/60 rounded-xl transition-colors cursor-pointer shadow-sm font-bold"
+                    className="flex min-h-11 items-center justify-center gap-1.5 px-1.5 sm:px-3 sm:py-1.5 text-[11px] sm:text-sm bg-violet-100 hover:bg-violet-200 text-violet-800 dark:bg-violet-900/50 dark:text-violet-300 dark:hover:bg-violet-800/60 rounded-xl transition-colors cursor-pointer shadow-sm font-bold"
                     title="إنشاء رابط أو رمز QR لفتح الخطة على جهاز آخر"
                   >
                     <Link2 size={15} />
@@ -1284,7 +1569,7 @@ function FlowComponent() {
                       setLoadError(null);
                       setIsLoadScheduleOpen(true);
                     }}
-                    className="flex min-h-10 items-center justify-center gap-1.5 px-1.5 sm:px-3 sm:py-1.5 text-[11px] sm:text-sm bg-gray-100 hover:bg-gray-200 text-gray-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700 rounded-xl transition-colors cursor-pointer shadow-sm font-bold"
+                    className="flex min-h-11 items-center justify-center gap-1.5 px-1.5 sm:px-3 sm:py-1.5 text-[11px] sm:text-sm bg-gray-100 hover:bg-gray-200 text-gray-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700 rounded-xl transition-colors cursor-pointer shadow-sm font-bold"
                     title="فتح خطة مشتركة باستخدام رمز أو رابط"
                   >
                     <Search size={15} />
@@ -1294,7 +1579,7 @@ function FlowComponent() {
 
                   <button
                     onClick={() => setIsSupportModalOpen(true)}
-                    className="flex min-h-10 items-center justify-center gap-1.5 px-1.5 sm:px-3 sm:py-1.5 text-[11px] sm:text-sm bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700 text-white dark:from-emerald-600 dark:to-emerald-700 dark:hover:from-emerald-700 dark:hover:to-emerald-800 rounded-xl transition-all duration-200 cursor-pointer shadow-lg shadow-emerald-200/50 dark:shadow-emerald-900/30 hover:shadow-xl hover:shadow-emerald-300/60 dark:hover:shadow-emerald-900/50 hover:-translate-y-0.5 font-extrabold"
+                    className="flex min-h-11 items-center justify-center gap-1.5 px-1.5 sm:px-3 sm:py-1.5 text-[11px] sm:text-sm bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700 text-white dark:from-emerald-600 dark:to-emerald-700 dark:hover:from-emerald-700 dark:hover:to-emerald-800 rounded-xl transition-all duration-200 cursor-pointer shadow-lg shadow-emerald-200/50 dark:shadow-emerald-900/30 hover:shadow-xl hover:shadow-emerald-300/60 dark:hover:shadow-emerald-900/50 hover:-translate-y-0.5 font-extrabold"
                     title="الدعم والاقتراحات"
                   >
                     <MessageCircle
@@ -1310,11 +1595,49 @@ function FlowComponent() {
                   </button>
                 </div>
               </div>
-              <p className="text-[10px] sm:text-sm text-gray-600 dark:text-slate-400 uppercase font-bold flex items-center gap-2">
-                تخصص هندسة أنظمة الحاسوب{" "}
-                <span className="w-1.5 h-1.5 rounded-full bg-gradient-to-r from-blue-500 to-indigo-500"></span>{" "}
-                جامعة فلسطين التقنية - خضوري (PTUK)
-              </p>
+              <div className="flex flex-wrap items-center gap-2 mt-1">
+                {currentStudent ? (
+                  <div className="inline-flex items-center gap-2 px-3 py-1 bg-indigo-50/90 dark:bg-indigo-950/60 border border-indigo-200 dark:border-indigo-800 text-indigo-700 dark:text-indigo-300 rounded-xl text-xs font-bold transition-all shadow-sm">
+                    <GraduationCap size={15} className="text-indigo-600 dark:text-indigo-400 shrink-0" />
+                    <span>طالب: <strong className="font-mono">{currentStudent.studentId}</strong></span>
+                    {currentStudent.cohortYear && (
+                      <span className="text-indigo-500 dark:text-indigo-400">• دفعة {currentStudent.cohortYear}</span>
+                    )}
+                    <span>• {activeMajorName}</span>
+                    <button
+                      type="button"
+                      onClick={handleLogoutStudent}
+                      className="mr-1 text-[11px] underline text-slate-500 hover:text-rose-600 dark:hover:text-rose-400 transition-colors cursor-pointer font-bold"
+                      title="تسجيل خروج أو تبديل الحساب"
+                    >
+                      (تبديل / خروج)
+                    </button>
+                  </div>
+                ) : (
+                  <div className="inline-flex items-center gap-2 px-3 py-1 bg-slate-100 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 rounded-xl text-xs font-bold transition-all shadow-sm">
+                    <span>تصفح كزائر ({activeMajorName})</span>
+                    <button
+                      type="button"
+                      onClick={() => setIsGuestMode(false)}
+                      className="text-[11px] text-indigo-600 dark:text-indigo-400 hover:underline font-bold cursor-pointer"
+                    >
+                      تسجيل دخول الطالب
+                    </button>
+                  </div>
+                )}
+                <span className="text-[11px] text-gray-500 dark:text-slate-400 font-semibold hidden sm:inline">
+                  • جامعة فلسطين التقنية - خضوري (PTUK)
+                </span>
+                {syncStatus && (
+                  <div className="hidden lg:flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-slate-100 dark:bg-slate-800/80 text-[11px] text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
+                    <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+                    <span className="font-medium">آخر تحديث للشعب:</span>
+                    <span className="font-bold text-emerald-700 dark:text-emerald-400">
+                      {formatArabicSyncTime(syncStatus.lastSyncTime)}
+                    </span>
+                  </div>
+                )}
+              </div>
               <div className="mt-2 hidden sm:flex items-center gap-2 text-[10px] font-extrabold text-amber-700 dark:text-amber-300 bg-gradient-to-r from-amber-100 to-orange-100 dark:from-amber-900/30 dark:to-orange-900/30 px-4 py-1.5 rounded-xl border border-amber-200 dark:border-amber-800/50 shadow-md shadow-amber-200/30 dark:shadow-amber-900/20 w-fit animate-in fade-in slide-in-from-right-2 duration-500">
                 <Pin size={12} className="rotate-25" />
                 <span>
@@ -1326,7 +1649,7 @@ function FlowComponent() {
           </div>
 
           {/* Search & Actions */}
-          <div className="w-full xl:w-auto grid grid-cols-[1fr_auto] items-center gap-2 sm:flex sm:flex-row sm:flex-wrap sm:items-center sm:gap-4">
+          <div className="w-full 2xl:w-auto grid grid-cols-[1fr_auto] items-center gap-2 sm:flex sm:flex-row sm:flex-wrap sm:items-center sm:gap-4">
             <div className="relative group col-span-2 min-w-0 sm:col-span-1 sm:flex-1 sm:min-w-45 sm:w-64">
               <Search
                 className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-blue-500 transition-colors"
@@ -1506,14 +1829,11 @@ function FlowComponent() {
                 {/* Selected Course Prereq/Dependent Info Box */}
                 {selectedNodeId &&
                   (() => {
-                    const selCourse = courses.find(
-                      (c) => c.id === selectedNodeId,
-                    );
+                    const selCourse = coursesById.get(selectedNodeId);
                     if (!selCourse) return null;
                     const prereqs = selCourse.prerequisites || [];
-                    const dependents = courses
-                      .filter((c) => c.prerequisites.includes(selectedNodeId))
-                      .map((c) => c.id);
+                    const dependents =
+                      courseDependentsMap.get(selectedNodeId) || [];
                     return (
                       <div
                         className="absolute top-2 left-2 sm:top-6 sm:left-6 bg-white dark:bg-slate-800 p-2.5 sm:p-4 rounded-xl shadow-xl border border-gray-200 dark:border-slate-700 flex flex-col gap-2 z-10 w-[calc(100vw-1rem)] max-w-70 sm:w-70 max-h-[60vh] sm:max-h-[70vh] overflow-y-auto"
@@ -1551,7 +1871,7 @@ function FlowComponent() {
                           ) : (
                             <div className="flex flex-wrap gap-1">
                               {prereqs.map((pid) => {
-                                const p = courses.find((c) => c.id === pid);
+                                const p = coursesById.get(pid);
                                 return (
                                   <button
                                     key={pid}
@@ -1605,7 +1925,7 @@ function FlowComponent() {
                           ) : (
                             <div className="flex flex-wrap gap-1">
                               {dependents.map((did) => {
-                                const p = courses.find((c) => c.id === did);
+                                const p = coursesById.get(did);
                                 return (
                                   <button
                                     key={did}
@@ -1648,29 +1968,31 @@ function FlowComponent() {
               </div>
             )}
             {viewMode === "list" && (
-              <ListView
-                activeCourses={activeCourses}
-                listGroupBy={listGroupBy}
-                setListGroupBy={setListGroupBy}
-                completedCourses={completedCourses}
-                availableCourses={availableCourses}
-                plannedCourses={plannedCourses}
-                pinnedCourseId={pinnedCourseId}
-                setPinnedCourseId={setPinnedCourseId}
-                pinnedPath={pinnedPath}
-                searchQuery={searchQuery}
-                toggleCourseCompletion={toggleCourseCompletion}
-                setPlanningCourseId={setPlanningCourseId}
-                setIsPlannerOpen={setIsPlannerOpen}
-                selectedElectives={selectedElectives}
-                setSelectedElectives={setSelectedElectives}
-                completedCreditsPerCategory={completedCreditsPerCategory}
-                courses={courses}
-                hoveredCourseId={hoveredCourseId}
-                setHoveredCourseId={setHoveredCourseId}
-                hoveredPath={hoveredPath}
-                onOpenDetails={openDetails}
-              />
+              <React.Suspense fallback={modalLoadingFallback}>
+                <ListView
+                  activeCourses={activeCourses}
+                  listGroupBy={listGroupBy}
+                  setListGroupBy={setListGroupBy}
+                  completedCourses={completedCourses}
+                  availableCourses={availableCourses}
+                  plannedCourses={plannedCourses}
+                  pinnedCourseId={pinnedCourseId}
+                  setPinnedCourseId={setPinnedCourseId}
+                  pinnedPath={pinnedPath}
+                  searchQuery={deferredSearchQuery}
+                  toggleCourseCompletion={toggleCourseCompletion}
+                  setPlanningCourseId={setPlanningCourseId}
+                  setIsPlannerOpen={setIsPlannerOpen}
+                  selectedElectives={selectedElectives}
+                  setSelectedElectives={setSelectedElectives}
+                  completedCreditsPerCategory={completedCreditsPerCategory}
+                  courses={courses}
+                  hoveredCourseId={hoveredCourseId}
+                  setHoveredCourseId={setHoveredCourseId}
+                  hoveredPath={hoveredPath}
+                  onOpenDetails={openDetails}
+                />
+              </React.Suspense>
             )}
           </>
 
@@ -1687,14 +2009,10 @@ function FlowComponent() {
           >
             {selectedNodeId &&
               (() => {
-                const node = courses.find((c) => c.id === selectedNodeId);
+                const node = coursesById.get(selectedNodeId);
                 if (!node) return null;
                 const isComp = completedCourses.has(node.id);
                 const isAvail = availableCourseIds.has(node.id);
-                const req = categoryRequirements[node.category] || 999;
-                const comp = completedCreditsPerCategory[node.category] || 0;
-                const isGroupCompleted = comp >= req;
-                const isElective = node.category.includes("اختياري");
                 const prerequisitesCompleted = node.prerequisites.every(
                   (prereq) => completedCourses.has(prereq),
                 );
@@ -1709,9 +2027,6 @@ function FlowComponent() {
 
                 if (isComp) {
                   buttonText = "إلغاء المادة كمنجزة";
-                } else if (isGroupCompleted && isElective) {
-                  buttonText = "المجموعة متكملة";
-                  isDisabled = true;
                 } else if (isAvail) {
                   buttonText = "تحديد كمادة منجزة";
                 } else {
@@ -1900,7 +2215,7 @@ function FlowComponent() {
               onClick={() => setIsSidebarOpen(false)}
             >
               <div
-                className="w-80 sm:w-96 max-w-[100vw] h-full bg-white dark:bg-slate-900 shadow-2xl border-r border-gray-200 dark:border-slate-800 flex flex-col animate-in slide-in-from-right-full duration-300"
+                className="w-full sm:w-96 max-w-full sm:max-w-md h-full bg-white dark:bg-slate-900 shadow-2xl border-r border-gray-200 dark:border-slate-800 flex flex-col animate-in slide-in-from-right-full duration-300"
                 onClick={(e) => e.stopPropagation()}
               >
                 <div className="flex justify-between items-center p-4 sm:p-5 border-b border-gray-100 dark:border-slate-800">
@@ -1992,29 +2307,6 @@ function FlowComponent() {
 
                 <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-5 relative bg-gray-50/50 dark:bg-slate-900/50">
                   {(() => {
-                    const getYearFromId = (id: string) => {
-                      if (id.length >= 6) {
-                        const levelChar = id.charAt(5);
-                        const level = parseInt(levelChar);
-                        if (!isNaN(level) && level >= 1 && level <= 5)
-                          return level.toString();
-
-                        // Special cases for codes like 1301... or 1501...
-                        // Usually the 6th digit is the level in PTUK new system
-                        // or 4th/5th in old.
-                      }
-                      // Fallback for university requirements which often start with 1501, 1520 etc.
-                      if (id.startsWith("1520") || id.startsWith("1301"))
-                        return "1";
-                      if (id.startsWith("121401")) return "1";
-                      if (id.startsWith("121402")) return "2";
-                      if (id.startsWith("121403")) return "3";
-                      if (id.startsWith("121404")) return "4";
-                      if (id.startsWith("121405")) return "5";
-
-                      return "1";
-                    };
-
                     let displayCourses = courses;
                     if (activeTab === "available")
                       displayCourses = availableCourses;
@@ -2059,8 +2351,6 @@ function FlowComponent() {
                         const comp =
                           completedCreditsPerCategory[categoryName] || 0;
                         const isGroupCompleted = comp >= req;
-                        const isElective = categoryName.includes("اختياري");
-                        const isLocked = isGroupCompleted && isElective;
 
                         return (
                           <div
@@ -2092,12 +2382,7 @@ function FlowComponent() {
                                 return (
                                   <div
                                     key={course.id}
-                                    className={cn(
-                                      "p-3 bg-white dark:bg-slate-800 border rounded-xl flex flex-col gap-1 cursor-pointer hover:border-blue-300 hover:dark:border-blue-500 hover:shadow-md transition-all group relative overflow-hidden",
-                                      isLocked && !isComp
-                                        ? "opacity-50 grayscale border-gray-100 dark:border-slate-800"
-                                        : "border-gray-200 dark:border-slate-700",
-                                    )}
+                                    className="cv-auto p-3 bg-white dark:bg-slate-800 border rounded-xl flex flex-col gap-1 cursor-pointer hover:border-blue-300 hover:dark:border-blue-500 hover:shadow-md transition-all group relative overflow-hidden border-gray-200 dark:border-slate-700"
                                     onClick={() => {
                                       focusNode(course.id);
                                       setSelectedNodeId(course.id);
@@ -2123,7 +2408,7 @@ function FlowComponent() {
                                         </span>
                                       </div>
                                       <div className="flex gap-1 shrink-0">
-                                        {!isComp && (!isLocked || isComp) && (
+                                        {!isComp && (
                                           <button
                                             onClick={(e) => {
                                               e.stopPropagation();
@@ -2147,8 +2432,7 @@ function FlowComponent() {
                                         <button
                                           onClick={(e) => {
                                             e.stopPropagation();
-                                            if (!isLocked || isComp)
-                                              toggleCourseCompletion(course.id);
+                                            toggleCourseCompletion(course.id);
                                           }}
                                           className={cn(
                                             "p-1.5 rounded-md transition-colors",
@@ -2161,11 +2445,8 @@ function FlowComponent() {
                                           title={
                                             isComp
                                               ? "تحديد كغير منجز"
-                                              : isLocked
-                                                ? "المجموعة مكتملة"
-                                                : "إنجاز"
+                                              : "إنجاز"
                                           }
-                                          disabled={isLocked && !isComp}
                                         >
                                           <CircleCheckBig size={18} />
                                         </button>
@@ -2447,6 +2728,12 @@ function FlowComponent() {
               onApply={applySharedSchedule}
             />
           </React.Suspense>
+        )}
+        {!currentStudent && !isGuestMode && (
+          <StudentLoginGate
+            onLoginSuccess={handleApplyStudentData}
+            onContinueAsGuest={() => setIsGuestMode(true)}
+          />
         )}
       </div>
     </div>

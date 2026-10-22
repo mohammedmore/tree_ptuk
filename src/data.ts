@@ -8,6 +8,7 @@ export interface Course {
   seasonal?: "first" | "second" | "both"; // 'first' = الفصل الأول, 'second' = الفصل الثاني, 'both' = كلاهما
   availableSemesters?: ("first" | "second" | "summer")[]; // فترات طرح المادة: الفصل الأول، الثاني، الصيفي
   resourceLink?: string; // Optional link to IVR Library resources for this course
+  minCredits?: number; // Optional minimum credit threshold (e.g. senior standing / graduation project / training)
 }
 
 export interface ScheduleEntry {
@@ -660,6 +661,7 @@ export const courses: Course[] = [
     prerequisites: ["12110316", "12140418"],
     credits: 1,
     category: "متطلب تخصص إجباري",
+    minCredits: 120,
   },
   {
     id: "12140523",
@@ -675,6 +677,7 @@ export const courses: Course[] = [
     prerequisites: ["12140521"],
     credits: 3,
     category: "متطلب تخصص إجباري",
+    minCredits: 120,
   },
   {
     id: "12140527",
@@ -934,3 +937,20 @@ export const courses: Course[] = [
     category: "متطلب تخصص اختياري",
   },
 ];
+
+export const coursesById = new Map<string, Course>(
+  courses.map((course) => [course.id, course]),
+);
+
+export const courseDependentsMap = new Map<string, string[]>();
+for (const course of courses) {
+  for (const prereq of course.prerequisites) {
+    const list = courseDependentsMap.get(prereq);
+    if (list) {
+      list.push(course.id);
+    } else {
+      courseDependentsMap.set(prereq, [course.id]);
+    }
+  }
+}
+

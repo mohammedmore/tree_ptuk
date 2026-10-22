@@ -17,7 +17,7 @@ import { courses } from "../data";
 import { SEMESTERS, TOTAL_CREDITS } from "../constants";
 import DynamicCourseDetailsModal from "./DynamicCourseDetailsModal";
 import StatsDashboard from "./StatsDashboard";
-import { markCoursesCompleted } from "../courseProgress";
+import { markCoursesCompleted, isDegreeCreditBearing } from "../courseProgress";
 
 interface PlannerViewProps {
   isPlannerOpen: boolean;
@@ -134,6 +134,30 @@ const PlannerView: React.FC<PlannerViewProps> = ({
             );
           }
         });
+      }
+
+      // Check minimum credits threshold
+      if (course.minCredits !== undefined && course.minCredits > 0) {
+        let earnedBeforeSemester = 0;
+        courses.forEach((c) => {
+          if (!isDegreeCreditBearing(c)) return;
+          if (completedCourses.has(c.id)) {
+            earnedBeforeSemester += c.credits;
+          } else {
+            const plannedSem = plannedCourses[c.id];
+            const pIdx = plannedSem ? SEMESTERS.indexOf(plannedSem) : -1;
+            if (pIdx >= 0 && pIdx < courseSemesterIdx) {
+              earnedBeforeSemester += c.credits;
+            }
+          }
+        });
+
+        if (earnedBeforeSemester < course.minCredits) {
+          if (!warnings[courseId]) warnings[courseId] = [];
+          warnings[courseId].push(
+            `المادة تتطلب إنجاز ${course.minCredits} ساعة معتمدة على الأقل قبل تسجيلها (الساعات المنجزة والمخططة سابقاً: ${earnedBeforeSemester})`,
+          );
+        }
       }
     });
     return warnings;

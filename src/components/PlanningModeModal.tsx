@@ -14,6 +14,10 @@ import type { Course } from "../data";
 import { categoryRequirements } from "../data";
 import { SEMESTERS } from "../constants";
 import {
+  isCourseAvailable as defaultIsCourseAvailable,
+  calculateDegreeCredits,
+} from "../courseProgress";
+import {
   getSemesterType,
   isCourseAvailableInSemester,
   formatOfferings,
@@ -30,12 +34,11 @@ interface PlanningModeModalProps {
     React.SetStateAction<Record<string, string>>
   >;
   courses: Course[];
-  isCourseAvailable: (
+  isCourseAvailable?: (
     course: Course,
-    completed: Set<string>,
-    categoryCredits: Record<string, number>,
-    allCourses: Course[],
-    currentPlannedCourses?: Set<string>,
+    completed: ReadonlySet<string>,
+    allCourses?: readonly Course[],
+    options?: import("../courseProgress").CourseAvailabilityOptions,
   ) => boolean;
   completedCreditsPerCategory: Record<string, number>;
   hasHighGpa: boolean;
@@ -129,6 +132,12 @@ const PlanningModeModal: React.FC<PlanningModeModalProps> = ({
     coursesById,
   ]);
 
+  const checkCourseAvailability = isCourseAvailable || defaultIsCourseAvailable;
+
+  const cumulativeEarnedCredits = React.useMemo(() => {
+    return calculateDegreeCredits(courses, allPrev);
+  }, [courses, allPrev]);
+
   const available = React.useMemo(() => {
     if (!selectedSemester) return [];
     return courses.filter((c) => {
@@ -142,13 +151,11 @@ const PlanningModeModal: React.FC<PlanningModeModalProps> = ({
         plannedSemesterIndex < currentSemesterIndex;
       const isPlannedNow = plannedSemester === selectedSemester;
       if (isComp || isPlannedInPrev || isPlannedNow) return false;
-      return isCourseAvailable(
-        c,
-        allPrev,
-        creditsThroughCurrentSemester,
-        courses,
-        currentSemesterPlannedCourses,
-      );
+      return checkCourseAvailability(c, allPrev, courses, {
+        currentPlannedCourses: currentSemesterPlannedCourses,
+        cumulativeEarnedCredits,
+        coreqMode: "strict",
+      });
     });
   }, [
     selectedSemester,
@@ -156,10 +163,11 @@ const PlanningModeModal: React.FC<PlanningModeModalProps> = ({
     completedCourses,
     plannedCourses,
     courses,
-    isCourseAvailable,
+    checkCourseAvailability,
     allPrev,
     creditsThroughCurrentSemester,
     currentSemesterPlannedCourses,
+    cumulativeEarnedCredits,
   ]);
 
   const groupedAvailable = React.useMemo(() => {
@@ -195,27 +203,27 @@ const PlanningModeModal: React.FC<PlanningModeModalProps> = ({
 
   return (
     <div
-      className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[110] flex items-center justify-center p-4"
+      className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[110] flex items-center justify-center p-2 sm:p-4"
       onClick={onClose}
     >
       <div
         role="dialog"
         aria-modal="true"
         aria-labelledby="planning-mode-title"
-        className="bg-white dark:bg-slate-900 rounded-3xl p-0 w-full max-w-2xl shadow-2xl animate-in zoom-in-95 duration-300 relative overflow-hidden border border-gray-100 dark:border-slate-700 flex flex-col max-h-[90vh]"
+        className="bg-white dark:bg-slate-900 rounded-2xl sm:rounded-3xl p-0 w-full max-w-5xl shadow-2xl animate-in zoom-in-95 duration-300 relative overflow-hidden border border-gray-100 dark:border-slate-700 flex flex-col max-h-[calc(100dvh-1rem)] sm:max-h-[90vh]"
         dir="rtl"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="absolute top-0 right-0 left-0 h-1.5 bg-gradient-to-r from-orange-600 via-orange-500 to-yellow-500"></div>
 
         {/* Header */}
-        <div className="p-6 border-b border-gray-100 dark:border-slate-700 flex justify-between items-center bg-gray-50/50 dark:bg-slate-950/20 shrink-0">
+        <div className="p-4 sm:p-6 border-b border-gray-100 dark:border-slate-700 flex justify-between items-center bg-gray-50/50 dark:bg-slate-950/20 shrink-0">
           <h2
             id="planning-mode-title"
-            className="text-xl font-black text-gray-800 dark:text-slate-100 flex items-center gap-3"
+            className="text-lg sm:text-xl font-black text-gray-800 dark:text-slate-100 flex items-center gap-2 sm:gap-3"
           >
-            <div className="bg-gradient-to-br from-orange-500 to-orange-600 p-2.5 rounded-2xl text-white shadow-lg shadow-orange-200 dark:shadow-none">
-              <CalendarDays size={24} />
+            <div className="bg-gradient-to-br from-orange-500 to-orange-600 p-2 sm:p-2.5 rounded-xl sm:rounded-2xl text-white shadow-lg shadow-orange-200 dark:shadow-none">
+              <CalendarDays size={22} />
             </div>
             <span>
               {selectedSemester ? `تخطيط ${selectedSemester}` : "بدء التخطيط "}
@@ -225,13 +233,13 @@ const PlanningModeModal: React.FC<PlanningModeModalProps> = ({
             type="button"
             aria-label="إغلاق وضع التخطيط"
             onClick={onClose}
-            className="p-2 text-gray-400 hover:bg-gray-100 dark:hover:bg-slate-800 rounded-full transition-colors"
+            className="min-h-11 min-w-11 flex items-center justify-center p-2 text-gray-400 hover:bg-gray-100 dark:hover:bg-slate-800 rounded-xl transition-colors"
           >
-            <X />
+            <X size={20} />
           </button>
         </div>
 
-        <div className="p-6 overflow-y-auto">
+        <div className="p-3 sm:p-6 overflow-y-auto custom-scrollbar flex-1">
           {currentSemesterIndex < 0 ? (
             <div className="space-y-6">
               <div className="p-4 bg-orange-50 dark:bg-orange-500/10 rounded-2xl border border-orange-100 dark:border-orange-500/30">

@@ -1,3 +1,9 @@
+export const KNOWN_DAYS: string[];
+export const DAY_NAMES_MAP: Record<string, string>;
+
+export function normalizeDayKey(value: unknown): string | null;
+export function dayKeyToName(value: unknown): string;
+
 export interface MeetingOption {
   days?: string[];
   day?: string;
@@ -6,12 +12,14 @@ export interface MeetingOption {
   section?: string;
   instructor?: string;
   room?: string;
+  blocks?: ScheduleBlock[];
 }
 
 export interface ScheduleBlock {
   days: string[];
   start: number;
   end: number;
+  rawTime?: string;
 }
 
 export interface CatalogSection {
@@ -95,7 +103,7 @@ export interface SolvedSchedule {
 }
 
 export function hasConflict(
-  schedule: Array<{ section: CatalogSection }>,
+  schedule: Array<{ section: CatalogSection } | CatalogSection>,
   newSection: CatalogSection,
 ): boolean;
 export function generateAllSchedules(

@@ -7,17 +7,32 @@ import {
   Hash,
   Layout,
   Edit3,
+  AlertTriangle,
+  RefreshCw,
 } from "lucide-react";
 import { BaseModal } from "./BaseModal";
+import { ErrorBoundary } from "./ErrorBoundary";
 import type { Course, ScheduleEntry } from "../data";
 import { cn } from "../utils";
 import { SEMESTERS } from "../constants";
 import {
+  fetchSyncStatus,
+  triggerManualSync,
+  formatArabicSyncTime,
+  SyncStatus,
+} from "../services/syncService";
+import {
   fetchCourses,
   fetchCoursesByCodes,
   searchCourses,
+  isOfflineCatalog,
+  clearCoursesCache,
 } from "../services/courseService";
-import { generateAllSchedules } from "../services/scheduleSolver";
+import {
+  generateAllSchedules,
+  normalizeDayKey,
+  dayKeyToName,
+} from "../services/scheduleSolver";
 import type { CatalogCourse } from "../services/scheduleSolver";
 import type { CatalogScheduleFilters } from "../services/scheduleSolver";
 
@@ -84,6 +99,7 @@ export const WeeklyScheduleModal: React.FC<WeeklyScheduleModalProps> = ({
   const [courseLoadError, setCourseLoadError] = useState<string | null>(null);
   const [searchError, setSearchError] = useState<string | null>(null);
   const [selectionError, setSelectionError] = useState<string | null>(null);
+  const [isOffline, setIsOffline] = useState(false);
   const [courseLoadAttempt, setCourseLoadAttempt] = useState(0);
   const [selectionLoadAttempt, setSelectionLoadAttempt] = useState(0);
   const [activeScheduleIndex, setActiveScheduleIndex] = useState(0);
@@ -96,6 +112,28 @@ export const WeeklyScheduleModal: React.FC<WeeklyScheduleModalProps> = ({
       timePreference: "",
       maxGap: null,
     });
+  const [syncInfo, setSyncInfo] = useState<SyncStatus | null>(null);
+  const [isSyncRefreshing, setIsSyncRefreshing] = useState(false);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    fetchSyncStatus().then(setSyncInfo).catch(() => {});
+  }, [isOpen]);
+
+  const handleManualSync = async () => {
+    setIsSyncRefreshing(true);
+    try {
+      await triggerManualSync();
+      const updated = await fetchSyncStatus();
+      setSyncInfo(updated);
+      clearCoursesCache();
+      setCourseLoadAttempt((attempt) => attempt + 1);
+    } catch (err) {
+      console.error("Manual sync error:", err);
+    } finally {
+      setIsSyncRefreshing(false);
+    }
+  };
 
   const coursesById = useMemo(
     () => new Map(courses.map((course) => [course.id, course])),
@@ -134,8 +172,11 @@ export const WeeklyScheduleModal: React.FC<WeeklyScheduleModalProps> = ({
       setIsCourseLoading(true);
       setCourseLoadError(null);
       try {
-        const loadedCourses = await fetchCourses();
+        const forceRefresh = courseLoadAttempt > 0;
+        if (forceRefresh) clearCoursesCache();
+        const loadedCourses = await fetchCourses(forceRefresh);
         if (cancelled) return;
+        setIsOffline(isOfflineCatalog());
         setAvailableCourses(loadedCourses);
         const coursesWithSections = new Set(
           loadedCourses
@@ -147,6 +188,7 @@ export const WeeklyScheduleModal: React.FC<WeeklyScheduleModalProps> = ({
         );
       } catch (error) {
         if (!cancelled) {
+          setIsOffline(isOfflineCatalog());
           setCourseLoadError(
             error instanceof Error ? error.message : "تعذر تحميل المساقات.",
           );
@@ -238,10 +280,17 @@ export const WeeklyScheduleModal: React.FC<WeeklyScheduleModalProps> = ({
       (code, index) => selectedCourses[index]?.id === code,
     );
   const generatedSchedules = useMemo(
-    () =>
-      hasGeneratedSchedules && selectionReady && selectedCourseCodes.length > 0
-        ? generateAllSchedules(selectedCourses, scheduleFilters)
-        : [],
+    () => {
+      if (!hasGeneratedSchedules || !selectionReady || selectedCourseCodes.length === 0) {
+        return [];
+      }
+      try {
+        return generateAllSchedules(selectedCourses, scheduleFilters);
+      } catch (err) {
+        console.error("Schedule solver error:", err);
+        return [];
+      }
+    },
     [
       hasGeneratedSchedules,
       selectionReady,
@@ -362,7 +411,7 @@ export const WeeklyScheduleModal: React.FC<WeeklyScheduleModalProps> = ({
     const block = selectedRealSection?.blocks?.[0];
     if (!selectedRealSection || !block) return null;
     const days = block.days
-      .map((dayKey) => DAY_NAME_BY_KEY.get(dayKey))
+      .map((dayKey) => DAY_NAME_BY_KEY.get(normalizeDayKey(dayKey) ?? dayKey))
       .filter((day): day is string => Boolean(day));
     return {
       startTime: formatScheduleTime(block.start),
@@ -415,7 +464,7 @@ export const WeeklyScheduleModal: React.FC<WeeklyScheduleModalProps> = ({
   };
 
   const timeToMinutes = (time: string | undefined): number | null => {
-    const match = /^([01]\d|2[0-3]):([0-5]\d)$/.exec(time ?? "");
+    const match = /^([0-1]?\d|2[0-3]):([0-5]\d)$/.exec(time ?? "");
     if (!match) return null;
     return Number(match[1]) * 60 + Number(match[2]);
   };
@@ -444,7 +493,8 @@ export const WeeklyScheduleModal: React.FC<WeeklyScheduleModalProps> = ({
       title="الجدول الدراسي الأسبوعي"
       maxWidth="max-w-6xl"
     >
-      <div className="flex flex-col h-full max-h-[calc(100dvh-7rem)] sm:max-h-[85vh]">
+      <ErrorBoundary>
+        <div className="flex flex-col h-full max-h-[calc(100dvh-7rem)] sm:max-h-[85vh]">
         {/* Header Controls */}
         <div className="flex flex-col md:flex-row gap-2 sm:gap-4 mb-3 sm:mb-6 items-center justify-between">
           <div className="flex bg-gray-100 dark:bg-slate-900 p-1 rounded-2xl w-full md:w-auto">
@@ -722,6 +772,35 @@ export const WeeklyScheduleModal: React.FC<WeeklyScheduleModalProps> = ({
               aria-label="اختيار المساقات"
               className="shrink-0 rounded-2xl border border-gray-100 dark:border-slate-800 bg-gray-50 dark:bg-slate-900/50 p-3"
             >
+              <div className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-xl bg-white dark:bg-slate-800 p-2.5 text-xs border border-gray-200 dark:border-slate-700 shadow-sm">
+                <div className="flex items-center gap-2 text-slate-700 dark:text-slate-300">
+                  <span className="flex h-2.5 w-2.5 rounded-full bg-emerald-500 animate-pulse" />
+                  <span className="font-bold">آخر تحديث للشعب من الجامعة:</span>
+                  <span className="text-emerald-700 dark:text-emerald-400 font-bold">
+                    {syncInfo?.lastSyncTime
+                      ? formatArabicSyncTime(syncInfo.lastSyncTime)
+                      : "اليوم"}
+                  </span>
+                  {syncInfo?.totalSections ? (
+                    <span className="text-slate-500 dark:text-slate-400 text-[11px] hidden sm:inline">
+                      ({syncInfo.totalCourses} مساق • {syncInfo.totalSections} شعبة)
+                    </span>
+                  ) : null}
+                </div>
+                <button
+                  type="button"
+                  onClick={handleManualSync}
+                  disabled={isSyncRefreshing}
+                  className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-blue-50 dark:bg-blue-950/40 text-[11px] font-bold text-blue-600 dark:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-900/50 transition-colors disabled:opacity-50"
+                >
+                  <RefreshCw
+                    size={12}
+                    className={isSyncRefreshing ? "animate-spin" : ""}
+                  />
+                  <span>{isSyncRefreshing ? "جاري التحديث..." : "تحديث فوري للشعب"}</span>
+                </button>
+              </div>
+
               <h3 className="mb-2 text-sm font-black text-gray-700 dark:text-slate-200">
                 ابحث عن مساق لإضافته
               </h3>
@@ -753,6 +832,29 @@ export const WeeklyScheduleModal: React.FC<WeeklyScheduleModalProps> = ({
                   جارٍ تحميل المساقات...
                 </p>
               )}
+              {isOffline && (
+                <div
+                  role="status"
+                  className="mt-2 flex items-center justify-between rounded-xl border border-amber-300 bg-amber-50 p-2.5 text-xs text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200"
+                >
+                  <div className="flex items-center gap-2">
+                    <AlertTriangle className="h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />
+                    <span className="font-bold">
+                      تعذر الاتصال بخادم المساقات. يتم استخدام البيانات المخزنة محلياً في وضع عدم الاتصال.
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      clearCoursesCache();
+                      setCourseLoadAttempt((attempt) => attempt + 1);
+                    }}
+                    className="font-black text-amber-800 underline hover:text-amber-950 dark:text-amber-200"
+                  >
+                    إعادة المحاولة
+                  </button>
+                </div>
+              )}
               {courseLoadError && (
                 <div
                   role="alert"
@@ -763,9 +865,10 @@ export const WeeklyScheduleModal: React.FC<WeeklyScheduleModalProps> = ({
                   </p>
                   <button
                     type="button"
-                    onClick={() =>
-                      setCourseLoadAttempt((attempt) => attempt + 1)
-                    }
+                    onClick={() => {
+                      clearCoursesCache();
+                      setCourseLoadAttempt((attempt) => attempt + 1);
+                    }}
                     className="min-h-10 rounded-lg px-3 font-black text-blue-700 underline dark:text-blue-300"
                   >
                     إعادة المحاولة
@@ -1071,7 +1174,11 @@ export const WeeklyScheduleModal: React.FC<WeeklyScheduleModalProps> = ({
                               <option key={section.sec} value={section.sec}>
                                 {section.sec} ·{" "}
                                 {section.blocks
-                                  .map((block) => block.days.join("، "))
+                                  .map((block) =>
+                                    block.days
+                                      .map((d) => DAY_NAME_BY_KEY.get(normalizeDayKey(d) ?? d) ?? d)
+                                      .join("، "),
+                                  )
                                   .join(" / ")}
                               </option>
                             ))}
@@ -1107,19 +1214,11 @@ export const WeeklyScheduleModal: React.FC<WeeklyScheduleModalProps> = ({
 
             <nav
               aria-label="التنقل بين الجداول المقترحة"
-              className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-gray-100 dark:border-slate-800 px-3 py-2"
+              className="flex flex-col sm:flex-row items-center justify-between gap-3 rounded-2xl border border-gray-100 dark:border-slate-800 p-3"
             >
-              <button
-                type="button"
-                disabled={activeScheduleIndex <= 0}
-                onClick={() => setActiveScheduleIndex((index) => index - 1)}
-                className="min-h-10 rounded-xl border border-gray-200 dark:border-slate-700 px-4 text-sm font-black disabled:opacity-40"
-              >
-                السابق
-              </button>
               <p
                 aria-live="polite"
-                className="text-sm font-black text-gray-700 dark:text-slate-200"
+                className="text-xs sm:text-sm font-black text-gray-700 dark:text-slate-200 text-center sm:text-right"
               >
                 {generatedSchedules.length
                   ? `جدول ${activeScheduleIndex + 1} من أصل ${generatedSchedules.length} خالي من التعارض`
@@ -1131,29 +1230,39 @@ export const WeeklyScheduleModal: React.FC<WeeklyScheduleModalProps> = ({
                         : "حدّد المواد والفلاتر ثم ولّد الجداول المقترحة"
                       : "اختر مادة من الكتالوج لعرض الجداول المقترحة"}
               </p>
-              <button
-                type="button"
-                disabled={
-                  selectedCourseCodes.length === 0 ||
-                  !selectionReady ||
-                  isSelectionLoading
-                }
-                onClick={() => {
-                  setActiveScheduleIndex(0);
-                  setHasGeneratedSchedules(true);
-                }}
-                className="min-h-10 rounded-xl bg-blue-600 px-4 text-sm font-black text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-40"
-              >
-                توليد الجداول
-              </button>
-              <button
-                type="button"
-                disabled={activeScheduleIndex >= generatedSchedules.length - 1}
-                onClick={() => setActiveScheduleIndex((index) => index + 1)}
-                className="min-h-10 rounded-xl border border-gray-200 dark:border-slate-700 px-4 text-sm font-black disabled:opacity-40"
-              >
-                التالي
-              </button>
+              <div className="flex flex-wrap items-center justify-center gap-2 w-full sm:w-auto">
+                <button
+                  type="button"
+                  disabled={activeScheduleIndex <= 0}
+                  onClick={() => setActiveScheduleIndex((index) => index - 1)}
+                  className="min-h-11 flex-1 sm:flex-none rounded-xl border border-gray-200 dark:border-slate-700 px-4 text-xs sm:text-sm font-black disabled:opacity-40 cursor-pointer"
+                >
+                  السابق
+                </button>
+                <button
+                  type="button"
+                  disabled={
+                    selectedCourseCodes.length === 0 ||
+                    !selectionReady ||
+                    isSelectionLoading
+                  }
+                  onClick={() => {
+                    setActiveScheduleIndex(0);
+                    setHasGeneratedSchedules(true);
+                  }}
+                  className="min-h-11 flex-1 sm:flex-none rounded-xl bg-blue-600 px-4 text-xs sm:text-sm font-black text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-40 cursor-pointer"
+                >
+                  توليد الجداول
+                </button>
+                <button
+                  type="button"
+                  disabled={activeScheduleIndex >= generatedSchedules.length - 1}
+                  onClick={() => setActiveScheduleIndex((index) => index + 1)}
+                  className="min-h-11 flex-1 sm:flex-none rounded-xl border border-gray-200 dark:border-slate-700 px-4 text-xs sm:text-sm font-black disabled:opacity-40 cursor-pointer"
+                >
+                  التالي
+                </button>
+              </div>
             </nav>
 
             <section
@@ -1163,7 +1272,7 @@ export const WeeklyScheduleModal: React.FC<WeeklyScheduleModalProps> = ({
               <div className="overflow-auto custom-scrollbar">
                 <div className="min-w-[900px]">
                   <div className="grid grid-cols-[3.5rem_repeat(6,minmax(0,1fr))] border-b border-gray-200 dark:border-slate-800 bg-white dark:bg-slate-900">
-                    <div aria-hidden="true" />
+                    <div aria-hidden="true" className="sticky right-0 z-10 bg-white dark:bg-slate-900 border-l border-gray-100 dark:border-slate-800" />
                     {DAYS.map((day) => (
                       <div
                         key={day}
@@ -1174,7 +1283,7 @@ export const WeeklyScheduleModal: React.FC<WeeklyScheduleModalProps> = ({
                     ))}
                   </div>
                   <div className="grid grid-cols-[3.5rem_repeat(6,minmax(0,1fr))]">
-                    <div>
+                    <div className="sticky right-0 z-10 bg-white dark:bg-slate-900 border-l border-gray-100 dark:border-slate-800">
                       {HOURS.map((hour) => (
                         <div
                           key={hour}
@@ -1201,7 +1310,7 @@ export const WeeklyScheduleModal: React.FC<WeeklyScheduleModalProps> = ({
                           item.section.blocks
                             .filter(
                               (block) =>
-                                block.days.includes(dayKey) &&
+                                block.days.some((d) => (normalizeDayKey(d) ?? d) === dayKey) &&
                                 block.end > 8 &&
                                 block.start < 16,
                             )
@@ -1258,6 +1367,7 @@ export const WeeklyScheduleModal: React.FC<WeeklyScheduleModalProps> = ({
           <p>يمكنك التبديل بين الأقسام من الأعلى</p>
         </div>
       </div>
-    </BaseModal>
-  );
+    </ErrorBoundary>
+  </BaseModal>
+);
 };
