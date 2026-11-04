@@ -6,6 +6,8 @@ dist-ssr/
 *.tmp
 *.tmp.*
 data/
+!src/data/
+!src/data/ptukAcademicCalendar.ts
 
 # Logs
 *.log
