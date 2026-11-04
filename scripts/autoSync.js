@@ -1,8 +1,8 @@
 import "dotenv/config";
 import { pathToFileURL } from "node:url";
 import { createClient } from "@supabase/supabase-js";
-import { authenticatePTUK } from "../src/services/authService.js";
-import { scrapePTUKSchedules } from "../src/services/ptukScraper.js";
+import { authenticatePTUK } from "../server/services/scrapers/authService.js";
+import { scrapePTUKSchedules } from "../server/services/scrapers/ptukScraper.js";
 
 const BATCH_SIZE = 500;
 const MAX_RETRIES = 3;

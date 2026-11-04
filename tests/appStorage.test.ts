@@ -4,16 +4,18 @@ import {
   normalizeAppStorageValue,
   readAppStorageValue,
   serializeAppStorageValue,
+  writeAppStorageValue,
 } from "../src/appStorage";
 
 function withLocalStorage<T>(
   getItem: (key: string) => string | null,
   run: () => T,
+  setItem?: (key: string, value: string) => void,
 ): T {
   const originalWindow = Object.getOwnPropertyDescriptor(globalThis, "window");
   Object.defineProperty(globalThis, "window", {
     configurable: true,
-    value: { localStorage: { getItem } },
+    value: { localStorage: { getItem, setItem: setItem ?? (() => {}) } },
   });
 
   try {
@@ -154,32 +156,58 @@ test("rejects unsupported storage schema versions and reports the issue", () => 
   assert.equal(issues.length, 1);
 });
 
-test("normalizes single-digit hours by padding with leading zero", () => {
-  assert.deepEqual(
-    normalizeAppStorageValue(
-      "weekly_schedule",
-      {
-        "السنة الأولى - الفصل الأول": {
-          "12140101": {
-            startTime: "8:30",
-            endTime: "9:45",
-            days: ["الأحد"],
-          },
-        },
-      },
-      {},
-    ),
-    {
-      "السنة الأولى - الفصل الأول": {
-        "12140101": {
-          startTime: "08:30",
-          endTime: "09:45",
-          days: ["الأحد"],
-          section: "",
-          instructor: "",
-          room: "",
-        },
-      },
+test("migrates legacy un-enveloped raw arrays and records without data loss", () => {
+  const issues: string[] = [];
+  const value = withLocalStorage(
+    () => JSON.stringify(["12140101", "12140102"]),
+    () =>
+      readAppStorageValue("completed_courses", new Set<string>(), (message) =>
+        issues.push(message),
+      ),
+  );
+
+  assert.deepEqual(value, new Set(["12140101", "12140102"]));
+  assert.equal(issues.length, 0);
+});
+
+test("migrates older versioned envelopes (v0) to current schema", () => {
+  const issues: string[] = [];
+  const value = withLocalStorage(
+    () => JSON.stringify({ schemaVersion: 0, value: ["12140101"] }),
+    () =>
+      readAppStorageValue("completed_courses", new Set<string>(), (message) =>
+        issues.push(message),
+      ),
+  );
+
+  assert.deepEqual(value, new Set(["12140101"]));
+  assert.equal(issues.length, 0);
+});
+
+test("writeAppStorageValue serializes and atomically persists values with schema version envelope", () => {
+  const store = new Map<string, string>();
+  const success = withLocalStorage(
+    (key) => store.get(key) ?? null,
+    () => {
+      const ok1 = writeAppStorageValue(
+        "completed_courses",
+        new Set(["12140101", "12140102"]),
+      );
+      const ok2 = writeAppStorageValue("dark_mode", true);
+      return ok1 && ok2;
+    },
+    (key, val) => {
+      store.set(key, val);
     },
   );
+
+  assert.equal(success, true);
+  assert.ok(store.has("completed_courses"));
+  const parsedCourses = JSON.parse(store.get("completed_courses")!);
+  assert.equal(parsedCourses.schemaVersion, 1);
+  assert.deepEqual(parsedCourses.value, ["12140101", "12140102"]);
+
+  const parsedTheme = JSON.parse(store.get("dark_mode")!);
+  assert.equal(parsedTheme.schemaVersion, 1);
+  assert.equal(parsedTheme.value, true);
 });

@@ -1,5 +1,6 @@
 import express from "express";
 import { getMajors, getMajorById, upsertMajor } from "../db.js";
+import { requireAdminAuth } from "../middleware/security.js";
 
 const router = express.Router();
 
@@ -12,7 +13,7 @@ router.get("/", (req, res) => {
     const majors = getMajors();
     return res.json(majors);
   } catch (err) {
-    console.error("Majors list error:", err);
+    console.error("Majors list error:", err.message || err);
     return res.status(500).json({ error: "فشل في جلب قائمة التخصصات." });
   }
 });
@@ -24,6 +25,12 @@ router.get("/", (req, res) => {
 router.get("/:majorId", (req, res) => {
   try {
     const { majorId } = req.params;
+
+    // ─── Input Validation ───────────────────────────────────────────
+    if (!majorId || typeof majorId !== "string" || majorId.length > 50) {
+      return res.status(400).json({ error: "معرف التخصص غير صالح." });
+    }
+
     const major = getMajorById(majorId);
 
     if (!major) {
@@ -32,7 +39,7 @@ router.get("/:majorId", (req, res) => {
 
     return res.json(major);
   } catch (err) {
-    console.error("Major by id error:", err);
+    console.error("Major by id error:", err.message || err);
     return res.status(500).json({ error: "فشل في جلب تفاصيل التخصص." });
   }
 });
@@ -40,19 +47,32 @@ router.get("/:majorId", (req, res) => {
 /**
  * POST /api/majors
  * Add or update a major and its curriculum.
+ * Protected: Requires admin authorization.
  */
-router.post("/", (req, res) => {
+router.post("/", requireAdminAuth, (req, res) => {
   try {
     const majorData = req.body;
-    if (!majorData || !majorData.id || !majorData.name) {
-      return res.status(400).json({ error: "البيانات غير مكتملة: مطلوب id و name." });
+
+    // ─── Input Validation ───────────────────────────────────────────
+    if (
+      !majorData ||
+      typeof majorData.id !== "string" ||
+      typeof majorData.name !== "string"
+    ) {
+      return res
+        .status(400)
+        .json({ error: "البيانات غير مكتملة: مطلوب id و name كنصوص." });
+    }
+
+    if (majorData.id.length > 50 || majorData.name.length > 200) {
+      return res.status(400).json({ error: "البيانات تتجاوز الطول المسموح." });
     }
 
     const updated = upsertMajor(majorData);
     return res.json({ success: true, major: updated });
   } catch (err) {
-    console.error("Upsert major error:", err);
-    return res.status(500).json({ error: "فشل في حفظ التخصص.", details: err.message });
+    console.error("Upsert major error:", err.message || err);
+    return res.status(500).json({ error: "فشل في حفظ التخصص." });
   }
 });
 

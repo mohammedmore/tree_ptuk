@@ -1,0 +1,402 @@
+@import "tailwindcss";
+@import "./tokens.css";
+
+@theme inline {
+  --color-*: initial;
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-sunken: var(--sunken);
+  --color-text: var(--text);
+  --color-text-2: var(--text-2);
+  --color-text-3: var(--text-3);
+  --color-line: var(--line);
+  --color-control: var(--line-control);
+  --color-accent: var(--accent);
+  --color-accent-soft: var(--accent-soft);
+  --color-warn: var(--warn);
+  --color-danger: var(--danger);
+  --shadow-*: initial;
+  --shadow-menu: var(--shadow-pop);
+}
+
+:root {
+  /* Compatibility bridge to tokens */
+  --bg-canvas: var(--bg);
+  --bg-app: var(--bg);
+  --bg-canvas-pattern: none;
+  --bg-pattern-size: 0;
+  --surface-card: var(--surface);
+  --surface-raised: var(--surface);
+  --surface-glass: var(--surface);
+  --surface-glass-strong: var(--surface);
+  --surface-glass-hover: var(--sunken);
+  --surface-card-hover: var(--sunken);
+  --surface-hover: var(--sunken);
+  --surface-backdrop-blur: none;
+  --border-card: 1px solid var(--line);
+  --border-card-hover: 1px solid var(--accent);
+  --border-glass: var(--line);
+  --border-subtle: var(--line);
+  --border-strong: var(--line-control);
+  --border-accent: var(--accent);
+  --text-primary: var(--text);
+  --text-main: var(--text);
+  --text-muted: var(--text-2);
+  --text-subtle: var(--text-3);
+  --color-primary: var(--accent);
+  --color-secondary: var(--accent);
+  --color-accent: var(--accent);
+  --color-accent-border: var(--accent);
+  --accent-primary: var(--accent);
+  --accent-secondary: var(--accent-hover);
+  --shadow-elevation: none;
+  --shadow-card: none;
+  --shadow-control: none;
+  --glow-primary: none;
+  --glow-accent: none;
+  --glow-ring: transparent;
+  --radius-panel: var(--r-surface);
+  --radius-card: var(--r-control);
+  --radius-control: var(--r-control);
+  --status-complete-bg: var(--accent-soft);
+  --status-complete-text: var(--accent);
+  --status-available-bg: var(--surface);
+  --status-available-text: var(--text);
+  --status-planned-bg: var(--surface);
+  --status-planned-text: var(--text-2);
+  --status-locked-bg: var(--bg);
+  --status-locked-text: var(--text-3);
+  --status-warning-bg: var(--warn-soft);
+  --status-warning-text: var(--warn);
+  --status-completed: var(--accent);
+  --status-completed-text: var(--accent);
+  --status-available: var(--line-control);
+  --status-planned: var(--accent);
+  --status-prerequisite: var(--accent);
+  --status-dependent: var(--accent);
+}
+
+html {
+  font-variant-numeric: tabular-nums;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+body {
+  margin: 0;
+  width: 100%;
+  min-height: 100%;
+  background-color: var(--bg);
+  color: var(--text);
+  font-family: var(--font-ui);
+  line-height: var(--lh-body);
+  font-size: var(--fs-md);
+  overscroll-behavior: none;
+}
+
+#root {
+  width: 100%;
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Typography Headings */
+h1,
+.font-title {
+  font-family: var(--font-title);
+  font-weight: 600;
+  line-height: var(--lh-tight);
+}
+
+h2,
+h3,
+h4,
+h5,
+h6 {
+  font-family: var(--font-ui);
+  font-weight: 600;
+  line-height: var(--lh-tight);
+}
+
+/* Tabular Numerics across all tables, numbers, hours, and grades */
+table,
+[role="table"],
+time,
+.tabular-nums,
+input[type="number"] {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum";
+}
+
+/* Focus outline */
+:is(button, a, input, select, textarea, [tabindex]):focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* Item 107: Prevent iOS Safari Auto-Zoom on form inputs (< 768px) */
+@media screen and (max-width: 768px) {
+  input,
+  select,
+  textarea {
+    font-size: 16px !important;
+  }
+}
+
+/* Clean Scrollbars */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--line-control) transparent;
+}
+
+::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  border-radius: 4px;
+  background: var(--line-control);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--text-3);
+}
+
+/* Transitions: Basic, purposeful, respecting reduced motion */
+button,
+a,
+input,
+select {
+  transition:
+    background-color var(--dur-2) var(--ease),
+    border-color var(--dur-2) var(--ease),
+    color var(--dur-2) var(--ease);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* React Flow styling overrides to adhere to tokens */
+.react-flow__background {
+  background: var(--bg) !important;
+}
+
+.react-flow__pane {
+  background: var(--bg) !important;
+}
+
+.react-flow__edge-path {
+  stroke: var(--line) !important;
+  stroke-width: 1px !important;
+}
+
+.react-flow__edge.selected .react-flow__edge-path,
+.react-flow__edge:hover .react-flow__edge-path {
+  stroke: var(--accent) !important;
+  stroke-width: 2px !important;
+}
+
+.react-flow__controls {
+  box-shadow: none !important;
+  border: 1px solid var(--line-control) !important;
+  border-radius: var(--r-control) !important;
+  background: var(--surface) !important;
+  overflow: hidden;
+}
+
+.react-flow__controls-button {
+  border-bottom: 1px solid var(--line) !important;
+  background: transparent !important;
+  color: var(--text) !important;
+  border-radius: 0 !important;
+}
+
+.react-flow__controls-button:hover {
+  background: var(--sunken) !important;
+}
+
+.react-flow__attribution {
+  display: none !important;
+}
+
+/* Print Stylesheet for A4 Academic Transcript */
+@media print {
+  @page {
+    size: A4 portrait;
+    margin: 10mm 12mm;
+  }
+
+  html,
+  body {
+    background: #ffffff !important;
+    color: #000000 !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  header,
+  nav,
+  footer,
+  button,
+  input,
+  select,
+  [role="dialog"],
+  [role="status"],
+  .no-print,
+  .print\:hidden,
+  .print-hidden {
+    display: none !important;
+  }
+
+  .print\:block {
+    display: block !important;
+  }
+
+  .page-break-inside-avoid {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  table {
+    page-break-inside: auto;
+  }
+
+  tr {
+    page-break-inside: avoid;
+    page-break-after: auto;
+  }
+}
+
+/* Point 45: Accessibility Preferences (Reduced Motion & High Contrast) */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+@media (prefers-contrast: high) {
+  :root {
+    --line: #000000 !important;
+    --line-control: #000000 !important;
+    --text: #000000 !important;
+    --border-card: 2px solid #000000 !important;
+  }
+  .dark {
+    --line: #ffffff !important;
+    --line-control: #ffffff !important;
+    --text: #ffffff !important;
+    --border-card: 2px solid #ffffff !important;
+  }
+}
+
+/* Item 135: Content-visibility optimization for high-performance off-screen rendering */
+.cv-auto {
+  content-visibility: auto;
+  contain-intrinsic-size: 0 56px;
+}
+
+/* Item 115: Privacy Screen Mask Mode (حماية الشاشة من التلصص وتمويه البيانات الحساسة) */
+span.privacy-sensitive {
+  display: inline-block;
+  vertical-align: baseline;
+}
+
+.privacy-mask-active .privacy-sensitive,
+[data-privacy-mask="true"] .privacy-sensitive,
+body.privacy-mask-active .privacy-sensitive,
+html[data-privacy-mask="true"] .privacy-sensitive {
+  filter: blur(8px) !important;
+  -webkit-filter: blur(8px) !important;
+  user-select: none !important;
+  -webkit-user-select: none !important;
+  pointer-events: none !important;
+  transition: filter 0.2s ease-in-out;
+}
+
+@media print {
+  @page {
+    size: A4 portrait;
+    margin: 10mm 10mm 12mm 10mm;
+  }
+
+  html,
+  body {
+    background: #ffffff !important;
+    color: #000000 !important;
+    font-size: 10pt !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  /* Unmask privacy sensitive data during official physical printing */
+  .privacy-mask-active .privacy-sensitive,
+  [data-privacy-mask="true"] .privacy-sensitive,
+  body.privacy-mask-active .privacy-sensitive,
+  html[data-privacy-mask="true"] .privacy-sensitive {
+    filter: none !important;
+    -webkit-filter: none !important;
+    user-select: auto !important;
+    -webkit-user-select: auto !important;
+    pointer-events: auto !important;
+  }
+
+  /* Hide screen chrome, headers, navigation bars, buttons, and popups */
+  header:not(#academic-audit-print-document *),
+  nav,
+  aside,
+  footer,
+  button,
+  input,
+  select,
+  textarea,
+  .no-print,
+  #app-header,
+  #app-navigation,
+  .modal-backdrop,
+  [role="dialog"] {
+    display: none !important;
+  }
+
+  /* When printing the academic audit document, hide screen page wrapper */
+  body:has(#academic-audit-print-document) main {
+    display: none !important;
+  }
+
+  /* Ensure the academic audit document is cleanly rendered */
+  #academic-audit-print-document {
+    display: block !important;
+    position: static !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    box-shadow: none !important;
+  }
+
+  .page-break-inside-avoid,
+  tr,
+  table,
+  .print-card {
+    break-inside: avoid !important;
+    page-break-inside: avoid !important;
+  }
+}

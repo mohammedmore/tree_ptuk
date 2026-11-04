@@ -1,0 +1,18 @@
+{
+  "name": "بوابة التخطيط الأكاديمي | جامعة فلسطين التقنية - خضوري",
+  "short_name": "مخطط خضوري",
+  "description": "نظام تخطيط المساقات وحساب المعدل التراكمي وجدولة المواد لطلبة جامعة فلسطين التقنية - خضوري",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#047857",
+  "dir": "rtl",
+  "lang": "ar",
+  "icons": [
+    {
+      "src": "/favicon.ico",
+      "sizes": "64x64 32x32 24x24 16x16",
+      "type": "image/x-icon"
+    }
+  ]
+}

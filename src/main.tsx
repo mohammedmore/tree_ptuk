@@ -4,7 +4,10 @@ import { Analytics } from "@vercel/analytics/react";
 import { SpeedInsights } from "@vercel/speed-insights/react";
 import App from "./App";
 import { ErrorBoundary } from "./components/ErrorBoundary";
-import "./index.css";
+import { initSessionGuard } from "./utils/sessionGuard";
+import "./styles/index.css";
+
+initSessionGuard();
 
 const rootElement = document.getElementById("root");
 if (!rootElement) {

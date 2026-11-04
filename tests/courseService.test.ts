@@ -21,7 +21,9 @@ test("searchCourses searches by code and normalized Arabic text variants", async
   // Search by code prefix
   const byCode = await searchCourses("12140");
   assert.ok(byCode.length > 0);
-  assert.ok(byCode.every((c) => c.id.includes("12140") || c.name.includes("12140")));
+  assert.ok(
+    byCode.every((c) => c.id.includes("12140") || c.name.includes("12140")),
+  );
 
   // Search by Arabic name with different alef/hamza forms
   const withHamza = await searchCourses("إنجليزي");

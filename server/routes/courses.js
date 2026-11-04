@@ -13,24 +13,63 @@ const router = express.Router();
  */
 router.get("/", async (req, res) => {
   try {
-    const { codes, search, limit, offset } = req.query;
+    const { codes, search, limit, offset, compact, fields } = req.query;
+
+    // ─── Input Validation ───────────────────────────────────────────
+    // Limit search query length to prevent abuse
+    if (search && typeof search === "string" && search.length > 200) {
+      return res.status(400).json({ error: "استعلام بحث طويل جداً." });
+    }
 
     const codeList = codes
       ? String(codes)
           .split(",")
           .map((c) => c.trim())
           .filter(Boolean)
+          .slice(0, 50) // Cap max codes per request
       : undefined;
 
-    const parsedLimit = limit ? Math.min(1000, Math.max(1, parseInt(String(limit), 10))) : 500;
+    const parsedLimit = limit
+      ? Math.min(1000, Math.max(1, parseInt(String(limit), 10)))
+      : 500;
     const parsedOffset = offset ? Math.max(0, parseInt(String(offset), 10)) : 0;
+    const fieldList = fields
+      ? String(fields)
+          .split(",")
+          .map((f) => f.trim())
+          .filter(Boolean)
+      : undefined;
 
-    const data = await getCourses({
+    let data = await getCourses({
       codes: codeList,
       search: search ? String(search) : undefined,
       limit: parsedLimit,
       offset: parsedOffset,
+      fields: fieldList,
     });
+
+    // Point 28: Compact payload minification for low-bandwidth mobile clients
+    if (compact === "true" || compact === "1") {
+      data = data.map((c) => ({
+        code: c.code,
+        name: c.name,
+        type: c.type,
+        secCount: Array.isArray(c.sections) ? c.sections.length : 0,
+        sections: (c.sections || []).map((s) => ({
+          sec: s.sec,
+          ins: s.instructor,
+          rm: s.room,
+          bld: s.building,
+          st: s.status,
+          b: (s.blocks || []).map((b) => ({
+            d: b.days,
+            s: b.start,
+            e: b.end,
+            t: b.rawTime,
+          })),
+        })),
+      }));
+    }
 
     const syncStatus = getSyncStatus();
 
@@ -42,7 +81,6 @@ router.get("/", async (req, res) => {
     console.error("Courses route error:", err);
     return res.status(500).json({
       error: "فشل في استعلام المواد من قاعدة البيانات.",
-      details: err.message,
     });
   }
 });
@@ -52,7 +90,14 @@ router.get("/", async (req, res) => {
  */
 router.get("/:code", async (req, res) => {
   try {
-    const course = await getCourseByCode(req.params.code);
+    const code = req.params.code;
+
+    // ─── Input Validation ───────────────────────────────────────────
+    if (!code || typeof code !== "string" || code.length > 20) {
+      return res.status(400).json({ error: "رمز المساق غير صالح." });
+    }
+
+    const course = await getCourseByCode(code);
     if (!course) {
       return res.status(404).json({ error: "المساق غير موجود." });
     }

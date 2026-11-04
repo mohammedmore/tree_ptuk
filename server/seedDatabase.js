@@ -1,7 +1,14 @@
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { upsertCatalogCourses, upsertMajor, getSyncStatus, updateSyncStatus } from "./db.js";
+import {
+  upsertCatalogCourses,
+  upsertMajor,
+  getSyncStatus,
+  updateSyncStatus,
+  saveAcademicCalendar,
+} from "./db.js";
+import { AUTHENTIC_FALLBACK_CALENDAR } from "./services/scrapers/academicCalendarScraper.js";
 import { INITIAL_MAJORS } from "./majorsData.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -11,13 +18,16 @@ function extractCoursesFromDataTs() {
   const dataTsPath = join(__dirname, "..", "src", "data.ts");
   const content = readFileSync(dataTsPath, "utf8");
 
-  const coursesMatch = content.match(/export const courses:\s*Course\[\]\s*=\s*\[([\s\S]*?)\];/);
+  const coursesMatch = content.match(
+    /export const courses:\s*Course\[\]\s*=\s*\[([\s\S]*?)\];/,
+  );
   if (!coursesMatch) {
     throw new Error("Could not find 'export const courses' in src/data.ts");
   }
 
   const rawCoursesBlock = coursesMatch[1];
-  const courseRegex = /\{[\s\S]*?id:\s*"([^"]+)"[\s\S]*?name:\s*"([^"]+)"[\s\S]*?prerequisites:\s*(\[[^\]]*\])[\s\S]*?credits:\s*(\d+)[\s\S]*?category:\s*"([^"]+)"([\s\S]*?)\}/g;
+  const courseRegex =
+    /\{[\s\S]*?id:\s*"([^"]+)"[\s\S]*?name:\s*"([^"]+)"[\s\S]*?prerequisites:\s*(\[[^\]]*\])[\s\S]*?credits:\s*(\d+)[\s\S]*?category:\s*"([^"]+)"([\s\S]*?)\}/g;
 
   const courses = [];
   let match;
@@ -29,7 +39,9 @@ function extractCoursesFromDataTs() {
     try {
       prerequisites = JSON.parse(prereqsRaw.replace(/'/g, '"'));
     } catch {
-      prerequisites = (prereqsRaw.match(/"([^"]+)"/g) || []).map((s) => s.replace(/"/g, ""));
+      prerequisites = (prereqsRaw.match(/"([^"]+)"/g) || []).map((s) =>
+        s.replace(/"/g, ""),
+      );
     }
 
     const coPrereqsMatch = rest.match(/coPrerequisites:\s*(\[[^\]]*\])/);
@@ -38,7 +50,9 @@ function extractCoursesFromDataTs() {
       try {
         coPrerequisites = JSON.parse(coPrereqsMatch[1].replace(/'/g, '"'));
       } catch {
-        coPrerequisites = (coPrereqsMatch[1].match(/"([^"]+)"/g) || []).map((s) => s.replace(/"/g, ""));
+        coPrerequisites = (coPrereqsMatch[1].match(/"([^"]+)"/g) || []).map(
+          (s) => s.replace(/"/g, ""),
+        );
       }
     }
 
@@ -70,7 +84,9 @@ function extractConstants() {
   const content = readFileSync(constPath, "utf8");
 
   const commonNames = {};
-  const commonNamesMatch = content.match(/export const courseCommonNames:\s*Record<string, string>\s*=\s*\{([\s\S]*?)\};/);
+  const commonNamesMatch = content.match(
+    /export const courseCommonNames:\s*Record<string, string>\s*=\s*\{([\s\S]*?)\};/,
+  );
   if (commonNamesMatch) {
     const lines = commonNamesMatch[1].split("\n");
     for (const line of lines) {
@@ -80,7 +96,9 @@ function extractConstants() {
   }
 
   const recommendedSemesters = {};
-  const recMatch = content.match(/export const courseRecommendedSemesters:\s*Record<string, string>\s*=\s*\{([\s\S]*?)\};/);
+  const recMatch = content.match(
+    /export const courseRecommendedSemesters:\s*Record<string, string>\s*=\s*\{([\s\S]*?)\};/,
+  );
   if (recMatch) {
     const lines = recMatch[1].split("\n");
     for (const line of lines) {
@@ -95,7 +113,13 @@ function extractConstants() {
 // Generate realistic lecture and lab schedule sections
 function generateStandardSections(course) {
   const isLab = course.name.includes("مختبر") || course.name.includes("عملي");
-  const instructors = ["د. محمد إبراهيم", "د. أحمد عمر", "أ. فاطمة سعيد", "د. سامر خليل", "أ. ليلى حسن"];
+  const instructors = [
+    "د. محمد إبراهيم",
+    "د. أحمد عمر",
+    "أ. فاطمة سعيد",
+    "د. سامر خليل",
+    "أ. ليلى حسن",
+  ];
   const rooms = ["B201", "B204", "E105", "C302", "Lab-3", "Lab-4", "D101"];
 
   const instIndex = Math.abs(hashCode(course.id)) % instructors.length;
@@ -202,8 +226,9 @@ export async function seedDatabase() {
   const enrichedCseCourses = cseCourses.map((c) => ({
     ...c,
     commonName: commonNames[c.id] || null,
-    recommendedSemester: recommendedSemesters[c.id] || "السنة الأولى - الفصل الأول",
-    sections: generateStandardSections(c),
+    recommendedSemester:
+      recommendedSemesters[c.id] || "السنة الأولى - الفصل الأول",
+    sections: [], // Real sections must only be synced from live PTUK schedule scraper
   }));
 
   // Upsert all CSE courses into catalog
@@ -216,118 +241,6 @@ export async function seedDatabase() {
     })),
   );
 
-  // Seed CSE major
-  upsertMajor({
-    ...INITIAL_MAJORS.find((m) => m.id === "cse"),
-    courses: enrichedCseCourses,
-  });
-
-  // Seed SWE major (Software Engineering)
-  const sweCourses = enrichedCseCourses
-    .filter((c) => !c.name.includes("مجسات") && !c.name.includes("سيركت 2"))
-    .concat([
-      {
-        id: "12140430",
-        code: "12140430",
-        name: "هندسة المتطلبات والمواصفات",
-        credits: 3,
-        category: "متطلب تخصص إجباري",
-        prerequisites: ["12140418"],
-        recommendedSemester: "السنة الثالثة - الفصل الأول",
-        sections: generateStandardSections({ id: "12140430", name: "هندسة المتطلبات والمواصفات" }),
-      },
-      {
-        id: "12140431",
-        code: "12140431",
-        name: "معمارية البرمجيات وأنماطها",
-        credits: 3,
-        category: "متطلب تخصص إجباري",
-        prerequisites: ["12140418"],
-        recommendedSemester: "السنة الثالثة - الفصل الثاني",
-        sections: generateStandardSections({ id: "12140431", name: "معمارية البرمجيات وأنماطها" }),
-      },
-      {
-        id: "12140432",
-        code: "12140432",
-        name: "فحص البرمجيات وضمان الجودة (QA)",
-        credits: 3,
-        category: "متطلب تخصص إجباري",
-        prerequisites: ["12140418"],
-        recommendedSemester: "السنة الرابعة - الفصل الأول",
-        sections: generateStandardSections({ id: "12140432", name: "فحص البرمجيات وضمان الجودة" }),
-      },
-      {
-        id: "12140433",
-        code: "12140433",
-        name: "الحوسبة السحابية وDevOps",
-        credits: 3,
-        category: "متطلب تخصص إجباري",
-        prerequisites: ["12140308", "12140312"],
-        recommendedSemester: "السنة الرابعة - الفصل الثاني",
-        sections: generateStandardSections({ id: "12140433", name: "الحوسبة السحابية وDevOps" }),
-      },
-    ]);
-
-  upsertMajor({
-    ...INITIAL_MAJORS.find((m) => m.id === "swe"),
-    courses: sweCourses,
-  });
-
-  // Seed CS major (Computer Science)
-  const csCourses = enrichedCseCourses
-    .filter((c) => !c.category.includes("كلية إجباري") || c.name.includes("كالكولس") || c.name.includes("فيزياء 1"))
-    .slice(0, 50)
-    .concat([
-      {
-        id: "12140360",
-        code: "12140360",
-        name: "نظرية الحوسبة واللغات الصورية",
-        credits: 3,
-        category: "متطلب تخصص إجباري",
-        prerequisites: ["12140204"],
-        recommendedSemester: "السنة الثانية - الفصل الثاني",
-        sections: generateStandardSections({ id: "12140360", name: "نظرية الحوسبة" }),
-      },
-      {
-        id: "12140361",
-        code: "12140361",
-        name: "بناء المترجمات (Compilers)",
-        credits: 3,
-        category: "متطلب تخصص إجباري",
-        prerequisites: ["12140360"],
-        recommendedSemester: "السنة الثالثة - الفصل الأول",
-        sections: generateStandardSections({ id: "12140361", name: "بناء المترجمات" }),
-      },
-      {
-        id: "12140362",
-        code: "12140362",
-        name: "أمن المعلومات والتشفير",
-        credits: 3,
-        category: "متطلب تخصص إجباري",
-        prerequisites: ["12140205", "12140312"],
-        recommendedSemester: "السنة الثالثة - الفصل الثاني",
-        sections: generateStandardSections({ id: "12140362", name: "أمن المعلومات والتشفير" }),
-      },
-    ]);
-
-  upsertMajor({
-    ...INITIAL_MAJORS.find((m) => m.id === "cs"),
-    courses: csCourses,
-  });
-
-  // Seed EE major
-  upsertMajor({
-    ...INITIAL_MAJORS.find((m) => m.id === "ee"),
-    courses: enrichedCseCourses.filter((c) =>
-      c.name.includes("سيركت") ||
-      c.name.includes("إلكترونيات") ||
-      c.name.includes("إشارات") ||
-      c.name.includes("تحكم") ||
-      c.category.includes("جامعة") ||
-      c.category.includes("كلية"),
-    ),
-  });
-
   // Update sync status
   updateSyncStatus({
     lastSyncTime: new Date().toISOString(),
@@ -338,7 +251,12 @@ export async function seedDatabase() {
     durationSeconds: 1.2,
   });
 
-  console.log(`✅ Seeded ${catalogResult.totalCourses} courses across ${INITIAL_MAJORS.length} majors into db.json.`);
+  // Seed official PTUK Academic Calendar
+  saveAcademicCalendar(AUTHENTIC_FALLBACK_CALENDAR);
+
+  console.log(
+    `✅ Seeded ${catalogResult.totalCourses} courses with sections into catalog db.json and initialized academic calendar.`,
+  );
 }
 
 if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {

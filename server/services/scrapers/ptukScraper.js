@@ -4,26 +4,96 @@ import * as cheerio from "cheerio";
 const SCHEDULE_URL =
   "https://edugate.ptuk.edu.ps/faces/ui/pages/student/scheduleCourses/index.xhtml";
 const PAGE_SIZE = 15;
-const MAX_PAGES = 200;
-const PAGE_REQUEST_DELAY_MS = 1_500;
+const DEFAULT_MAX_PAGES = 200;
+const PAGE_REQUEST_DELAY_MS = 1_200;
+const MAX_REQUEST_RETRIES = 3;
 const TIME_RANGE_PATTERN =
   /\[?\s*(\d{1,2}:\d{2})\s*[_\u2013\u2014-]\s*(\d{1,2}:\d{2})\s*\]?/g;
-const DAY_NAMES = [
-  ["الأحد", "الاحد", "أحد"],
-  ["الاثنين", "الإثنين", "اثنين"],
-  ["الثلاثاء", "ثلاثاء"],
-  ["الأربعاء", "الاربعاء", "أربعاء"],
-  ["الخميس", "خميس"],
-  ["الجمعة", "جمعة"],
-  ["السبت", "سبت"],
-  ["Sunday"],
-  ["Monday"],
-  ["Tuesday"],
-  ["Wednesday"],
-  ["Thursday"],
-  ["Friday"],
-  ["Saturday"],
-];
+
+const DAY_ALIAS_MAP = {
+  // Sunday
+  الأحد: "الأحد",
+  الاحد: "الأحد",
+  أحد: "الأحد",
+  احد: "الأحد",
+  أح: "الأحد",
+  اح: "الأحد",
+  ح: "الأحد",
+  sun: "الأحد",
+  sunday: "الأحد",
+  // Monday
+  الاثنين: "الاثنين",
+  الإثنين: "الاثنين",
+  اثنين: "الاثنين",
+  إثنين: "الاثنين",
+  اث: "الاثنين",
+  ن: "الاثنين",
+  mon: "الاثنين",
+  monday: "الاثنين",
+  // Tuesday
+  الثلاثاء: "الثلاثاء",
+  ثلاثاء: "الثلاثاء",
+  ثلا: "الثلاثاء",
+  ثل: "الثلاثاء",
+  ث: "الثلاثاء",
+  tue: "الثلاثاء",
+  tuesday: "الثلاثاء",
+  // Wednesday
+  الأربعاء: "الأربعاء",
+  الاربعاء: "الأربعاء",
+  أربعاء: "الأربعاء",
+  اربعاء: "الأربعاء",
+  ارب: "الأربعاء",
+  ار: "الأربعاء",
+  ر: "الأربعاء",
+  wed: "الأربعاء",
+  wednesday: "الأربعاء",
+  // Thursday
+  الخميس: "الخميس",
+  خميس: "الخميس",
+  خمـ: "الخميس",
+  خم: "الخميس",
+  خ: "الخميس",
+  thu: "الخميس",
+  thursday: "الخميس",
+  // Friday
+  الجمعة: "الجمعة",
+  جمعة: "الجمعة",
+  جم: "الجمعة",
+  ج: "الجمعة",
+  fri: "الجمعة",
+  friday: "الجمعة",
+  // Saturday
+  السبت: "السبت",
+  سبت: "السبت",
+  سب: "السبت",
+  س: "السبت",
+  sat: "السبت",
+  saturday: "السبت",
+};
+
+/**
+ * Normalizes PTUK campus building names:
+ * - Fixes common university typo entries (الرئيسيي -> الرئيسي, الخدامات -> الخدمات)
+ * - Removes excessive whitespace and diacritics
+ * - Normalizes empty or '--' markers to 'غير محدد'
+ * @param {string} building
+ * @returns {string}
+ */
+export function normalizeBuildingName(building) {
+  if (!building || typeof building !== "string") return "غير محدد";
+  let s = building.trim();
+  if (s === "--" || s === "" || s === "-") return "غير محدد";
+
+  s = s.replace(/المبنى الرئيسيي/g, "المبنى الرئيسي");
+  s = s.replace(/الخدامات الطلابية/g, "الخدمات الطلابية");
+  s = s.replace(/[\u064B-\u065F\u0670]/g, ""); // remove diacritics
+  s = s.replace(/\s+/g, " ");
+  s = s.replace(/مبنى\s+A_A_A/g, "مبنى A_A_A");
+  s = s.replace(/مبنى\s+A_A\s+_C/g, "مبنى A_A_C");
+  s = s.replace(/مبنى\s+A_A_B/g, "مبنى A_A_B");
+  return s.trim() || "غير محدد";
+}
 
 /**
  * @typedef {Object} ScheduleBlock
@@ -40,6 +110,7 @@ const DAY_NAMES = [
  * @property {string} status
  * @property {string} instructor
  * @property {string} building
+ * @property {string} [gender]
  * @property {ScheduleBlock[]} blocks
  */
 
@@ -139,21 +210,53 @@ function parseHour(value) {
 
 /**
  * Return normalized day labels present in a text segment.
+ * Comprehensive support for full Arabic day names, PTUK abbreviation codes (أح, اث, ثلا, ار, خمـ, جم, سب),
+ * and single-letter codes (ح, ن, ث, ر, خ, ج, س).
  *
  * @param {string} value
  * @returns {string[]}
  */
-function parseDays(value) {
-  const normalized = value.replace(/[إأآ]/g, "ا").toLocaleLowerCase();
-  const matched = DAY_NAMES.flatMap((aliases) => {
-    const hasDay = aliases.some((alias) =>
-      normalized.includes(alias.replace(/[إأآ]/g, "ا").toLocaleLowerCase()),
-    );
+export function parseDays(value) {
+  if (!value || typeof value !== "string") return [];
 
-    return hasDay ? [aliases[0]] : [];
-  });
+  // Strip time patterns e.g. [ 09:00_10:00 ] or 09:00 - 10:00
+  const withoutTime = value.replace(
+    /\[?\s*\d{1,2}:\d{2}\s*[_–—-]\s*\d{1,2}:\d{2}\s*\]?/g,
+    " ",
+  );
 
-  return [...new Set(matched)];
+  // Clean punctuation except Arabic letters
+  const tokens = withoutTime
+    .replace(/[٠-٩\d]/g, " ")
+    .replace(/[،,;:|\-_()[\]]/g, " ")
+    .split(/\s+/)
+    .map((t) => t.trim().toLowerCase())
+    .filter(Boolean);
+
+  const matched = [];
+  for (const token of tokens) {
+    const canonical =
+      DAY_ALIAS_MAP[token] || DAY_ALIAS_MAP[token.replace(/[إأآ]/g, "ا")];
+    if (canonical && !matched.includes(canonical)) {
+      matched.push(canonical);
+    }
+  }
+
+  // Fallback substring check if tokens didn't hit (for connected strings)
+  if (matched.length === 0) {
+    const normalized = withoutTime.replace(/[إأآ]/g, "ا").toLowerCase();
+    for (const [alias, canonical] of Object.entries(DAY_ALIAS_MAP)) {
+      if (
+        alias.length >= 2 &&
+        normalized.includes(alias.replace(/[إأآ]/g, "ا")) &&
+        !matched.includes(canonical)
+      ) {
+        matched.push(canonical);
+      }
+    }
+  }
+
+  return matched;
 }
 
 /**
@@ -233,6 +336,7 @@ function extractRowsFromXml(xmlString) {
 
 /**
  * Parse extracted table rows into grouped course records.
+ * Retains all sections (co-ed "مختلط", male "طلاب", female "طالبات") without omitting valid data.
  *
  * @param {string[][]} rows
  * @param {Map<string, Course>} coursesByCode
@@ -242,8 +346,6 @@ function addTableRows(rows, coursesByCode) {
   let acceptedRows = 0;
 
   for (const values of rows) {
-    if (values.some((value) => value.includes("مختلط"))) continue;
-
     const [
       ,
       code,
@@ -255,14 +357,26 @@ function addTableRows(rows, coursesByCode) {
       status = "",
       instructor = "",
       building = "",
+      info = "",
     ] = values;
     if (!code || !name || !sectionNumber) continue;
+
+    // Detect gender/section type instead of discarding sections
+    let gender = "مختلط";
+    const fullRowText = values.join(" ");
+    if (fullRowText.includes("طالبات") || fullRowText.includes("إناث")) {
+      gender = "طالبات";
+    } else if (fullRowText.includes("طلاب") || fullRowText.includes("ذكور")) {
+      gender = "طلاب";
+    }
 
     let course = coursesByCode.get(code);
     if (!course) {
       course = { code, name, type, sections: [] };
       coursesByCode.set(code, course);
     }
+
+    const cleanBuilding = normalizeBuildingName(building);
 
     let section = course.sections.find((item) => item.sec === sectionNumber);
     if (!section) {
@@ -271,7 +385,8 @@ function addTableRows(rows, coursesByCode) {
         room,
         status,
         instructor,
-        building,
+        building: cleanBuilding,
+        gender,
         blocks: [],
       };
       course.sections.push(section);
@@ -279,7 +394,8 @@ function addTableRows(rows, coursesByCode) {
       section.room = room || section.room;
       section.status = status || section.status;
       section.instructor = instructor || section.instructor;
-      section.building = building || section.building;
+      section.building = cleanBuilding || section.building;
+      section.gender = gender || section.gender;
     }
 
     section.blocks = [...section.blocks, ...parseScheduleBlocks(rawSchedule)];
@@ -290,13 +406,53 @@ function addTableRows(rows, coursesByCode) {
 }
 
 /**
+ * Fetch a single page from PTUK Edugate with bounded exponential retries.
+ */
+async function fetchPageWithRetry(params, cookieHeader) {
+  let lastError;
+  for (let attempt = 0; attempt < MAX_REQUEST_RETRIES; attempt += 1) {
+    try {
+      const response = await axios.post(SCHEDULE_URL, params.toString(), {
+        timeout: 35000,
+        headers: {
+          Accept: "application/xml, text/xml, */*; q=0.01",
+          "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
+          Cookie: cookieHeader,
+          "Faces-Request": "partial/ajax",
+          Origin: "https://edugate.ptuk.edu.ps",
+          Referer: SCHEDULE_URL,
+          "X-Requested-With": "XMLHttpRequest",
+        },
+      });
+      return response;
+    } catch (err) {
+      lastError = err;
+      if (attempt < MAX_REQUEST_RETRIES - 1) {
+        await new Promise((resolve) =>
+          setTimeout(resolve, 1000 * 2 ** attempt),
+        );
+      }
+    }
+  }
+  throw lastError;
+}
+
+/**
  * Fetch all PTUK course sections by following the JSF ViewState returned by each page.
  *
  * @param {string} cookieHeader
  * @param {string} initialViewState
+ * @param {object} [options]
+ * @param {string} [options.branch="1"] - "1" for Tulkarm, "3" for Ramallah, "4" for Al-Arroub
+ * @param {number} [options.maxPages=200]
+ * @param {number} [options.delayMs=1200]
  * @returns {Promise<Course[]>}
  */
-async function scrapePTUKSchedules(cookieHeader, initialViewState) {
+async function scrapePTUKSchedules(
+  cookieHeader,
+  initialViewState,
+  options = {},
+) {
   if (typeof cookieHeader !== "string" || !cookieHeader.trim()) {
     throw new TypeError("cookieHeader must be a non-empty string.");
   }
@@ -304,14 +460,16 @@ async function scrapePTUKSchedules(cookieHeader, initialViewState) {
     throw new TypeError("initialViewState must be a non-empty string.");
   }
 
+  const branch = options.branch || "1";
+  const maxPages = options.maxPages || DEFAULT_MAX_PAGES;
+  const delayMs = options.delayMs || PAGE_REQUEST_DELAY_MS;
+
   const coursesByCode = new Map();
   let currentViewState = initialViewState.trim();
 
-  for (let page = 0; page < MAX_PAGES; page += 1) {
+  for (let page = 0; page < maxPages; page += 1) {
     if (page > 0) {
-      await new Promise((resolve) =>
-        setTimeout(resolve, PAGE_REQUEST_DELAY_MS),
-      );
+      await new Promise((resolve) => setTimeout(resolve, delayMs));
     }
 
     const firstOffset = page * PAGE_SIZE;
@@ -324,7 +482,7 @@ async function scrapePTUKSchedules(cookieHeader, initialViewState) {
       "javax.faces.behavior.event": "page",
       "javax.faces.partial.event": "page",
       "javax.faces.ViewState": currentViewState,
-      "contents:j_idt117_input": "1",
+      "contents:j_idt117_input": branch,
     });
     params.append("contents:scheduleDtl_pagination", "true");
     params.append("contents:scheduleDtl_first", String(firstOffset));
@@ -339,18 +497,7 @@ async function scrapePTUKSchedules(cookieHeader, initialViewState) {
 
     let response;
     try {
-      response = await axios.post(SCHEDULE_URL, params.toString(), {
-        timeout: 30000,
-        headers: {
-          Accept: "application/xml, text/xml, */*; q=0.01",
-          "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
-          Cookie: cookieHeader,
-          "Faces-Request": "partial/ajax",
-          Origin: "https://edugate.ptuk.edu.ps",
-          Referer: SCHEDULE_URL,
-          "X-Requested-With": "XMLHttpRequest",
-        },
-      });
+      response = await fetchPageWithRetry(params, cookieHeader);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       throw new Error(
@@ -360,6 +507,7 @@ async function scrapePTUKSchedules(cookieHeader, initialViewState) {
         },
       );
     }
+
     const xml = String(response.data);
     const sessionExpiredMessage =
       "Session expired. Please provide a fresh PTUK cookie.";

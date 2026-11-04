@@ -14,8 +14,24 @@ export interface SyncStatus {
 const STORAGE_SYNC_CACHE_KEY = "ptuk_sync_status_cache";
 
 function getBaseApiUrl(): string {
-  if (typeof import.meta !== "undefined" && import.meta.env?.VITE_API_BASE_URL) {
-    return import.meta.env.VITE_API_BASE_URL.replace(/\/+$/, "");
+  const envBase =
+    typeof import.meta !== "undefined" && import.meta.env?.VITE_API_BASE_URL
+      ? import.meta.env.VITE_API_BASE_URL
+      : "";
+
+  if (typeof window !== "undefined") {
+    if (
+      envBase &&
+      !envBase.includes("localhost:3001") &&
+      !envBase.includes("127.0.0.1:3001")
+    ) {
+      return envBase.replace(/\/+$/, "");
+    }
+    return "";
+  }
+
+  if (envBase) {
+    return envBase.replace(/\/+$/, "");
   }
   return "http://localhost:3001";
 }
@@ -65,7 +81,10 @@ export async function fetchSyncStatus(): Promise<SyncStatus> {
   }
 }
 
-export async function triggerManualSync(): Promise<{ success: boolean; message?: string }> {
+export async function triggerManualSync(): Promise<{
+  success: boolean;
+  message?: string;
+}> {
   const url = `${getBaseApiUrl()}/api/sync/trigger`;
   const response = await fetch(url, {
     method: "POST",
@@ -82,7 +101,9 @@ export async function triggerManualSync(): Promise<{ success: boolean; message?:
 /**
  * Format ISO date string into readable Arabic relative or absolute time.
  */
-export function formatArabicSyncTime(isoString: string | null | undefined): string {
+export function formatArabicSyncTime(
+  isoString: string | null | undefined,
+): string {
   if (!isoString) return "لم يتم التحديث بعد";
 
   const date = new Date(isoString);

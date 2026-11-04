@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { getCourseDetails } from "../src/courseExplanations";
+import { getCourseDetails } from "../src/core/courseExplanations";
 import type { Course } from "../src/data";
 
 const makeCourse = (id: string, prerequisites: string[] = []): Course => ({

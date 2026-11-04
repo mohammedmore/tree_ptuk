@@ -12,9 +12,10 @@ const DEFAULT_SCHEDULE_URL =
  *
  * @returns {Promise<{ cookie: string, viewState: string }>}
  */
-export async function authenticatePTUK() {
-  const username = process.env.PTUK_USERNAME?.trim();
-  const password = process.env.PTUK_PASSWORD;
+export async function authenticatePTUK(customUsername, customPassword) {
+  const username = (customUsername || process.env.PTUK_USERNAME)?.trim();
+  const password =
+    customPassword !== undefined ? customPassword : process.env.PTUK_PASSWORD;
 
   if (!username || !password) {
     throw new Error("PTUK_USERNAME and PTUK_PASSWORD must be configured.");
@@ -50,9 +51,18 @@ export async function authenticatePTUK() {
       });
     }
 
+    // 1. Select Branch dropdown (الدراسة النظامية - طولكرم = "1")
+    const branchSelect = page.locator(
+      '#contents\\:j_idt117_input, select[name*="j_idt117"]',
+    );
+    if ((await branchSelect.count()) > 0) {
+      await branchSelect.selectOption({ index: 1 });
+      await page.waitForTimeout(500);
+    }
+
     const searchButton = page
       .locator(
-        'button:has-text("بحث"), button:has-text("Search"), span:has-text("بحث")',
+        'button[id*="scheduleDtl"], button:has-text("بحث"), button:has-text("Search"), span:has-text("بحث")',
       )
       .first();
 
@@ -64,9 +74,11 @@ export async function authenticatePTUK() {
 
     await page.waitForLoadState("networkidle");
     await page
-      .waitForSelector("table tbody tr", { timeout: 15000 })
+      .waitForSelector("#contents\\:scheduleDtl_data tr, table tbody tr", {
+        timeout: 15000,
+      })
       .catch(() => console.log("لم يتم العثور على جدول بعد البحث."));
-    await page.waitForTimeout(2000);
+    await page.waitForTimeout(1500);
 
     const sessionCookies = await context.cookies(DEFAULT_SCHEDULE_URL);
     const sessionCookie = sessionCookies.find(
@@ -94,9 +106,13 @@ export async function authenticatePTUK() {
       );
     }
 
-    return { cookie, viewState: viewState.trim() };
+    return { success: true, cookie, viewState: viewState.trim() };
   } catch (error) {
-    if (page) {
+    if (
+      page &&
+      process.env.NODE_ENV !== "production" &&
+      process.env.DEBUG_SCREENSHOTS === "true"
+    ) {
       try {
         await page.screenshot({
           path: "login-failed-debug.png",

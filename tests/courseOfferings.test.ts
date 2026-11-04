@@ -6,7 +6,7 @@ import {
   getAvailableSemesters,
   getSemesterType,
   isCourseAvailableInSemester,
-} from "../src/courseOfferings";
+} from "../src/core/courseOfferings";
 import { courses } from "../src/data";
 
 test("uses catalog availability as the single source of course offerings", () => {

@@ -1,5 +1,10 @@
-import { courses as fallbackCourses } from "../data";
+import { courses as fallbackCourses } from "../data.ts";
 import { normalizeDayKey } from "./scheduleSolver";
+import {
+  saveCatalogToIndexedDB,
+  loadCatalogFromIndexedDB,
+  searchCatalogFromIndexedDB,
+} from "./catalogDb";
 
 const DEFAULT_API_URL = "http://localhost:3001/api/courses";
 const STORAGE_CACHE_KEY = "ptuk_catalog_courses_cache";
@@ -15,8 +20,16 @@ function getApiUrl() {
   if (direct) return direct;
 
   const base = env?.VITE_API_BASE_URL || proc?.VITE_API_BASE_URL;
-  if (base) {
+  if (
+    base &&
+    !base.includes("localhost:3001") &&
+    !base.includes("127.0.0.1:3001")
+  ) {
     return `${base.replace(/\/+$/, "")}/api/courses`;
+  }
+
+  if (typeof window !== "undefined") {
+    return "/api/courses";
   }
 
   return DEFAULT_API_URL;
@@ -60,21 +73,20 @@ function parseBlock(block) {
     throw new Error("Invalid course response: a schedule block is malformed.");
   }
   const { start, end } = block;
+  const isOnlineZero = start === 0 && end === 0;
   if (
     typeof start !== "number" ||
     !Number.isFinite(start) ||
     typeof end !== "number" ||
     !Number.isFinite(end) ||
-    end <= start ||
+    (!isOnlineZero && end <= start) ||
     !block.days.every((day) => typeof day === "string")
   ) {
     throw new Error(
       "Invalid course response: a schedule block has invalid times or days.",
     );
   }
-  const normalizedDays = block.days
-    .map(normalizeDayKey)
-    .filter(Boolean);
+  const normalizedDays = block.days.map(normalizeDayKey).filter(Boolean);
   return {
     days: normalizedDays.length > 0 ? normalizedDays : block.days,
     start,
@@ -97,6 +109,12 @@ function parseSection(section) {
     status: typeof section.status === "string" ? section.status : undefined,
     building:
       typeof section.building === "string" ? section.building : undefined,
+    capacity:
+      typeof section.capacity === "number" ? section.capacity : undefined,
+    registered:
+      typeof section.registered === "number" ? section.registered : undefined,
+    isOnline:
+      typeof section.isOnline === "boolean" ? section.isOnline : undefined,
     blocks: section.blocks.map(parseBlock),
   };
 }
@@ -203,15 +221,27 @@ async function loadCourses() {
     const courses = parseCourses(data);
     if (courses.length > 0) {
       saveToLocalStorage(courses);
+      saveCatalogToIndexedDB(courses).catch(() => {});
       isOfflineFallbackActive = false;
       return courses;
     }
     throw new Error("لم يتم العثور على مساقات في الاستجابة.");
   } catch (fetchError) {
-    // Attempt graceful fallback
+    // Attempt graceful fallback: IndexedDB first, then localStorage, then static
+    try {
+      const idbCourses = await loadCatalogFromIndexedDB();
+      if (idbCourses && idbCourses.length > 0) {
+        isOfflineFallbackActive = true;
+        return idbCourses;
+      }
+    } catch {
+      // Ignore IDB read error and fallback to storage
+    }
+
     const cached = loadFromLocalStorage();
     if (cached && cached.length > 0) {
       isOfflineFallbackActive = true;
+      saveCatalogToIndexedDB(cached).catch(() => {});
       return cached;
     }
 

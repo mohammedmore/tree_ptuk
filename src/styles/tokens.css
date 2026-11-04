@@ -1,0 +1,186 @@
+:root,
+:root[data-theme="light"] {
+  color-scheme: light;
+  --bg: #f1f2ed;
+  --surface: #fafaf7;
+  --sunken: #e5e7e0;
+  --scrim: rgb(31 36 33 / 0.45);
+  --text: #1f2421;
+  --text-2: #3d443f;
+  --text-3: #5c635d;
+  --text-on-accent: #f7f8f3;
+  --line: #d6d9d1;
+  --line-control: #858d82;
+  --accent: #3f5b2e;
+  --accent-hover: #334a25;
+  --accent-soft: #e1e8d6;
+  --warn: #8a5f10;
+  --warn-soft: #f1e8cf;
+  --danger: #a33a2b;
+  --danger-soft: #f3ddd8;
+  --shadow-pop: 0 4px 16px rgb(31 36 33 / 0.12);
+
+  /* ألوان المواد للجدول الأسبوعي (المضيء) */
+  --c1-bg: oklch(0.92 0.03 30);
+  --c1-bar: oklch(0.5 0.09 30);
+  --c2-bg: oklch(0.92 0.03 85);
+  --c2-bar: oklch(0.5 0.09 85);
+  --c3-bg: oklch(0.92 0.03 150);
+  --c3-bar: oklch(0.5 0.09 150);
+  --c4-bg: oklch(0.92 0.03 200);
+  --c4-bar: oklch(0.5 0.09 200);
+  --c5-bg: oklch(0.92 0.03 255);
+  --c5-bar: oklch(0.5 0.09 255);
+  --c6-bg: oklch(0.92 0.03 320);
+  --c6-bar: oklch(0.5 0.09 320);
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #212724;
+  --surface: #2a312d;
+  --sunken: #1a1f1c;
+  --scrim: rgb(0 0 0 / 0.6);
+  --text: #e9ece6;
+  --text-2: #bcc2ba;
+  --text-3: #98a09a;
+  --text-on-accent: #1b2417;
+  --line: #3a423d;
+  --line-control: #75807a;
+  --accent: #a9c38b;
+  --accent-hover: #bad29f;
+  --accent-soft: #2f3a27;
+  --warn: #ddb35a;
+  --warn-soft: #3a301a;
+  --danger: #e4907f;
+  --danger-soft: #402723;
+  --shadow-pop: 0 4px 16px rgb(0 0 0 / 0.45);
+
+  /* ألوان المواد للجدول الأسبوعي (الداكن) */
+  --c1-bg: oklch(0.33 0.03 30);
+  --c1-bar: oklch(0.74 0.09 30);
+  --c2-bg: oklch(0.33 0.03 85);
+  --c2-bar: oklch(0.74 0.09 85);
+  --c3-bg: oklch(0.33 0.03 150);
+  --c3-bar: oklch(0.74 0.09 150);
+  --c4-bg: oklch(0.33 0.03 200);
+  --c4-bar: oklch(0.74 0.09 200);
+  --c5-bg: oklch(0.33 0.03 255);
+  --c5-bar: oklch(0.74 0.09 255);
+  --c6-bg: oklch(0.33 0.03 320);
+  --c6-bar: oklch(0.74 0.09 320);
+}
+
+/* نمط شاشات OLED الأسود الخالص لتوفير البطارية */
+:root[data-theme="oled-black"],
+:root.oled-black {
+  color-scheme: dark;
+  --bg: #000000;
+  --surface: #0a0a0a;
+  --sunken: #000000;
+  --scrim: rgb(0 0 0 / 0.85);
+  --text: #ffffff;
+  --text-2: #e2e8f0;
+  --text-3: #94a3b8;
+  --text-on-accent: #000000;
+  --line: #1c1c1c;
+  --line-control: #383838;
+  --accent: #10b981;
+  --accent-hover: #34d399;
+  --accent-soft: #064e3b;
+  --warn: #f59e0b;
+  --warn-soft: #451a03;
+  --danger: #ef4444;
+  --danger-soft: #450a0a;
+  --shadow-pop: 0 4px 20px rgb(0 0 0 / 0.9);
+
+  --c1-bg: #0d1117;
+  --c1-bar: #38bdf8;
+  --c2-bg: #0d1117;
+  --c2-bar: #34d399;
+  --c3-bg: #0d1117;
+  --c3-bar: #fbbf24;
+  --c4-bg: #0d1117;
+  --c4-bar: #f472b6;
+  --c5-bg: #0d1117;
+  --c5-bar: #a78bfa;
+  --c6-bg: #0d1117;
+  --c6-bar: #4ade80;
+}
+
+/* نمط التباين العالي (High-Contrast Mode) للقراءة تحت أشعة الشمس المباشرة */
+:root[data-theme="high-contrast"],
+:root.high-contrast {
+  color-scheme: light;
+  --bg: #ffffff;
+  --surface: #ffffff;
+  --sunken: #f0f0f0;
+  --scrim: rgb(0 0 0 / 0.7);
+  --text: #000000;
+  --text-2: #111111;
+  --text-3: #222222;
+  --text-on-accent: #ffffff;
+  --line: #000000;
+  --line-control: #000000;
+  --accent: #0047ab;
+  --accent-hover: #002d6b;
+  --accent-soft: #dbeafe;
+  --warn: #9a3412;
+  --warn-soft: #fed7aa;
+  --danger: #991b1b;
+  --danger-soft: #fecaca;
+  --shadow-pop: 0 0 0 2px #000000;
+
+  --c1-bg: #e0f2fe;
+  --c1-bar: #0369a1;
+  --c2-bg: #dcfce7;
+  --c2-bar: #15803d;
+  --c3-bg: #fef3c7;
+  --c3-bar: #b45309;
+  --c4-bg: #fce7f3;
+  --c4-bar: #be185d;
+  --c5-bg: #ede9fe;
+  --c5-bar: #6d28d9;
+  --c6-bg: #ccfbf1;
+  --c6-bar: #0f766e;
+}
+
+:root {
+  --font-ui: "IBM Plex Sans Arabic", "Segoe UI", Tahoma, system-ui, sans-serif;
+  --font-title: "Noto Naskh Arabic", "IBM Plex Sans Arabic", serif;
+
+  --fs-xs: 0.75rem; /* 12: بيانات وصفية فقط */
+  --fs-sm: 0.8125rem; /* 13: تسميات الحقول والنص المساعد */
+  --fs-base: 0.9375rem; /* 15: الجداول والقوائم والأزرار */
+  --fs-md: 1rem; /* 16: النص الأساسي */
+  --fs-lg: 1.25rem; /* 20: عناوين الأقسام */
+  --fs-xl: 1.625rem; /* 26: عنوان الشاشة */
+  --fs-figure: 2.5rem; /* 40: الأرقام الكبيرة */
+  --lh-tight: 1.35;
+  --lh-ui: 1.6;
+  --lh-body: 1.85;
+
+  --s-1: 4px;
+  --s-2: 8px;
+  --s-3: 12px;
+  --s-4: 16px;
+  --s-5: 24px;
+  --s-6: 32px;
+  --s-7: 48px;
+  --s-8: 64px;
+
+  --r-control: 6px;
+  --r-surface: 10px;
+
+  --dur-1: 120ms;
+  --dur-2: 200ms;
+  --ease: cubic-bezier(0.2, 0, 0, 1);
+
+  --z-sticky: 10;
+  --z-menu: 30;
+  --z-dialog: 40;
+  --z-toast: 50;
+
+  --topbar-h: 52px;
+  --control-h: 36px;
+}

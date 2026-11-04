@@ -61,6 +61,19 @@ export const SEMESTERS = [
   "السنة الخامسة - الصيفي",
 ];
 
+export const REGULAR_SEMESTERS = [
+  "السنة الأولى - الفصل الأول",
+  "السنة الأولى - الفصل الثاني",
+  "السنة الثانية - الفصل الأول",
+  "السنة الثانية - الفصل الثاني",
+  "السنة الثالثة - الفصل الأول",
+  "السنة الثالثة - الفصل الثاني",
+  "السنة الرابعة - الفصل الأول",
+  "السنة الرابعة - الفصل الثاني",
+  "السنة الخامسة - الفصل الأول",
+  "السنة الخامسة - الفصل الثاني",
+] as const;
+
 export const courseRecommendedSemesters: Record<string, string> = {
   "12140101": "السنة الأولى - الفصل الأول",
   "15010101": "السنة الأولى - الفصل الأول",
@@ -125,34 +138,65 @@ export const courseRecommendedSemesters: Record<string, string> = {
 export const getRecommendedSemesterOfCourse = (course: {
   id: string;
   category: string;
+  semester?: string;
+  recommendedSemester?: string;
+  prerequisites?: string[];
+  name?: string;
 }): string => {
+  // 1. If explicit semester is already specified on course, normalize and validate
+  const rawSem = course.semester || course.recommendedSemester;
+  if (rawSem) {
+    if (SEMESTERS.includes(rawSem)) return rawSem;
+
+    // Check term
+    const isSummer = rawSem.includes("صيفي") || rawSem.includes("الصيفي");
+    const isSecond =
+      !isSummer &&
+      (rawSem.includes("الثاني") ||
+        rawSem.includes("ثاني") ||
+        rawSem.includes("2"));
+    const term = isSummer
+      ? "الصيفي"
+      : isSecond
+        ? "الفصل الثاني"
+        : "الفصل الأول";
+
+    // Check academic year
+    let yStr = "";
+    if (rawSem.includes("الأولى") || rawSem.includes("الاولى"))
+      yStr = "السنة الأولى";
+    else if (rawSem.includes("الثانية") || rawSem.includes("الثانيه"))
+      yStr = "السنة الثانية";
+    else if (rawSem.includes("الثالثة") || rawSem.includes("الثالثه"))
+      yStr = "السنة الثالثة";
+    else if (rawSem.includes("الرابعة") || rawSem.includes("الرابعه"))
+      yStr = "السنة الرابعة";
+    else if (rawSem.includes("الخامسة") || rawSem.includes("الخامسه"))
+      yStr = "السنة الخامسة";
+
+    if (!yStr) {
+      const yFromId = getYearFromId(course.id);
+      yStr =
+        {
+          "1": "السنة الأولى",
+          "2": "السنة الثانية",
+          "3": "السنة الثالثة",
+          "4": "السنة الرابعة",
+          "5": "السنة الخامسة",
+        }[yFromId] || "السنة الأولى";
+    }
+
+    const resolved = `${yStr} - ${term}`;
+    if (SEMESTERS.includes(resolved)) return resolved;
+  }
+
+  // 2. If present in pre-configured CSE map, use it
   if (courseRecommendedSemesters[course.id]) {
     return courseRecommendedSemesters[course.id];
   }
 
+  // 3. Determine academic year
   const yearStr = getYearFromId(course.id);
-  if (course.category === "متطلب جامعة اختياري") {
-    const lastChar = course.id.charAt(course.id.length - 1);
-    return parseInt(lastChar) % 2 === 0
-      ? "السنة الثانية - الفصل الأول"
-      : "السنة الخامسة - الفصل الأول";
-  }
-
-  if (course.category === "متطلب تخصص اختياري") {
-    if (yearStr === "4") {
-      const lastChar = course.id.charAt(course.id.length - 1);
-      return parseInt(lastChar) % 2 === 0
-        ? "السنة الرابعة - الفصل الأول"
-        : "السنة الرابعة - الفصل الثاني";
-    }
-    if (yearStr === "5") {
-      const lastChar = course.id.charAt(course.id.length - 1);
-      return parseInt(lastChar) % 2 === 0
-        ? "السنة الخامسة - الفصل الأول"
-        : "السنة الخامسة - الفصل الثاني";
-    }
-  }
-
   const yearWord =
     {
       "1": "السنة الأولى",
@@ -161,7 +205,46 @@ export const getRecommendedSemesterOfCourse = (course: {
       "4": "السنة الرابعة",
       "5": "السنة الخامسة",
     }[yearStr] || "السنة الأولى";
-  return `${yearWord} - الفصل الأول`;
+
+  // 4. University electives - distribute evenly
+  if (course.category === "متطلب جامعة اختياري") {
+    const lastChar = course.id.charAt(course.id.length - 1);
+    return parseInt(lastChar, 10) % 2 === 0
+      ? `${yearWord} - الفصل الأول`
+      : `${yearWord} - الفصل الثاني`;
+  }
+
+  // 5. Specialization electives - distribute evenly
+  if (course.category === "متطلب تخصص اختياري") {
+    const lastChar = course.id.charAt(course.id.length - 1);
+    return parseInt(lastChar, 10) % 2 === 0
+      ? `${yearWord} - الفصل الأول`
+      : `${yearWord} - الفصل الثاني`;
+  }
+
+  // 6. Mandatory courses: balance between Semester 1 and Semester 2
+  const name = course.name || "";
+  const yNum = parseInt(yearStr, 10) || 1;
+  const hasPrereqsInSameYear =
+    Array.isArray(course.prerequisites) &&
+    course.prerequisites.some((p) => {
+      const pYear = parseInt(getYearFromId(p), 10) || 1;
+      return pYear === yNum;
+    });
+  const isSecondPart =
+    name.includes("(2)") ||
+    name.includes(" 2") ||
+    name.includes("ثاني") ||
+    name.includes("الثاني") ||
+    name.includes("مختبر") ||
+    name.includes("عملي");
+  const lastDigit = parseInt(course.id.slice(-1), 10) || 0;
+
+  // Part 2 courses or courses with prerequisites in same year go to Semester 2
+  const isSemester2 =
+    isSecondPart || hasPrereqsInSameYear || lastDigit % 2 === 0;
+
+  return `${yearWord} - ${isSemester2 ? "الفصل الثاني" : "الفصل الأول"}`;
 };
 
 export const ELECTIVE_SLOTS_DEFS: Record<

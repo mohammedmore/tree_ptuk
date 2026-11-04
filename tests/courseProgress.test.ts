@@ -11,12 +11,23 @@ import {
   calculateProgressPercentage,
   calculateCategoryCredits,
   isCourseAvailable,
+  isPrerequisiteSatisfied,
   calculateGPA,
+  getAcademicStandingInfo,
+  detectPrerequisiteCycles,
+  getTransitivePrerequisites,
+  computeCriticalPath,
+  calculateYearlyProgress,
+  getTopRetakeRecommendations,
   REMEDIAL_COURSE_ID,
+  COMPUTER_SKILLS_COURSE_ID,
   REMEDIAL_CATEGORY,
-} from "../src/courseProgress";
+} from "../src/core/courseProgress";
 import type { Course } from "../src/data";
-import { courses as realCatalogCourses, categoryRequirements } from "../src/data";
+import {
+  courses as realCatalogCourses,
+  categoryRequirements,
+} from "../src/data";
 import { TOTAL_CREDITS } from "../src/constants";
 
 const mockCourses: Course[] = [
@@ -26,6 +37,13 @@ const mockCourses: Course[] = [
     prerequisites: [],
     credits: 3,
     category: "متطلب استدراكي إجباري",
+  },
+  {
+    id: "13010006",
+    name: "مهارات الحاسوب وتطبيقاته",
+    prerequisites: [],
+    credits: 1,
+    category: "متطلب جامعة إجباري",
   },
   {
     id: "15200106",
@@ -153,16 +171,24 @@ test("real catalog category requirements sum to TOTAL_CREDITS (164) excluding re
   assert.equal(categoryRequirements[REMEDIAL_CATEGORY], 3);
 });
 
-test("isRemedialCourse and isDegreeCreditBearing identify remedial course", () => {
-  const remedial = mockCourses.find((c) => c.id === "15200099")!;
+test("isRemedialCourse and isDegreeCreditBearing identify remedial courses (English and Computer Skills)", () => {
+  const englishRemedial = mockCourses.find((c) => c.id === "15200099")!;
+  const computerSkills = mockCourses.find((c) => c.id === "13010006")!;
   const standard = mockCourses.find((c) => c.id === "15200106")!;
 
-  assert.equal(isRemedialCourse(remedial), true);
+  assert.equal(isRemedialCourse(englishRemedial), true);
   assert.equal(isRemedialCourse(REMEDIAL_COURSE_ID), true);
   assert.equal(isRemedialCourse("15200099"), true);
-  assert.equal(isDegreeCreditBearing(remedial), false);
+  assert.equal(isDegreeCreditBearing(englishRemedial), false);
   assert.equal(isDegreeCreditBearing(REMEDIAL_COURSE_ID), false);
   assert.equal(isDegreeCreditBearing("15200099"), false);
+
+  assert.equal(isRemedialCourse(computerSkills), true);
+  assert.equal(isRemedialCourse(COMPUTER_SKILLS_COURSE_ID), true);
+  assert.equal(isRemedialCourse("13010006"), true);
+  assert.equal(isDegreeCreditBearing(computerSkills), false);
+  assert.equal(isDegreeCreditBearing(COMPUTER_SKILLS_COURSE_ID), false);
+  assert.equal(isDegreeCreditBearing("13010006"), false);
 
   assert.equal(isRemedialCourse(standard), false);
   assert.equal(isRemedialCourse("15200106"), false);
@@ -170,10 +196,16 @@ test("isRemedialCourse and isDegreeCreditBearing identify remedial course", () =
   assert.equal(isDegreeCreditBearing("15200106"), true);
 });
 
-test("calculateDegreeCredits excludes remedial courses from earned total", () => {
-  const completed = new Set(["15200099", "15200106", "11100101", "12010101"]);
+test("calculateDegreeCredits excludes both English remedial and Computer Skills from earned total", () => {
+  const completed = new Set([
+    "15200099",
+    "13010006",
+    "15200106",
+    "11100101",
+    "12010101",
+  ]);
   const credits = calculateDegreeCredits(mockCourses, completed);
-  // 15200106 (3) + 11100101 (3) + 12010101 (4) = 10 cr (remedial 3 cr excluded)
+  // 15200106 (3) + 11100101 (3) + 12010101 (4) = 10 cr (remedials 3 cr + 1 cr excluded)
   assert.equal(credits, 10);
 });
 
@@ -318,16 +350,10 @@ test("isCourseAvailable allows elective selection even when category minimum is 
   const completed = new Set(["13020001", "13020002", "13020003"]);
 
   // Jerusalem history is not yet completed and must remain available to explore/plan/swap
-  assert.equal(
-    isCourseAvailable(jerusalem, completed, mockCourses),
-    true,
-  );
+  assert.equal(isCourseAvailable(jerusalem, completed, mockCourses), true);
 
   // Already completed Hebrew should not be available
-  assert.equal(
-    isCourseAvailable(hebrew, completed, mockCourses),
-    false,
-  );
+  assert.equal(isCourseAvailable(hebrew, completed, mockCourses), false);
 });
 
 test("calculateGPA excludes remedial courses and Pass/Fail (-1)", () => {
@@ -371,6 +397,45 @@ test("calculateGPA handles failed courses and what-if grades correctly", () => {
   assert.equal(whatIfGPA, 80);
 });
 
+test("Item 145: calculateGPA and credit counters safely handle zero-credit labs and workshops without NaN", () => {
+  const zeroCreditWorkshop: Course = {
+    id: "99999000",
+    name: "ورشة عمل تدريبية",
+    credits: 0,
+    category: "university_elective",
+    prerequisites: [],
+  };
+
+  const coursesWithZeroCredit = [...mockCourses, zeroCreditWorkshop];
+  const completed = new Set(["11100101", "99999000"]); // Calc 1 (3cr, grade 90) + Workshop (0cr, grade 95)
+  const grades = {
+    "11100101": 90,
+    "99999000": 95,
+  };
+
+  // GPA should remain exactly 90 and not divide by 0 or produce NaN
+  const gpa = calculateGPA(coursesWithZeroCredit, grades, completed);
+  assert.equal(gpa, 90);
+  assert.ok(!isNaN(gpa));
+
+  // If ONLY the zero-credit course is completed
+  const onlyZeroCompleted = new Set(["99999000"]);
+  const gpaZero = calculateGPA(
+    coursesWithZeroCredit,
+    grades,
+    onlyZeroCompleted,
+  );
+  assert.equal(gpaZero, 0);
+  assert.ok(!isNaN(gpaZero));
+
+  // Degree credits should not count 0-credit course towards credit accumulation
+  const degreeCredits = calculateDegreeCredits(
+    coursesWithZeroCredit,
+    onlyZeroCompleted,
+  );
+  assert.equal(degreeCredits, 0);
+});
+
 test("toggling a course changes only that course and preserves the input set", () => {
   const completed = new Set(["prerequisite", "other"]);
 
@@ -395,4 +460,340 @@ test("marking a semester completed marks only its planned courses", () => {
 
   assert.deepEqual([...next], ["existing", "planned", "another-planned"]);
   assert.deepEqual([...completed], ["existing"]);
+});
+
+test("getAcademicStandingInfo accurately computes standing, graduation project, field training, and scholarship tiers", () => {
+  // 1. High Honor student with 125 credits
+  const info1 = getAcademicStandingInfo(92.5, 125);
+  assert.equal(info1.isHonor, true);
+  assert.equal(info1.scholarshipTier, "full");
+  assert.equal(info1.canRegisterGradProject, true);
+  assert.equal(info1.creditsToGradProject, 0);
+  assert.equal(info1.canRegisterFieldTraining, true);
+
+  // 2. Partial scholarship student with 95 credits
+  const info2 = getAcademicStandingInfo(87, 95);
+  assert.equal(info2.isHonor, true);
+  assert.equal(info2.scholarshipTier, "partial");
+  assert.equal(info2.canRegisterGradProject, false);
+  assert.equal(info2.creditsToGradProject, 25);
+  assert.equal(info2.canRegisterFieldTraining, true);
+  assert.equal(info2.creditsToFieldTraining, 0);
+
+  // 3. Scholarship candidate (82%) with 80 credits
+  const info3 = getAcademicStandingInfo(82, 80);
+  assert.equal(info3.isHonor, false);
+  assert.equal(info3.scholarshipTier, "candidate");
+  assert.equal(info3.canRegisterFieldTraining, false);
+  assert.equal(info3.creditsToFieldTraining, 10);
+
+  // 4. Academic warning student
+  const info4 = getAcademicStandingInfo(58, 30);
+  assert.equal(info4.isWarning, true);
+  assert.equal(info4.scholarshipTier, "none");
+});
+
+test("isPrerequisiteSatisfied and isCourseAvailable correctly handle OR alternative prerequisites", () => {
+  // Direct match
+  assert.equal(
+    isPrerequisiteSatisfied("11100101", new Set(["11100101"])),
+    true,
+  );
+  assert.equal(
+    isPrerequisiteSatisfied("11100101", new Set(["11100102"])),
+    false,
+  );
+
+  // Pipe OR separator ("11100101|11100105")
+  assert.equal(
+    isPrerequisiteSatisfied("11100101|11100105", new Set(["11100105"])),
+    true,
+  );
+  assert.equal(
+    isPrerequisiteSatisfied("11100101|11100105", new Set(["11100101"])),
+    true,
+  );
+  assert.equal(
+    isPrerequisiteSatisfied("11100101|11100105", new Set(["12010101"])),
+    false,
+  );
+
+  // Slash OR separator ("11100101/11100105")
+  assert.equal(
+    isPrerequisiteSatisfied("11100101/11100105", new Set(["11100105"])),
+    true,
+  );
+
+  // Explicit " OR " keyword separator
+  assert.equal(
+    isPrerequisiteSatisfied("11100101 OR 11100105", new Set(["11100105"])),
+    true,
+  );
+
+  // Course with alternative prereqs
+  const courseWithAltPrereq: Course = {
+    id: "12010202",
+    name: "خوارزميات متقدمة",
+    prerequisites: ["12010201|12010205", "11100101"],
+    credits: 3,
+    category: "متطلب تخصص إجباري",
+  };
+
+  // Has only one of the alternatives (12010205) and Calc 1 (11100101)
+  assert.equal(
+    isCourseAvailable(courseWithAltPrereq, new Set(["12010205", "11100101"])),
+    true,
+  );
+
+  // Missing Calc 1
+  assert.equal(
+    isCourseAvailable(courseWithAltPrereq, new Set(["12010205"])),
+    false,
+  );
+});
+
+test("detectPrerequisiteCycles identifies circular dependency loops and confirms valid catalog is acyclic", () => {
+  // Real catalog should have 0 circular dependency cycles
+  const realCatalogCycles = detectPrerequisiteCycles(realCatalogCourses);
+  assert.equal(
+    realCatalogCycles.length,
+    0,
+    "Real PTUK catalog must be an acyclic DAG",
+  );
+
+  // Synthetic test with direct circular loop: Course A -> Course B -> Course A
+  const cyclicCourses: Course[] = [
+    {
+      id: "C_A",
+      name: "مادة أ",
+      prerequisites: ["C_B"],
+      credits: 3,
+      category: "متطلب تخصص إجباري",
+    },
+    {
+      id: "C_B",
+      name: "مادة ب",
+      prerequisites: ["C_A"],
+      credits: 3,
+      category: "متطلب تخصص إجباري",
+    },
+  ];
+
+  const detected = detectPrerequisiteCycles(cyclicCourses);
+  assert.ok(detected.length > 0, "Must detect direct cyclic loop");
+  assert.ok(detected[0].includes("C_A") && detected[0].includes("C_B"));
+
+  // getTransitivePrerequisites handles cyclic graph without infinite recursion or stack overflow
+  const transitive = getTransitivePrerequisites("C_A", cyclicCourses);
+  assert.ok(transitive.has("C_B"));
+  assert.ok(transitive.has("C_A"));
+});
+
+test("computeCriticalPath discovers the longest prerequisite bottleneck chain", () => {
+  const result = computeCriticalPath(realCatalogCourses);
+  assert.ok(
+    result.maxChainLength >= 5,
+    `Expected max chain >= 5, got ${result.maxChainLength}`,
+  );
+  assert.ok(result.criticalCourseIds.size > 0);
+  assert.ok(result.longestChain.length === result.maxChainLength);
+
+  // In PTUK CSE, Calculus or Programming foundation must lead into senior graduation projects
+  assert.ok(
+    result.criticalCourseIds.has("15010101") ||
+      result.criticalCourseIds.has("11100101") ||
+      result.criticalCourseIds.has("12140101"),
+    "Introductory bottleneck courses must be recognized on the critical path",
+  );
+});
+
+test("calculateYearlyProgress accurately sums completed and total degree credits per academic year", () => {
+  const completed = new Set(["15010101", "15020101", "15200101"]); // Real catalog Year 1 courses (Calc 1, Physics 1, Palestine Issue)
+  const yearly = calculateYearlyProgress(realCatalogCourses, completed);
+
+  // 164-credit CSE engineering plan scales to 5 academic years
+  assert.equal(yearly.length, 5);
+  assert.equal(yearly[0].year, 1);
+  assert.ok(yearly[0].totalCredits > 30);
+  assert.ok(yearly[0].completedCredits >= 9);
+  assert.ok(yearly[0].percentage > 0 && yearly[0].percentage <= 100);
+
+  // Year 4 and Year 5 should have 0 completed initially
+  assert.equal(yearly[3].completedCredits, 0);
+  assert.equal(yearly[3].percentage, 0);
+  assert.equal(yearly[4].year, 5);
+  assert.equal(yearly[4].completedCredits, 0);
+
+  // 132-credit Bachelor plan scales to 4 academic years
+  const bachelorYearly = calculateYearlyProgress(
+    realCatalogCourses,
+    completed,
+    132,
+  );
+  assert.equal(bachelorYearly.length, 4);
+
+  // 72-credit Diploma plan scales to 2 academic years
+  const diplomaYearly = calculateYearlyProgress(
+    realCatalogCourses,
+    completed,
+    72,
+  );
+  assert.equal(diplomaYearly.length, 2);
+});
+
+test("getTopRetakeRecommendations returns all courses boosting GPA by more than 0.1 and excludes negligible boosts", () => {
+  const sampleCourses: Course[] = [
+    {
+      id: "C1",
+      name: "برمجة متقدمة",
+      credits: 3,
+      category: "متطلب تخصص إجباري",
+      prerequisites: [],
+    },
+    {
+      id: "C2",
+      name: "قواعد بيانات",
+      credits: 3,
+      category: "متطلب تخصص إجباري",
+      prerequisites: [],
+    },
+    {
+      id: "C3",
+      name: "مختبر شبكات",
+      credits: 1,
+      category: "متطلب تخصص إجباري",
+      prerequisites: [],
+    },
+    {
+      id: "C4",
+      name: "هياكل بيانات",
+      credits: 3,
+      category: "متطلب تخصص إجباري",
+      prerequisites: [],
+    },
+  ];
+
+  const completed = new Set(["C1", "C2", "C3", "C4"]); // Total credits = 10
+  const grades: Record<string, number> = {
+    C1: 60, // (85 - 60) * 3 / 10 = 7.5 > 0.1 -> Included
+    C2: 80, // (85 - 80) * 3 / 10 = 1.5 > 0.1 -> Included
+    C3: 84, // (85 - 84) * 1 / 10 = 0.1 -> Exactly 0.1, not > 0.1 -> Excluded
+    C4: 85, // Current grade equals target -> Excluded
+  };
+
+  const recs = getTopRetakeRecommendations(
+    sampleCourses,
+    grades,
+    completed,
+    85,
+    undefined,
+    0.1,
+  );
+
+  assert.equal(recs.length, 2);
+  assert.equal(recs[0].course.id, "C1");
+  assert.ok(recs[0].potentialGpaBoost > 0.1);
+  assert.equal(recs[1].course.id, "C2");
+  assert.ok(recs[1].potentialGpaBoost > 0.1);
+});
+
+test("getTopRetakeRecommendations respects custom limits when provided", () => {
+  const sampleCourses: Course[] = [
+    {
+      id: "A",
+      name: "A",
+      credits: 3,
+      category: "متطلب تخصص إجباري",
+      prerequisites: [],
+    },
+    {
+      id: "B",
+      name: "B",
+      credits: 3,
+      category: "متطلب تخصص إجباري",
+      prerequisites: [],
+    },
+    {
+      id: "C",
+      name: "C",
+      credits: 3,
+      category: "متطلب تخصص إجباري",
+      prerequisites: [],
+    },
+  ];
+  const completed = new Set(["A", "B", "C"]);
+  const grades = { A: 60, B: 65, C: 70 };
+
+  const limited = getTopRetakeRecommendations(
+    sampleCourses,
+    grades,
+    completed,
+    85,
+    2,
+    0.1,
+  );
+  assert.equal(limited.length, 2);
+  assert.equal(limited[0].course.id, "A");
+  assert.equal(limited[1].course.id, "B");
+});
+
+test("calculateGPA allows what-if simulation for courses with existing grade > 75 without arbitrary block", () => {
+  const courses: Course[] = [
+    {
+      id: "MATH1",
+      name: "Calculus",
+      credits: 3,
+      category: "متطلب كلية إجباري",
+      prerequisites: [],
+    },
+  ];
+  const completed = new Set(["MATH1"]);
+  const grades = { MATH1: 78 };
+
+  // Prior logic blocked what-if if grade > 75. New logic allows simulating retake for any course:
+  const whatIfGrades = { MATH1: 95 };
+  const gpa = calculateGPA(
+    courses,
+    grades,
+    completed,
+    new Set(),
+    whatIfGrades,
+    true,
+  );
+  assert.equal(gpa, 95);
+});
+
+test("getTopRetakeRecommendations includes and prioritizes failed courses", () => {
+  const courses: Course[] = [
+    {
+      id: "FAIL1",
+      name: "Digital Logic",
+      credits: 3,
+      category: "متطلب تخصص إجباري",
+      prerequisites: [],
+    },
+    {
+      id: "PASS1",
+      name: "Programming",
+      credits: 3,
+      category: "متطلب تخصص إجباري",
+      prerequisites: [],
+    },
+  ];
+  const completed = new Set(["PASS1"]);
+  const failed = new Set(["FAIL1"]);
+  const grades = { FAIL1: 42, PASS1: 65 };
+
+  const recs = getTopRetakeRecommendations(
+    courses,
+    grades,
+    completed,
+    failed,
+    85,
+    undefined,
+    0.1,
+  );
+  assert.equal(recs.length, 2);
+  assert.equal(recs[0].course.id, "FAIL1"); // Failed course prioritized first
+  assert.ok(recs[0].potentialGpaBoost > recs[1].potentialGpaBoost);
 });

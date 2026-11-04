@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { escapeCsvValue, parseCsvRows } from "../src/csv";
+import { escapeCsvValue, parseCsvRows } from "../src/core/csv";
 
 test("parses quoted commas and escaped quotes across CRLF rows", () => {
   const csv = [
@@ -32,4 +32,11 @@ test("strips a UTF-8 BOM before parsing the first header", () => {
 test("rejects malformed quoted fields", () => {
   assert.throws(() => parseCsvRows('"incomplete'), /غير مكتمل/);
   assert.throws(() => parseCsvRows('"quoted"x'), /بعد نهاية الحقل/);
+});
+
+test("neutralizes CSV formula injection characters (=, +, -, @)", () => {
+  assert.equal(escapeCsvValue("=cmd|' /C calc'!A0"), "\"'=cmd|' /C calc'!A0\"");
+  assert.equal(escapeCsvValue("+12345"), ' "\'+12345"'.trim());
+  assert.equal(escapeCsvValue("@admin"), '"\'@admin"');
+  assert.equal(escapeCsvValue("Normal Course"), '"Normal Course"');
 });

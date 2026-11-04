@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:all": "node scripts/devAll.js",
     "build": "vite build",
     "start": "node Server.js",
     "preview": "vite preview",
@@ -12,33 +13,41 @@
     "lint": "tsc --noEmit",
     "sync": "node scripts/autoSync.js",
     "sync:schedule": "node scripts/localAutoSync.js",
-    "test": "node --import tsx --test tests/courseProgress.test.ts tests/appStorage.test.ts tests/csv.test.ts tests/sharedSchedules.test.ts tests/courseOfferings.test.ts tests/utils.test.ts tests/courseExplanations.test.ts tests/scheduleSolver.test.ts tests/courseService.test.ts tests/backendApi.test.ts"
+    "test": "node scripts/audit-illusions.js && node --import tsx --test \"tests/*.test.ts\""
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.117.2",
     "@tailwindcss/vite": "^4.1.14",
+    "@types/better-sqlite3": "^9.6.0",
     "@vercel/analytics": "^2.0.1",
     "@vercel/speed-insights": "^2.0.0",
     "@vitejs/plugin-react": "^5.0.4",
     "@xyflow/react": "^12.10.2",
     "axios": "^1.20.0",
+    "better-sqlite3": "^13.0.3",
     "cheerio": "^1.2.0",
     "clsx": "^2.1.1",
     "cors": "^2.8.6",
     "dagre": "^0.8.5",
     "dotenv": "^17.2.3",
     "express": "^4.22.3",
+    "express-rate-limit": "^8.7.1",
+    "express-validator": "^7.3.2",
+    "helmet": "^8.3.0",
     "html-to-image": "^1.11.13",
     "jspdf": "^4.2.1",
     "lucide-react": "^0.546.0",
     "motion": "^12.23.24",
     "node-cron": "^4.6.0",
+    "pino": "^10.4.0",
+    "pino-pretty": "^13.2.0",
     "playwright": "^1.63.0",
     "qrcode": "^1.5.4",
     "react": "^19.0.1",
     "react-dom": "^19.0.1",
     "tailwind-merge": "^3.5.0",
-    "vite": "^6.2.3"
+    "vite": "^6.2.3",
+    "zod": "^4.6.7"
   },
   "overrides": {
     "qs": "^6.16.0"

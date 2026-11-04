@@ -1,0 +1,31 @@
+services:
+  planner:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: ptuk-academic-planner
+    restart: unless-stopped
+    ports:
+      - "3001:3001"
+    environment:
+      - NODE_ENV=production
+      - PORT=3001
+    env_file:
+      - .env
+    volumes:
+      - ptuk_sqlite_data:/app/server/data
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "wget",
+          "--spider",
+          "-q",
+          "http://localhost:3001/api/sync/status",
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+volumes:
+  ptuk_sqlite_data:

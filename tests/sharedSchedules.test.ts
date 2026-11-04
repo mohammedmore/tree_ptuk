@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { normalizeSharedScheduleSnapshot } from "../src/sharedSchedules";
+import {
+  normalizeSharedScheduleSnapshot,
+  hashPinCode,
+  verifyPinCode,
+} from "../src/core/sharedSchedules";
 
 function createSnapshot() {
   return {
@@ -61,5 +65,38 @@ test("preserves legacy single-day weekly schedule entries", () => {
     normalizeSharedScheduleSnapshot(snapshot)?.weeklySchedule.semester.course
       .days,
     ["الأحد"],
+  );
+});
+
+test("Item 73: hashPinCode and verifyPinCode authenticate PIN protected schedules accurately", async () => {
+  const pin = "2026";
+  const hash = await hashPinCode(pin);
+  assert.equal(typeof hash, "string");
+  assert.equal(hash.length, 64); // SHA-256 hex string
+
+  // Correct PIN verifies true
+  const isValid = await verifyPinCode("2026", hash);
+  assert.equal(isValid, true);
+
+  // Wrong PIN verifies false
+  const isWrong = await verifyPinCode("9999", hash);
+  assert.equal(isWrong, false);
+
+  // Normalization preserves valid 64-character hex pinHash
+  const protectedSnapshot = {
+    ...createSnapshot(),
+    pinHash: hash,
+  };
+  const normalized = normalizeSharedScheduleSnapshot(protectedSnapshot);
+  assert.equal(normalized?.pinHash, hash);
+
+  // Normalization purges invalid/corrupted pinHash
+  const corruptedSnapshot = {
+    ...createSnapshot(),
+    pinHash: "invalid-short-hash",
+  };
+  assert.equal(
+    normalizeSharedScheduleSnapshot(corruptedSnapshot)?.pinHash,
+    undefined,
   );
 });
