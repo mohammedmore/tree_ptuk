@@ -6,10 +6,15 @@ on:
   pull_request:
     branches: ["main"]
 
+permissions:
+  contents: read
+
 jobs:
   quality-check:
     name: 🎨 Code Quality (ESLint & Prettier)
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
@@ -34,6 +39,8 @@ jobs:
   security-audit:
     name: 🔒 Dependencies Security (SCA)
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
@@ -51,7 +58,9 @@ jobs:
     name: 🛡️ CodeQL (OWASP Top 10)
     runs-on: ubuntu-latest
     permissions:
+      contents: read
       security-events: write
+      actions: read
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
