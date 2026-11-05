@@ -18,3 +18,4 @@ export { default as PlanScenarioModal } from "./PlanScenarioModal";
 export { CommandPaletteModal } from "./CommandPaletteModal";
 export { CourseComparisonDrawer } from "./CourseComparisonDrawer";
 export { AcademicCalendarModal } from "./AcademicCalendarModal";
+export { default as SystemHealthModal } from "./SystemHealthModal";

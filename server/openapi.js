@@ -26,6 +26,31 @@ export const openApiSpec = {
         },
       },
     },
+    "/health/live": {
+      get: {
+        summary: "Kubernetes/container liveness probe",
+        responses: {
+          200: { description: "Process is live" },
+        },
+      },
+    },
+    "/health/ready": {
+      get: {
+        summary: "Readiness probe verifying DB and upstream gateway",
+        responses: {
+          200: { description: "Process is ready to serve traffic" },
+          503: { description: "Process is not ready" },
+        },
+      },
+    },
+    "/observability/stats": {
+      get: {
+        summary: "Real-time performance metrics and percentile latencies",
+        responses: {
+          200: { description: "Live observability telemetry payload" },
+        },
+      },
+    },
     "/courses": {
       get: {
         summary: "List catalog courses with sections and schedule blocks",

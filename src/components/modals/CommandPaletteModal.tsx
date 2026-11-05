@@ -25,6 +25,7 @@ import {
   Printer,
   Contrast,
   X,
+  Activity,
 } from "lucide-react";
 import type { Course } from "../../data";
 import type { AppRoute } from "../../router";
@@ -46,6 +47,7 @@ export interface CommandPaletteProps {
   onSelectMajor?: (majorId: string) => void;
   onOpenComparison?: () => void;
   onOpenCalendar?: () => void;
+  onOpenSystemHealth?: () => void;
   onPrintTranscript?: () => void;
   activeMajorId?: string;
 }
@@ -72,6 +74,7 @@ export const CommandPaletteModal: React.FC<CommandPaletteProps> = ({
   onSelectMajor,
   onOpenComparison,
   onOpenCalendar,
+  onOpenSystemHealth,
   onPrintTranscript,
   activeMajorId,
 }) => {
@@ -169,6 +172,31 @@ export const CommandPaletteModal: React.FC<CommandPaletteProps> = ({
           "إضافة",
           "calendar",
           "dates",
+        ],
+      },
+      {
+        id: "action-system-health",
+        title: "مراقبة واستقرار النظام (Observability)",
+        subtitle:
+          "تتبع زمن الاستجابة، حالة قاطع دورة Edugate، واستهلاك الذاكرة",
+        category: "actions",
+        icon: <Activity size={16} className="text-emerald-500" />,
+        perform: () => {
+          if (onOpenSystemHealth) onOpenSystemHealth();
+        },
+        keywords: [
+          "حالة",
+          "النظام",
+          "مراقبة",
+          "أداء",
+          "استقرار",
+          "سيرفر",
+          "health",
+          "status",
+          "latency",
+          "observability",
+          "metrics",
+          "edugate",
         ],
       },
       {

@@ -136,6 +136,11 @@ const AcademicCalendarModal = lazyWithRetry(() =>
     default: m.AcademicCalendarModal,
   })),
 );
+const SystemHealthModal = lazyWithRetry(() =>
+  import("./components/modals/SystemHealthModal").then((m) => ({
+    default: m.SystemHealthModal,
+  })),
+);
 import {
   ShareScheduleModal,
   LoadScheduleModal,
@@ -924,6 +929,7 @@ export function App() {
   const [isCalendarModalOpen, setIsCalendarModalOpen] = useState(false);
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
   const [isComparisonOpen, setIsComparisonOpen] = useState(false);
+  const [isSystemHealthModalOpen, setIsSystemHealthModalOpen] = useState(false);
 
   // Global keyboard shortcut for Command Palette (Ctrl+K / Cmd+K)
   useEffect(() => {
@@ -1449,11 +1455,7 @@ export function App() {
                 typeof navigator !== "undefined" ? navigator.onLine : true
               }
               lastSyncText={syncTimeText}
-              onClick={() =>
-                showAppToast(
-                  `حالة المزامنة: متزامن مع بوابة الجامعة (${syncTimeText})`,
-                )
-              }
+              onClick={() => setIsSystemHealthModalOpen(true)}
             />
           </div>
 
@@ -2322,6 +2324,14 @@ export function App() {
           />
         )}
 
+        {/* System Health & Live Observability Modal */}
+        {isSystemHealthModalOpen && (
+          <SystemHealthModal
+            isOpen={true}
+            onClose={() => setIsSystemHealthModalOpen(false)}
+          />
+        )}
+
         {/* Command Palette Modal (Ctrl+K) */}
         <CommandPaletteModal
           isOpen={isCommandPaletteOpen}
@@ -2351,6 +2361,10 @@ export function App() {
           onOpenCalendar={() => {
             setIsCommandPaletteOpen(false);
             setIsCalendarModalOpen(true);
+          }}
+          onOpenSystemHealth={() => {
+            setIsCommandPaletteOpen(false);
+            setIsSystemHealthModalOpen(true);
           }}
           onPrintTranscript={() => {
             setIsCommandPaletteOpen(false);
