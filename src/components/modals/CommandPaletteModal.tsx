@@ -48,6 +48,7 @@ export interface CommandPaletteProps {
   onOpenComparison?: () => void;
   onOpenCalendar?: () => void;
   onOpenSystemHealth?: () => void;
+  onOpenAdvisor?: () => void;
   onPrintTranscript?: () => void;
   activeMajorId?: string;
 }
@@ -75,6 +76,7 @@ export const CommandPaletteModal: React.FC<CommandPaletteProps> = ({
   onOpenComparison,
   onOpenCalendar,
   onOpenSystemHealth,
+  onOpenAdvisor,
   onPrintTranscript,
   activeMajorId,
 }) => {
@@ -197,6 +199,31 @@ export const CommandPaletteModal: React.FC<CommandPaletteProps> = ({
           "observability",
           "metrics",
           "edugate",
+        ],
+      },
+      {
+        id: "action-academic-advisor",
+        title: "المرشد الأكاديمي والمسار الحرج (Academic Advisor)",
+        subtitle:
+          "كشف المواد العنقودية، محاكاة تأخير التخرج، والتوصية بالفصل القادم",
+        category: "actions",
+        icon: <Compass size={16} className="text-indigo-500" />,
+        perform: () => {
+          if (onOpenAdvisor) onOpenAdvisor();
+        },
+        keywords: [
+          "مرشد",
+          "أكاديمي",
+          "مسار",
+          "حرج",
+          "اختناق",
+          "تخرج",
+          "معدل",
+          "توصية",
+          "advisor",
+          "critical",
+          "path",
+          "gpa",
         ],
       },
       {

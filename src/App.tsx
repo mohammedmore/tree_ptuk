@@ -141,6 +141,11 @@ const SystemHealthModal = lazyWithRetry(() =>
     default: m.SystemHealthModal,
   })),
 );
+const AcademicAdvisorModal = lazyWithRetry(() =>
+  import("./components/modals/AcademicAdvisorModal").then((m) => ({
+    default: m.AcademicAdvisorModal,
+  })),
+);
 import {
   ShareScheduleModal,
   LoadScheduleModal,
@@ -930,6 +935,7 @@ export function App() {
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
   const [isComparisonOpen, setIsComparisonOpen] = useState(false);
   const [isSystemHealthModalOpen, setIsSystemHealthModalOpen] = useState(false);
+  const [isAdvisorModalOpen, setIsAdvisorModalOpen] = useState(false);
 
   // Global keyboard shortcut for Command Palette (Ctrl+K / Cmd+K)
   useEffect(() => {
@@ -2332,6 +2338,26 @@ export function App() {
           />
         )}
 
+        {/* AI Academic Advisor & Critical Path Modal */}
+        {isAdvisorModalOpen && (
+          <AcademicAdvisorModal
+            isOpen={true}
+            onClose={() => setIsAdvisorModalOpen(false)}
+            courses={courses}
+            completedCourses={completedCourses}
+            studentGpa={
+              typeof currentStudent?.gpa === "number" ? currentStudent.gpa : 75
+            }
+            hasAcademicWarning={Boolean(currentStudent?.academicWarning)}
+            completedHours={earnedCredits}
+            onApplyRecommendedPlan={(recCourses) => {
+              showAppToast(
+                `تمت مواءمة الخطة الأكاديمية بنجاح (${recCourses.length} مساقات مقترحة).`,
+              );
+            }}
+          />
+        )}
+
         {/* Command Palette Modal (Ctrl+K) */}
         <CommandPaletteModal
           isOpen={isCommandPaletteOpen}
@@ -2365,6 +2391,10 @@ export function App() {
           onOpenSystemHealth={() => {
             setIsCommandPaletteOpen(false);
             setIsSystemHealthModalOpen(true);
+          }}
+          onOpenAdvisor={() => {
+            setIsCommandPaletteOpen(false);
+            setIsAdvisorModalOpen(true);
           }}
           onPrintTranscript={() => {
             setIsCommandPaletteOpen(false);

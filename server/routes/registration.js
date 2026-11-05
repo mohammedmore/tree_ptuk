@@ -14,7 +14,9 @@ import {
   registrationExecuteSchema,
   registrationTestRequestSchema,
   registrationCheckSeatsSchema,
+  registrationSnipeCheckSchema,
 } from "../validators.js";
+import { snipeAndRegister } from "../services/seatSniperService.js";
 
 const router = express.Router();
 
@@ -248,6 +250,73 @@ router.post(
     } catch (err) {
       console.error("Check seats error:", err.message || err);
       return res.status(500).json({ error: "فشل التحقق من سعة الشعب." });
+    }
+  },
+);
+
+/**
+ * POST /api/registration/snipe-check
+ * Inspects target closed sections, identifies vacancies, and triggers instant registration if autoExecute is enabled.
+ */
+router.post(
+  "/snipe-check",
+  authenticateStudentSession,
+  validateBody(registrationSnipeCheckSchema),
+  async (req, res) => {
+    try {
+      const {
+        studentId,
+        password,
+        targetSeats,
+        autoExecute,
+        plan,
+        semester,
+        demoMode,
+      } = req.body;
+
+      // Require authenticated session for sniper checks
+      if (!req.studentSession && !demoMode) {
+        return res.status(401).json({
+          error:
+            "طلب غير مصرح به: يجب تسجيل الدخول واستخدام جلسة صالحة لمراقبة المقاعد.",
+        });
+      }
+
+      // OWASP BOLA Mitigation: verify that authenticated student matches payload
+      if (req.studentSession && !demoMode) {
+        const sessionStudentId = req.studentSession.studentId;
+        const actualStudentId = req.studentSession.actualStudentId;
+        const isSelf =
+          sessionStudentId === studentId || actualStudentId === studentId;
+        if (!isSelf && req.studentSession.role !== "admin") {
+          return res.status(403).json({
+            error:
+              "طلب مرفوض: غير مصرح لك بمراقبة مقاعد لحساب طالب آخر (BOLA Violation).",
+          });
+        }
+      }
+
+      const outcome = await snipeAndRegister({
+        studentId,
+        password,
+        targetSeats,
+        autoExecute: Boolean(autoExecute),
+        plan,
+        semester: semester || "20241",
+        demoMode: Boolean(demoMode),
+      });
+
+      return res.json({
+        success: true,
+        data: outcome,
+      });
+    } catch (err) {
+      console.error("Seat sniper check error:", err.message || err);
+      return res.status(500).json({
+        error: "فشل التحقق من توفر المقاعد للقناص.",
+        message:
+          process.env.NODE_ENV === "production" ? undefined : err.message,
+      });
     }
   },
 );
