@@ -1,6 +1,7 @@
 import type { ScheduleEntry, Course } from "../data";
 import type { CatalogSection } from "../services/scheduleSolver";
 import { normalizeDayKey, hasConflict } from "../services/scheduleSolver";
+import { parseTimeToMinutes as parseSafeMinutes } from "./scheduleTimeParser";
 
 export interface SwapAnalysis {
   isAlreadyEnrolledInCourse: boolean;
@@ -16,24 +17,7 @@ export interface SwapAnalysis {
 }
 
 function parseTimeToMinutes(timeVal: string | number | undefined): number {
-  if (timeVal === undefined || timeVal === null) return 0;
-  if (typeof timeVal === "number") {
-    if (timeVal < 30) {
-      // Decimal hours, e.g. 8.5 -> 510 minutes
-      return Math.round(timeVal * 60);
-    }
-    return timeVal;
-  }
-  const timeStr = String(timeVal).trim();
-  if (timeStr.includes(":")) {
-    const [h, m] = timeStr.split(":").map(Number);
-    if (!isNaN(h)) return h * 60 + (m || 0);
-  }
-  const parsed = parseFloat(timeStr);
-  if (!isNaN(parsed)) {
-    return parsed < 30 ? Math.round(parsed * 60) : parsed;
-  }
-  return 0;
+  return parseSafeMinutes(timeVal) ?? 0;
 }
 
 /**

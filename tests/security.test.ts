@@ -12,6 +12,8 @@ import {
   isAccountLocked,
   recordFailedLogin,
   recordSuccessfulLogin,
+  sanitizeStudentRecordForClient,
+  hydrateSecurityStateFromDb,
 } from "../server/services/securityVault.js";
 import {
   sanitizeBody,
@@ -19,7 +21,18 @@ import {
   enforceContentType,
   additionalSecurityHeaders,
   validateSsrfTarget,
+  extractClientIdentity,
 } from "../server/middleware/security.js";
+import {
+  sqliteGetRevokedTokens,
+  sqliteGetAccountLockouts,
+} from "../server/sqliteDb.js";
+import {
+  studentLoginSchema,
+  registrationExecuteSchema,
+  registrationPrewarmSchema,
+  syncPtukSchema,
+} from "../server/validators.js";
 import {
   sanitizeSafeHttpUrl,
   normalizeSharedScheduleSnapshot,
@@ -497,4 +510,178 @@ test("database encryption at rest encrypts student profiles on disk", async () =
   assert.ok(inMemory);
   assert.equal(inMemory.studentName, "Secret Student Name 99");
   assert.equal(inMemory.gpa, 3.95);
+});
+
+test("sanitizeStudentRecordForClient eliminates authHash, password, and internal markers", () => {
+  const dirtyRecord = {
+    studentId: "202110999",
+    studentName: "Ahmad PTUK",
+    gpa: 3.8,
+    authHash: "c0ffee:1234567890abcdef",
+    password: "plain-secret-password",
+    _encryptionVersion: "v1",
+    planCourses: [{ code: "15200099", name: "Remedial English" }],
+  };
+
+  const clean = sanitizeStudentRecordForClient(dirtyRecord);
+  assert.equal(clean.studentId, "202110999");
+  assert.equal(clean.studentName, "Ahmad PTUK");
+  assert.equal(clean.gpa, 3.8);
+  assert.equal(clean.authHash, undefined, "authHash must be stripped");
+  assert.equal(clean.password, undefined, "password must be stripped");
+  assert.equal(
+    clean._encryptionVersion,
+    undefined,
+    "_encryptionVersion must be stripped",
+  );
+});
+
+test("SQLite persistent security state stores revoked tokens and survives cache rehydration", () => {
+  const token = signSessionToken(
+    { studentId: "202110555", role: "student" },
+    3600,
+  );
+  const sig = token.split(".")[2];
+
+  assert.equal(isSessionTokenRevoked(token), false);
+  revokeSessionToken(token);
+  assert.equal(isSessionTokenRevoked(token), true);
+
+  // Check persistent SQLite table
+  const dbTokens = sqliteGetRevokedTokens();
+  const found = dbTokens.some((t: any) => t.signature === sig);
+  assert.ok(found, "Revoked signature must exist in SQLite database");
+
+  // Rehydrate cache to simulate server restart
+  hydrateSecurityStateFromDb();
+  assert.equal(
+    isSessionTokenRevoked(token),
+    true,
+    "Revocation must persist across rehydration",
+  );
+});
+
+test("SQLite persistent security state stores account lockouts and clears on successful login", () => {
+  const testId = "202410777";
+  for (let i = 0; i < 5; i++) {
+    recordFailedLogin(testId);
+  }
+
+  const status = isAccountLocked(testId);
+  assert.equal(
+    status.locked,
+    true,
+    "Account must be locked after 5 failed attempts",
+  );
+
+  const dbLockouts = sqliteGetAccountLockouts();
+  const dbEntry = dbLockouts.find((l: any) => l.student_id === testId);
+  assert.ok(dbEntry, "Lockout record must be persisted in SQLite");
+  assert.equal(dbEntry.attempts, 5);
+
+  // Simulate successful login
+  recordSuccessfulLogin(testId);
+  assert.equal(isAccountLocked(testId).locked, false);
+
+  const postClearLockouts = sqliteGetAccountLockouts();
+  const cleared = postClearLockouts.find((l: any) => l.student_id === testId);
+  assert.equal(
+    cleared,
+    undefined,
+    "Lockout record must be deleted from SQLite upon successful login",
+  );
+});
+
+test("Zod schemas enforce fail-closed input validation", () => {
+  // studentLoginSchema accepts valid university IDs and normalizes Arabic numerals
+  const validArabicLogin = studentLoginSchema.safeParse({
+    studentId: "٢٠٢١١٠١٢٣",
+    password: "secretpassword123",
+  });
+  assert.ok(validArabicLogin.success);
+  assert.equal(validArabicLogin.data.studentId, "202110123");
+
+  // Rejects invalid chars in studentId
+  const invalidLogin = studentLoginSchema.safeParse({
+    studentId: "invalid<script>",
+    password: "pwd",
+  });
+  assert.equal(invalidLogin.success, false);
+
+  // registrationExecuteSchema validates plan structure
+  const invalidPlanExec = registrationExecuteSchema.safeParse({
+    studentId: "202110123",
+    plans: "not-an-object",
+  });
+  assert.equal(invalidPlanExec.success, false);
+
+  const validPlanExec = registrationExecuteSchema.safeParse({
+    studentId: "202110123",
+    plans: { A: { items: [] } },
+  });
+  assert.ok(validPlanExec.success);
+});
+
+test("extractClientIdentity generates dual-key (IP + student ID) for university NAT protection", () => {
+  const req1: any = {
+    ip: "194.165.1.10",
+    body: { studentId: "202110111" },
+    headers: {},
+  };
+  extractClientIdentity(req1, {} as any, () => {});
+  assert.equal(req1.clientIdentity, "194.165.1.10:202110111");
+
+  const req2: any = {
+    ip: "194.165.1.10",
+    body: { studentId: "202210222" },
+    headers: {},
+  };
+  extractClientIdentity(req2, {} as any, () => {});
+  assert.equal(req2.clientIdentity, "194.165.1.10:202210222");
+
+  // Distinct identities despite sharing the same university NAT IP!
+  assert.notEqual(req1.clientIdentity, req2.clientIdentity);
+});
+
+test("BOLA protection: POST /api/registration/execute blocks registration on mismatched student session", async () => {
+  const http = await import("node:http");
+  const server = http.createServer(app);
+
+  await new Promise<void>((resolve) => server.listen(0, resolve));
+  const address = server.address() as any;
+  const baseUrl = `http://127.0.0.1:${address.port}`;
+
+  try {
+    // Generate valid session token for student A
+    const tokenA = signSessionToken({
+      studentId: "202110123",
+      role: "student",
+    });
+
+    // Attempt to execute registration for student B with student A's token
+    const resp = await fetch(`${baseUrl}/api/registration/execute`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${tokenA}`,
+      },
+      body: JSON.stringify({
+        studentId: "202210999", // Mismatched target student!
+        plans: { A: { items: [] } },
+      }),
+    });
+
+    assert.equal(
+      resp.status,
+      403,
+      "Must reject BOLA attempt with HTTP 403 Forbidden",
+    );
+    const json = await resp.json();
+    assert.ok(
+      json.error.includes("BOLA"),
+      "Error message should mention BOLA violation",
+    );
+  } finally {
+    server.close();
+  }
 });

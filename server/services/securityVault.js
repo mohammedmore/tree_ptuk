@@ -1,4 +1,12 @@
 import crypto from "node:crypto";
+import {
+  sqliteRevokeToken,
+  sqliteGetRevokedTokens,
+  sqliteSaveAccountLockout,
+  sqliteGetAccountLockouts,
+  sqliteDeleteAccountLockout,
+  sqlitePruneExpiredSecurityState,
+} from "../sqliteDb.js";
 
 const ALGORITHM = "aes-256-gcm";
 const IV_LENGTH = 12; // 96 bits for GCM
@@ -179,9 +187,31 @@ function unbase64url(input) {
   return Buffer.from(base64, "base64").toString("utf8");
 }
 
-// ─── Token Revocation Blacklist ───────────────────────────────────────────
+// ─── Token Revocation Blacklist (L1 In-Memory Cache + SQLite L2 Persistence) ──
 const revokedTokens = new Map(); // signature -> expiry timestamp
 const REVOCATION_CLEANUP_INTERVAL_MS = 60 * 1000;
+
+// Hydrate revocation cache and lockouts from SQLite on startup
+export function hydrateSecurityStateFromDb() {
+  try {
+    const activeTokens = sqliteGetRevokedTokens();
+    for (const row of activeTokens) {
+      revokedTokens.set(row.signature, row.expires_at);
+    }
+    const activeLockouts = sqliteGetAccountLockouts();
+    for (const row of activeLockouts) {
+      accountLockouts.set(row.student_id, {
+        attempts: row.attempts,
+        firstAttempt: row.first_attempt_at,
+        lockedUntil: row.locked_until,
+      });
+    }
+  } catch (err) {
+    // Graceful fallback during early migration/test setup
+  }
+}
+
+hydrateSecurityStateFromDb();
 
 const cleanupInterval = setInterval(() => {
   const now = Math.floor(Date.now() / 1000);
@@ -190,13 +220,14 @@ const cleanupInterval = setInterval(() => {
       revokedTokens.delete(sig);
     }
   }
+  sqlitePruneExpiredSecurityState();
 }, REVOCATION_CLEANUP_INTERVAL_MS);
 if (cleanupInterval.unref) {
   cleanupInterval.unref();
 }
 
 /**
- * Revokes a session token immediately.
+ * Revokes a session token immediately across memory and persistent SQLite database.
  * @param {string} token
  * @returns {boolean}
  */
@@ -209,6 +240,9 @@ export function revokeSessionToken(token) {
     const payload = JSON.parse(unbase64url(encodedPayload));
     const exp = payload.exp || Math.floor(Date.now() / 1000) + 7 * 24 * 3600;
     revokedTokens.set(signature, exp);
+    try {
+      sqliteRevokeToken(signature, exp);
+    } catch {}
     return true;
   } catch {
     return false;
@@ -228,7 +262,7 @@ export function isSessionTokenRevoked(token) {
   return revokedTokens.has(signature);
 }
 
-// ─── Account-Based Brute Force Lockout Tracker (Dual-Key Security) ────────
+// ─── Account-Based Brute Force Lockout Tracker (Dual-Key Security + SQLite) ───
 const accountLockouts = new Map(); // studentId -> { attempts: number, firstAttempt: number, lockedUntil: number }
 const MAX_FAILED_ATTEMPTS = 5;
 const ATTEMPT_WINDOW_MS = 15 * 60 * 1000; // 15 minutes
@@ -254,6 +288,9 @@ export function isAccountLocked(studentId) {
   // Lockout expired
   if (state.lockedUntil && state.lockedUntil <= now) {
     accountLockouts.delete(normId);
+    try {
+      sqliteDeleteAccountLockout(normId);
+    } catch {}
   }
 
   return { locked: false, remainingSeconds: 0 };
@@ -261,7 +298,7 @@ export function isAccountLocked(studentId) {
 
 /**
  * Records a failed login attempt for an account.
- * Triggers a 15-minute lockout if threshold is exceeded.
+ * Triggers a 15-minute lockout if threshold is exceeded and writes through to SQLite.
  * @param {string} studentId
  */
 export function recordFailedLogin(studentId) {
@@ -290,6 +327,14 @@ export function recordFailedLogin(studentId) {
   }
 
   accountLockouts.set(normId, state);
+  try {
+    sqliteSaveAccountLockout(
+      normId,
+      state.attempts,
+      state.firstAttempt,
+      state.lockedUntil,
+    );
+  } catch {}
   return state;
 }
 
@@ -301,10 +346,29 @@ export function recordSuccessfulLogin(studentId) {
   if (!studentId) return;
   const normId = String(studentId).trim().toLowerCase();
   accountLockouts.delete(normId);
+  try {
+    sqliteDeleteAccountLockout(normId);
+  } catch {}
 }
 
 /**
- * Signs a tamper-proof session token using HMAC-SHA256.
+ * Strips all credential hashes and sensitive internal metadata from a student record
+ * before returning it in HTTP API responses.
+ * Enforces OWASP API3:2023 (Broken Object Property Level Authorization) & NIST privacy rules.
+ * @param {object} record
+ * @returns {object}
+ */
+export function sanitizeStudentRecordForClient(record) {
+  if (!record || typeof record !== "object") return record;
+  const clientSafe = { ...record };
+  delete clientSafe.authHash;
+  delete clientSafe.password;
+  delete clientSafe._encryptionVersion;
+  return clientSafe;
+}
+
+/**
+ * Signs a tamper-proof session token using HMAC-SHA256 with an anti-replay nonce (jti).
  * @param {object} payload
  * @param {number} [expiresInSeconds=604800] Default 7 days
  * @returns {string}
@@ -313,6 +377,7 @@ export function signSessionToken(payload, expiresInSeconds = 7 * 24 * 3600) {
   const header = { alg: "HS256", typ: "JWT" };
   const now = Math.floor(Date.now() / 1000);
   const fullPayload = {
+    jti: crypto.randomUUID(),
     ...payload,
     iat: now,
     exp: now + expiresInSeconds,

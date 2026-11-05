@@ -4,6 +4,7 @@ import {
   executeRealEdugateRegistration,
 } from "./scrapers/edugateLiveRegistration.js";
 import { getCourses } from "../db.js";
+import { edugateCircuitBreaker } from "../utils/circuitBreaker.js";
 
 export { checkOnlineRegistrationStatus, executeRealEdugateRegistration };
 
@@ -29,6 +30,18 @@ export async function prewarmSession({
       message: "جلسة التسجيل جاهزة ومُهيأة مسبقاً (وضع المحاكاة السريع).",
       timestamp: new Date().toISOString(),
       serverTimestamp: Date.now(),
+    };
+  }
+
+  const circuit = edugateCircuitBreaker.canExecute();
+  if (!circuit.allowed) {
+    return {
+      success: false,
+      sessionReady: false,
+      pingMs: Date.now() - startTime,
+      serverStatus: "server_slow",
+      message: circuit.reason,
+      timestamp: new Date().toISOString(),
     };
   }
 

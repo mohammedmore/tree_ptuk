@@ -1,5 +1,11 @@
 import express from "express";
 import { getCourses, getCourseByCode, getSyncStatus } from "../db.js";
+import {
+  validateQuery,
+  validateParams,
+  coursesQuerySchema,
+  courseCodeParamSchema,
+} from "../validators.js";
 
 const router = express.Router();
 
@@ -11,15 +17,9 @@ const router = express.Router();
  * - limit: number of results (default: 500)
  * - offset: pagination offset
  */
-router.get("/", async (req, res) => {
+router.get("/", validateQuery(coursesQuerySchema), async (req, res) => {
   try {
     const { codes, search, limit, offset, compact, fields } = req.query;
-
-    // ─── Input Validation ───────────────────────────────────────────
-    // Limit search query length to prevent abuse
-    if (search && typeof search === "string" && search.length > 200) {
-      return res.status(400).json({ error: "استعلام بحث طويل جداً." });
-    }
 
     const codeList = codes
       ? String(codes)
@@ -29,15 +29,14 @@ router.get("/", async (req, res) => {
           .slice(0, 50) // Cap max codes per request
       : undefined;
 
-    const parsedLimit = limit
-      ? Math.min(1000, Math.max(1, parseInt(String(limit), 10)))
-      : 500;
-    const parsedOffset = offset ? Math.max(0, parseInt(String(offset), 10)) : 0;
+    const parsedLimit = limit || 500;
+    const parsedOffset = offset || 0;
     const fieldList = fields
       ? String(fields)
           .split(",")
           .map((f) => f.trim())
           .filter(Boolean)
+          .slice(0, 20)
       : undefined;
 
     let data = await getCourses({
@@ -88,24 +87,22 @@ router.get("/", async (req, res) => {
 /**
  * GET /api/courses/:code
  */
-router.get("/:code", async (req, res) => {
-  try {
-    const code = req.params.code;
-
-    // ─── Input Validation ───────────────────────────────────────────
-    if (!code || typeof code !== "string" || code.length > 20) {
-      return res.status(400).json({ error: "رمز المساق غير صالح." });
+router.get(
+  "/:code",
+  validateParams(courseCodeParamSchema),
+  async (req, res) => {
+    try {
+      const code = req.params.code;
+      const course = await getCourseByCode(code);
+      if (!course) {
+        return res.status(404).json({ error: "المساق غير موجود." });
+      }
+      return res.json(course);
+    } catch (err) {
+      console.error("Course by code error:", err);
+      return res.status(500).json({ error: "فشل في جلب بيانات المساق." });
     }
-
-    const course = await getCourseByCode(code);
-    if (!course) {
-      return res.status(404).json({ error: "المساق غير موجود." });
-    }
-    return res.json(course);
-  } catch (err) {
-    console.error("Course by code error:", err);
-    return res.status(500).json({ error: "فشل في جلب بيانات المساق." });
-  }
-});
+  },
+);
 
 export default router;

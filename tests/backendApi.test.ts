@@ -290,3 +290,80 @@ test("database maintenance and sqlite optimization execute cleanly", async () =>
   assert.ok(maintenanceResult.success);
   assert.equal(typeof maintenanceResult.prunedSharedSchedules, "number");
 });
+
+test("sqliteDb getSqliteMetrics returns accurate storage and count analytics", async () => {
+  const { getSqliteMetrics, sqliteUpsertCohortPlan, sqliteGetCohortPlan } =
+    await import("../server/sqliteDb.js");
+
+  const metrics = getSqliteMetrics();
+  assert.ok(metrics);
+  assert.equal(typeof metrics.sizeBytes, "number");
+  assert.ok(metrics.sizeFormatted.includes("MB"));
+  assert.ok(typeof metrics.tableCounts.courses === "number");
+  assert.ok(typeof metrics.tableCounts.sections === "number");
+  assert.ok(typeof metrics.tableCounts.students === "number");
+
+  // Test cohort plans persistence roundtrip in SQLite
+  const testMajorId = "cse_test";
+  const testYear = "2024";
+  const planData = { title: "CSE Plan 2024", semesters: [] };
+
+  sqliteUpsertCohortPlan(testMajorId, testYear, planData);
+  const retrieved = sqliteGetCohortPlan(testMajorId, testYear);
+  assert.ok(retrieved);
+  assert.equal(retrieved.title, "CSE Plan 2024");
+});
+
+test("edugateCircuitBreaker trips to OPEN on upstream failures and resets on success", async () => {
+  const { edugateCircuitBreaker } =
+    await import("../server/utils/circuitBreaker.js");
+
+  edugateCircuitBreaker.reset();
+  assert.equal(edugateCircuitBreaker.canExecute().allowed, true);
+  assert.equal(edugateCircuitBreaker.getStatus().state, "CLOSED");
+
+  // User auth errors should NOT trip the breaker
+  edugateCircuitBreaker.recordFailure(new Error("بيانات الدخول غير صحيحة"));
+  assert.equal(edugateCircuitBreaker.getStatus().consecutiveFailures, 0);
+
+  // Upstream network failures DO trip the breaker
+  edugateCircuitBreaker.recordFailure(
+    new Error("ETIMEDOUT connecting to edugate.ptuk.edu.ps:443"),
+  );
+  edugateCircuitBreaker.recordFailure(new Error("502 Bad Gateway"));
+  edugateCircuitBreaker.recordFailure(new Error("Connection reset by peer"));
+
+  assert.equal(edugateCircuitBreaker.getStatus().consecutiveFailures, 3);
+  const check = edugateCircuitBreaker.canExecute();
+  assert.equal(check.allowed, false);
+  assert.ok(check.reason?.includes("Circuit Breaker Tripped"));
+
+  // Reset and verify recovery
+  edugateCircuitBreaker.recordSuccess();
+  assert.equal(edugateCircuitBreaker.getStatus().state, "CLOSED");
+  assert.equal(edugateCircuitBreaker.canExecute().allowed, true);
+});
+
+test("GET /api/health reports comprehensive database metrics and circuit status", async () => {
+  const http = await import("node:http");
+  const server = http.createServer(app);
+
+  await new Promise<void>((resolve) => server.listen(0, resolve));
+  const address = server.address() as any;
+  const baseUrl = `http://127.0.0.1:${address.port}`;
+
+  try {
+    const res = await fetch(`${baseUrl}/api/health`);
+    assert.equal(res.status, 200);
+    const data = await res.json();
+
+    assert.equal(data.status, "healthy");
+    assert.ok(data.database.sqliteHealthy);
+    assert.ok(data.database.metrics);
+    assert.ok(data.database.metrics.sizeFormatted);
+    assert.ok(data.circuitBreaker);
+    assert.equal(data.circuitBreaker.edugate.state, "CLOSED");
+  } finally {
+    server.close();
+  }
+});

@@ -1,6 +1,7 @@
 import app, { startServer } from "./server/app.js";
 import { supabase, persistStateSync } from "./server/db.js";
 import { getSqliteDb } from "./server/sqliteDb.js";
+import { closeSharedBrowser } from "./server/services/studentPortalService.js";
 
 const PORT = process.env.PORT || 3001;
 
@@ -11,7 +12,7 @@ function handleShutdown(signal) {
   console.log(`\n🛑 Received ${signal}. Initiating graceful shutdown...`);
 
   // Close HTTP server to stop accepting new requests
-  server.close(() => {
+  server.close(async () => {
     console.log("🔒 HTTP server closed.");
     try {
       persistStateSync();
@@ -20,10 +21,19 @@ function handleShutdown(signal) {
       console.warn("Error persisting state during shutdown:", e.message);
     }
 
+    // Clean up Playwright headless browser instances to prevent zombie processes
+    try {
+      await closeSharedBrowser();
+      console.log("🌐 Playwright browser instances closed cleanly.");
+    } catch (e) {
+      console.warn("Error closing Playwright browser:", e.message);
+    }
+
     try {
       const sqlite = getSqliteDb();
+      sqlite.pragma("wal_checkpoint(TRUNCATE)");
       sqlite.close();
-      console.log("🗄️ SQLite database connection closed.");
+      console.log("🗄️ SQLite database connection closed with WAL checkpoint.");
     } catch {}
 
     process.exit(0);

@@ -1,6 +1,12 @@
 import express from "express";
 import { getMajors, getMajorById, upsertMajor } from "../db.js";
 import { requireAdminAuth } from "../middleware/security.js";
+import {
+  validateParams,
+  validateBody,
+  majorParamSchema,
+  majorBodySchema,
+} from "../validators.js";
 
 const router = express.Router();
 
@@ -22,15 +28,9 @@ router.get("/", (req, res) => {
  * GET /api/majors/:majorId
  * Get comprehensive curriculum and study plan for a specific major.
  */
-router.get("/:majorId", (req, res) => {
+router.get("/:majorId", validateParams(majorParamSchema), (req, res) => {
   try {
     const { majorId } = req.params;
-
-    // ─── Input Validation ───────────────────────────────────────────
-    if (!majorId || typeof majorId !== "string" || majorId.length > 50) {
-      return res.status(400).json({ error: "معرف التخصص غير صالح." });
-    }
-
     const major = getMajorById(majorId);
 
     if (!major) {
@@ -49,31 +49,20 @@ router.get("/:majorId", (req, res) => {
  * Add or update a major and its curriculum.
  * Protected: Requires admin authorization.
  */
-router.post("/", requireAdminAuth, (req, res) => {
-  try {
-    const majorData = req.body;
-
-    // ─── Input Validation ───────────────────────────────────────────
-    if (
-      !majorData ||
-      typeof majorData.id !== "string" ||
-      typeof majorData.name !== "string"
-    ) {
-      return res
-        .status(400)
-        .json({ error: "البيانات غير مكتملة: مطلوب id و name كنصوص." });
+router.post(
+  "/",
+  requireAdminAuth,
+  validateBody(majorBodySchema),
+  (req, res) => {
+    try {
+      const majorData = req.body;
+      const updated = upsertMajor(majorData);
+      return res.json({ success: true, major: updated });
+    } catch (err) {
+      console.error("Upsert major error:", err.message || err);
+      return res.status(500).json({ error: "فشل في حفظ التخصص." });
     }
-
-    if (majorData.id.length > 50 || majorData.name.length > 200) {
-      return res.status(400).json({ error: "البيانات تتجاوز الطول المسموح." });
-    }
-
-    const updated = upsertMajor(majorData);
-    return res.json({ success: true, major: updated });
-  } catch (err) {
-    console.error("Upsert major error:", err.message || err);
-    return res.status(500).json({ error: "فشل في حفظ التخصص." });
-  }
-});
+  },
+);
 
 export default router;

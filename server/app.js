@@ -10,7 +10,8 @@ import registrationRouter from "./routes/registration.js";
 import calendarRouter from "./routes/calendar.js";
 import { startScheduler } from "./services/scheduler.js";
 import { getSyncStatus } from "./db.js";
-import { getSqliteDb } from "./sqliteDb.js";
+import { getSqliteDb, getSqliteMetrics } from "./sqliteDb.js";
+import { edugateCircuitBreaker } from "./utils/circuitBreaker.js";
 import { openApiSpec } from "./openapi.js";
 import {
   sanitizeQuery,
@@ -18,6 +19,7 @@ import {
   enforceContentType,
   additionalSecurityHeaders,
   verifyCsrfOrigin,
+  extractClientIdentity,
 } from "./middleware/security.js";
 import {
   globalLimiter,
@@ -84,6 +86,12 @@ app.disable("x-powered-by");
 app.use(additionalSecurityHeaders);
 
 // ─── CORS — Restricted Origin Whitelist ───────────────────────────────────
+const configuredFrontendUrls = process.env.FRONTEND_URL
+  ? process.env.FRONTEND_URL.split(",")
+      .map((s) => s.trim())
+      .filter(Boolean)
+  : [];
+
 const allowedOrigins = [
   "http://localhost:5173",
   "http://localhost:3000",
@@ -91,7 +99,7 @@ const allowedOrigins = [
   "http://127.0.0.1:5173",
   "http://127.0.0.1:3000",
   "http://127.0.0.1:3001",
-  process.env.FRONTEND_URL,
+  ...configuredFrontendUrls,
 ].filter(Boolean);
 
 app.use(
@@ -154,10 +162,11 @@ app.use(responseCompression);
 app.use(express.json({ limit: "1mb" }));
 app.use(express.urlencoded({ extended: false, limit: "1mb" }));
 
-// ─── Request Sanitization Middleware ──────────────────────────────────────
+// ─── Request Sanitization & Identity Extraction Middleware ───────────────
 app.use(sanitizeQuery);
 app.use(sanitizeBody);
 app.use(enforceContentType);
+app.use(extractClientIdentity);
 
 // ─── Global Rate Limiting ─────────────────────────────────────────────────
 app.use(globalLimiter);
@@ -171,18 +180,28 @@ export { authLimiter, syncLimiter, registrationLimiter, globalLimiter };
 app.get("/api/health", (req, res) => {
   const isProduction = process.env.NODE_ENV === "production";
   let sqliteHealthy = false;
+  let sqliteMetrics = null;
+
   try {
     const sqlite = getSqliteDb();
     sqlite.prepare("SELECT 1").get();
     sqliteHealthy = true;
+    sqliteMetrics = getSqliteMetrics();
   } catch {}
 
+  const circuitStatus = edugateCircuitBreaker.getStatus();
+
   const response = {
-    status: sqliteHealthy ? "healthy" : "degraded",
+    status:
+      sqliteHealthy && circuitStatus.state !== "OPEN" ? "healthy" : "degraded",
     timestamp: new Date().toISOString(),
     database: {
       engine: "SQLite (better-sqlite3) + Supabase",
       sqliteHealthy,
+      metrics: sqliteMetrics,
+    },
+    circuitBreaker: {
+      edugate: circuitStatus,
     },
   };
 
@@ -234,29 +253,43 @@ app.use((err, req, res, next) => {
   });
 });
 
-export function validateProductionSecurityEnvironment() {
+export function validateProductionSecurityEnvironment({
+  throwOnFailure = false,
+} = {}) {
   if (process.env.NODE_ENV !== "production") return true;
 
-  const warnings = [];
+  const errors = [];
   if (!process.env.SESSION_SECRET || process.env.SESSION_SECRET.length < 32) {
-    warnings.push("SESSION_SECRET is missing or shorter than 32 characters.");
+    errors.push("SESSION_SECRET is missing or shorter than 32 characters.");
   }
   if (!process.env.FRONTEND_URL) {
-    warnings.push("FRONTEND_URL is not configured for CORS restriction.");
+    errors.push("FRONTEND_URL is not configured for CORS restriction.");
   }
   if (!process.env.ADMIN_API_KEY && !process.env.SYNC_API_KEY) {
-    warnings.push("Neither ADMIN_API_KEY nor SYNC_API_KEY is configured.");
+    errors.push("Neither ADMIN_API_KEY nor SYNC_API_KEY is configured.");
   }
 
-  if (warnings.length > 0) {
-    console.warn("⚠️ [PRODUCTION SECURITY AUDIT]");
-    warnings.forEach((w) => console.warn(`   - ${w}`));
+  if (errors.length > 0) {
+    console.error("🚨 [FATAL PRODUCTION SECURITY AUDIT]");
+    errors.forEach((w) => console.error(`   - ${w}`));
+    if (throwOnFailure) {
+      throw new Error(
+        `Production security audit failed:\n${errors.join("\n")}`,
+      );
+    }
   }
-  return warnings.length === 0;
+  return errors.length === 0;
 }
 
 export function startServer(port = process.env.PORT || 3001) {
-  validateProductionSecurityEnvironment();
+  const isSecure = validateProductionSecurityEnvironment();
+  if (process.env.NODE_ENV === "production" && !isSecure) {
+    console.error(
+      "🛑 Server start aborted due to production security violations.",
+    );
+    process.exit(1);
+  }
+
   const server = app.listen(port, () => {
     console.log(`🚀 السيرفر المطور يعمل بنجاح على: http://localhost:${port}`);
     // Start automated background sync scheduler

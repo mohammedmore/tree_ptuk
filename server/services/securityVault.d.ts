@@ -14,3 +14,5 @@ export function isAccountLocked(studentId: string): {
 };
 export function recordFailedLogin(studentId: string): any;
 export function recordSuccessfulLogin(studentId: string): void;
+export function hydrateSecurityStateFromDb(): void;
+export function sanitizeStudentRecordForClient(record: any): any;

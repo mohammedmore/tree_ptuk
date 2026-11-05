@@ -86,6 +86,9 @@ export function additionalSecurityHeaders(req, res, next) {
   res.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
   res.setHeader("X-Content-Type-Options", "nosniff");
   res.setHeader("X-Frame-Options", "DENY");
+  res.setHeader("Cross-Origin-Opener-Policy", "same-origin");
+  res.setHeader("Cross-Origin-Resource-Policy", "same-origin");
+  res.setHeader("X-Permitted-Cross-Domain-Policies", "none");
 
   // Prevent caching of sensitive API endpoints (student records, registration, sync)
   if (
@@ -229,5 +232,53 @@ export function authenticateStudentSession(req, res, next) {
   const token = authHeader.replace(/^Bearer\s+/i, "").trim();
   const session = verifySessionToken(token);
   req.studentSession = session;
+  next();
+}
+
+/**
+ * Extracts client identity (IP + student ID / session token) for dual-key rate limiting.
+ * Protects university campus NAT gateways from shared-IP lockouts (OWASP API4 / NIST SP 800-63B).
+ */
+export function extractClientIdentity(req, res, next) {
+  let studentId = null;
+
+  // 1. Check if session was already decoded or extract from auth header
+  if (req.studentSession && req.studentSession.studentId) {
+    studentId = req.studentSession.studentId;
+  } else {
+    const authHeader =
+      req.headers["authorization"] || req.headers["x-auth-token"];
+    if (authHeader) {
+      const token = authHeader.replace(/^Bearer\s+/i, "").trim();
+      const session = verifySessionToken(token);
+      if (session && session.studentId) {
+        studentId = session.studentId;
+        req.studentSession = session;
+      }
+    }
+  }
+
+  // 2. Extract from request body if studentId is present
+  if (
+    !studentId &&
+    req.body &&
+    typeof req.body === "object" &&
+    typeof req.body.studentId === "string"
+  ) {
+    studentId = req.body.studentId
+      .replace(/[٠-٩]/g, (d) => String("٠١٢٣٤٥٦٧٨٩".indexOf(d)))
+      .replace(/[۰-۹]/g, (d) => String("۰۱۲۳۴۵۶۷۸۹".indexOf(d)))
+      .trim()
+      .toLowerCase();
+  }
+
+  // 3. Extract from URL params
+  if (!studentId && req.params && req.params.studentId) {
+    studentId = String(req.params.studentId).trim().toLowerCase();
+  }
+
+  const rawIp = req.ip || req.socket?.remoteAddress || "127.0.0.1";
+  req.clientStudentId = studentId || null;
+  req.clientIdentity = studentId ? `${rawIp}:${studentId}` : rawIp;
   next();
 }

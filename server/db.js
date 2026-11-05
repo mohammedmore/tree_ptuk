@@ -25,6 +25,8 @@ import {
   sqliteSaveStudent,
   sqliteSaveAcademicCalendar,
   sqliteGetAcademicCalendar,
+  sqliteUpsertCohortPlan,
+  sqliteGetCohortPlan,
 } from "./sqliteDb.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -87,18 +89,30 @@ function cleanupLegacyTempFiles() {
 
 let persistTimeout = null;
 let globalSyncLock = false;
+let syncLockAcquiredAt = 0;
+const SYNC_LOCK_TIMEOUT_MS = 10 * 60 * 1000; // 10 minutes max before auto-expire
 
 export function acquireSyncLock() {
-  if (globalSyncLock) return false;
+  const now = Date.now();
+  if (globalSyncLock && now - syncLockAcquiredAt < SYNC_LOCK_TIMEOUT_MS) {
+    return false;
+  }
   globalSyncLock = true;
+  syncLockAcquiredAt = now;
   return true;
 }
 
 export function releaseSyncLock() {
   globalSyncLock = false;
+  syncLockAcquiredAt = 0;
 }
 
 export function isSyncActive() {
+  const now = Date.now();
+  if (globalSyncLock && now - syncLockAcquiredAt >= SYNC_LOCK_TIMEOUT_MS) {
+    globalSyncLock = false;
+    syncLockAcquiredAt = 0;
+  }
   return globalSyncLock;
 }
 
@@ -140,6 +154,13 @@ export function persistStateSync() {
       if (state.students && Object.keys(state.students).length > 0) {
         for (const [id, s] of Object.entries(state.students)) {
           sqliteSaveStudent(id, encryptPayload(s));
+        }
+      }
+      if (state.cohortPlans && Object.keys(state.cohortPlans).length > 0) {
+        for (const p of Object.values(state.cohortPlans)) {
+          if (p && p.majorId && p.cohortYear) {
+            sqliteUpsertCohortPlan(p.majorId, p.cohortYear, p);
+          }
         }
       }
     } catch (sqlErr) {

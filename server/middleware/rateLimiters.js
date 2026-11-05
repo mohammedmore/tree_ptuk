@@ -1,4 +1,4 @@
-import rateLimit from "express-rate-limit";
+import rateLimit, { ipKeyGenerator } from "express-rate-limit";
 
 // Global limiter: 200 requests per 15 minutes per IP in production (1500 in dev)
 export const globalLimiter = rateLimit({
@@ -18,12 +18,16 @@ export const globalLimiter = rateLimit({
   },
 });
 
-// Auth-specific limiter: 15 requests per 15 minutes per IP in production (60 in dev)
+// Auth-specific limiter: 15 requests per 15 minutes per (IP + student ID) dual-key
 export const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: process.env.NODE_ENV === "production" ? 15 : 60,
   standardHeaders: true,
   legacyHeaders: false,
+  keyGenerator: (req) => {
+    const ip = ipKeyGenerator(req);
+    return req.clientStudentId ? `${ip}:${req.clientStudentId}` : ip;
+  },
   message: {
     error: "تم تجاوز عدد محاولات الدخول المسموح بها. يرجى الانتظار 15 دقيقة.",
   },
@@ -43,12 +47,16 @@ export const authLimiter = rateLimit({
   },
 });
 
-// Registration-specific limiter: 30 requests per 15 minutes per IP in production
+// Registration-specific limiter: 30 requests per 15 minutes per (IP + student ID) dual-key
 export const registrationLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: process.env.NODE_ENV === "production" ? 30 : 120,
   standardHeaders: true,
   legacyHeaders: false,
+  keyGenerator: (req) => {
+    const ip = ipKeyGenerator(req);
+    return req.clientStudentId ? `${ip}:${req.clientStudentId}` : ip;
+  },
   message: {
     error:
       "تم تجاوز الحد الأقصى لعمليات التسجيل السريع. يرجى الانتظار بضع دقائق.",

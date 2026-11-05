@@ -10,7 +10,11 @@ import {
   batchUpsertToSupabase,
   supabase,
 } from "../db.js";
-import { optimizeSqliteDb } from "../sqliteDb.js";
+import {
+  optimizeSqliteDb,
+  sqlitePruneExpiredSecurityState,
+} from "../sqliteDb.js";
+import { edugateCircuitBreaker } from "../utils/circuitBreaker.js";
 
 const DEFAULT_SCHEDULE = process.env.SYNC_CRON_SCHEDULE || "*/30 * * * *";
 let cronJob = null;
@@ -21,6 +25,17 @@ let cronJob = null;
  * @param {boolean} [options.manual=false]
  */
 export async function runSyncCycle(options = {}) {
+  // Check Circuit Breaker before initiating sync cycle
+  const circuitCheck = edugateCircuitBreaker.canExecute();
+  if (!circuitCheck.allowed) {
+    console.warn(`⚠️ [SCHEDULER] تخطي دورة المزامنة: ${circuitCheck.reason}`);
+    return {
+      success: false,
+      message: circuitCheck.reason,
+      syncStatus: getSyncStatus(),
+    };
+  }
+
   if (!acquireSyncLock()) {
     console.warn("⏳ عملية مزامنة أخرى قيد التشغيل بالفعل، تم تخطي هذا الطلب.");
     return {
@@ -95,6 +110,8 @@ export async function runSyncCycle(options = {}) {
       `✅ تمت المزامنة بنجاح خلال ${durationSeconds} ثانية! (إجمالي المواد: ${upsertStats.totalCourses}، إجمالي الشعب: ${upsertStats.insertedSections})`,
     );
 
+    edugateCircuitBreaker.recordSuccess();
+
     return {
       success: true,
       durationSeconds,
@@ -102,6 +119,7 @@ export async function runSyncCycle(options = {}) {
       syncStatus: updatedStatus,
     };
   } catch (error) {
+    edugateCircuitBreaker.recordFailure(error);
     const durationSeconds = Number(
       ((Date.now() - startTime) / 1000).toFixed(2),
     );
@@ -131,6 +149,7 @@ export async function runSyncCycle(options = {}) {
 export async function runDatabaseMaintenance() {
   console.log("🧹 بدء دورة الصيانة الدورية وتفريغ البيانات المنتهية...");
   optimizeSqliteDb();
+  sqlitePruneExpiredSecurityState();
 
   let prunedCount = 0;
   if (supabase) {

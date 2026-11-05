@@ -1,0 +1,7 @@
+dist
+node_modules
+data
+*.sqlite*
+package-lock.json
+.agents
+.gemini

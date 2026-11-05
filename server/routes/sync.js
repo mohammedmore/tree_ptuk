@@ -11,6 +11,7 @@ import { runSyncCycle } from "../services/scheduler.js";
 import scrapePTUKSchedules from "../services/scrapers/ptukScraper.js";
 import { syncLimiter } from "../middleware/rateLimiters.js";
 import { timingSafeEqualStrings } from "../services/securityVault.js";
+import { validateBody, syncPtukSchema } from "../validators.js";
 
 const router = express.Router();
 
@@ -66,67 +67,60 @@ router.post("/trigger", syncLimiter, verifySyncAuth, async (req, res) => {
 /**
  * POST /api/sync-ptuk (Legacy manual cookie/viewState sync support)
  */
-router.post("/ptuk", syncLimiter, verifySyncAuth, async (req, res) => {
-  const { cookie, viewState, branch } = req.body;
+router.post(
+  "/ptuk",
+  syncLimiter,
+  verifySyncAuth,
+  validateBody(syncPtukSchema),
+  async (req, res) => {
+    const { cookie, viewState, branch } = req.body;
 
-  if (!cookie || !viewState) {
-    return res
-      .status(400)
-      .json({ error: "مطلوب إرسال cookie و viewState في جسم الطلب." });
-  }
-
-  // ─── Input Validation ───────────────────────────────────────────
-  if (typeof cookie !== "string" || cookie.length > 4096) {
-    return res.status(400).json({ error: "قيمة cookie غير صالحة." });
-  }
-  if (typeof viewState !== "string" || viewState.length > 4096) {
-    return res.status(400).json({ error: "قيمة viewState غير صالحة." });
-  }
-
-  if (!acquireSyncLock()) {
-    return res.status(409).json({
-      error: "عملية مزامنة أخرى قيد التشغيل بالفعل. يرجى الانتظار.",
-    });
-  }
-
-  try {
-    console.log("⏳ بدء سحب البيانات ومزامنتها مع الخادم...");
-    const catalog = await scrapePTUKSchedules(cookie, viewState, {
-      branch: typeof branch === "string" ? branch : "1",
-    });
-
-    const upsertStats = await upsertCatalogCourses(catalog);
-
-    // Also update Supabase in batches if configured
-    let supabaseResult = null;
-    if (supabase) {
-      try {
-        supabaseResult = await batchUpsertToSupabase(catalog);
-      } catch (sbErr) {
-        console.warn(
-          "⚠️ تحذير: فشل تحديث Supabase، تم الاكتفاء بالتخزين المحلي:",
-          sbErr.message,
-        );
-      }
+    if (!acquireSyncLock()) {
+      return res.status(409).json({
+        error: "عملية مزامنة أخرى قيد التشغيل بالفعل. يرجى الانتظار.",
+      });
     }
 
-    return res.json({
-      success: true,
-      message: `تمت مزامنة ${upsertStats.insertedCourses} مساق بنجاح.`,
-      stats: {
-        ...upsertStats,
-        supabase: supabaseResult,
-      },
-    });
-  } catch (err) {
-    console.error("Manual sync failed:", err.message || err);
-    return res.status(500).json({
-      error: "فشلت عملية المزامنة.",
-      details: process.env.NODE_ENV === "production" ? undefined : err.message,
-    });
-  } finally {
-    releaseSyncLock();
-  }
-});
+    try {
+      console.log("⏳ بدء سحب البيانات ومزامنتها مع الخادم...");
+      const catalog = await scrapePTUKSchedules(cookie, viewState, {
+        branch: typeof branch === "string" ? branch : "1",
+      });
+
+      const upsertStats = await upsertCatalogCourses(catalog);
+
+      // Also update Supabase in batches if configured
+      let supabaseResult = null;
+      if (supabase) {
+        try {
+          supabaseResult = await batchUpsertToSupabase(catalog);
+        } catch (sbErr) {
+          console.warn(
+            "⚠️ تحذير: فشل تحديث Supabase، تم الاكتفاء بالتخزين المحلي:",
+            sbErr.message,
+          );
+        }
+      }
+
+      return res.json({
+        success: true,
+        message: `تمت مزامنة ${upsertStats.insertedCourses} مساق بنجاح.`,
+        stats: {
+          ...upsertStats,
+          supabase: supabaseResult,
+        },
+      });
+    } catch (err) {
+      console.error("Manual sync failed:", err.message || err);
+      return res.status(500).json({
+        error: "فشلت عملية المزامنة.",
+        details:
+          process.env.NODE_ENV === "production" ? undefined : err.message,
+      });
+    } finally {
+      releaseSyncLock();
+    }
+  },
+);
 
 export default router;

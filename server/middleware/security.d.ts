@@ -10,3 +10,4 @@ export function validateSsrfTarget(
 ): RequestHandler;
 export const requireAdminAuth: RequestHandler;
 export const authenticateStudentSession: RequestHandler;
+export const extractClientIdentity: RequestHandler;

@@ -1,34 +1,65 @@
-name: CI Pipeline
+name: Strict CI/CD Pipeline
 
 on:
   push:
-    branches: [main]
+    branches: ["main"]
   pull_request:
-    branches: [main]
+    branches: ["main"]
 
 jobs:
-  test:
-    name: Build, Lint & Test
+  quality-check:
+    name: 🎨 Code Quality (ESLint & Prettier)
     runs-on: ubuntu-latest
-
     steps:
-      - name: Checkout code
+      - name: Checkout Code
         uses: actions/checkout@v4
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: "20"
           cache: "npm"
 
-      - name: Install dependencies
+      - name: Install Dependencies
+        # يضمن تثبيت نفس النسخ الموجودة في package-lock.json لتجنب اختلافات البيئة
         run: npm ci
 
-      - name: Typecheck (tsc)
-        run: npm run lint
+      - name: Check Formatting (Prettier)
+        run: npx prettier --check .
 
-      - name: Run Test Suite
-        run: npm run test
+      - name: Run Linter (ESLint)
+        # سيفشل البناء إذا وجد أي تحذير (Warning) وليس فقط الأخطاء
+        run: npx eslint . --max-warnings=0
 
-      - name: Build Production Assets
-        run: npm run build
+  security-audit:
+    name: 🔒 Dependencies Security (SCA)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Audit NPM Packages
+        # يفشل البناء فوراً عند وجود ثغرات عالية الخطورة أو حرجة في المكتبات
+        run: npm audit --audit-level=high
+
+  sast-owasp:
+    name: 🛡️ CodeQL (OWASP Top 10)
+    runs-on: ubuntu-latest
+    permissions:
+      security-events: write
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: javascript-typescript
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v3

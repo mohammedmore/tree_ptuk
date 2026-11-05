@@ -16,6 +16,7 @@ import {
   AI_CATEGORY_REQUIREMENTS,
 } from "../majorsData.js";
 import { hashStudentPassword, verifyStudentPassword } from "./securityVault.js";
+import { edugateCircuitBreaker } from "../utils/circuitBreaker.js";
 export { AI_CURRICULUM_COURSES, AI_CATEGORY_REQUIREMENTS };
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -1293,8 +1294,19 @@ export function parseExemptionExamRows(scrapedExams) {
 }
 
 let sharedBrowser = null;
+let browserIdleTimer = null;
+const BROWSER_IDLE_TIMEOUT_MS = 3 * 60 * 1000;
+
+function resetBrowserIdleTimer() {
+  if (browserIdleTimer) clearTimeout(browserIdleTimer);
+  browserIdleTimer = setTimeout(() => {
+    closeSharedBrowser();
+  }, BROWSER_IDLE_TIMEOUT_MS);
+  if (browserIdleTimer.unref) browserIdleTimer.unref();
+}
 
 async function getSharedBrowser() {
+  resetBrowserIdleTimer();
   if (!sharedBrowser || !sharedBrowser.isConnected()) {
     sharedBrowser = await chromium.launch({
       headless: true,
@@ -1309,6 +1321,10 @@ async function getSharedBrowser() {
 }
 
 export async function closeSharedBrowser() {
+  if (browserIdleTimer) {
+    clearTimeout(browserIdleTimer);
+    browserIdleTimer = null;
+  }
   if (sharedBrowser) {
     try {
       await sharedBrowser.close();
@@ -1371,6 +1387,12 @@ export async function authenticateAndSyncStudent(
         fromCache: true,
       };
     }
+  }
+
+  // ─── Upstream Circuit Breaker Check ─────────────────────────────
+  const circuitCheck = edugateCircuitBreaker.canExecute();
+  if (!circuitCheck.allowed) {
+    throw new Error(circuitCheck.reason);
   }
 
   let context;
@@ -3653,8 +3675,10 @@ export async function authenticateAndSyncStudent(
       `✅ تمت مزامنة الطالب (${studentName || actualStudentId}) بنجاح: ${passedCourseIds.size} مادة مجتازة، ${registeredCourseIds.size} مسجلة حالياً، معدل: ${gpa}.`,
     );
 
+    edugateCircuitBreaker.recordSuccess();
     return studentRecord;
   } catch (err) {
+    edugateCircuitBreaker.recordFailure(err);
     console.error(
       `⚠️ خطأ أثناء مزامنة بيانات الطالب (${normId}): ${err.message}`,
     );

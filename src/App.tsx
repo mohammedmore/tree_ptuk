@@ -313,7 +313,9 @@ export function App() {
             return parsed.courses;
           }
         }
-      } catch {}
+      } catch (err) {
+        console.warn("Failed to load cached major plan courses:", err);
+      }
     }
     return defaultCourses;
   });
@@ -349,7 +351,9 @@ export function App() {
             return sanitizeCategoryRequirements(parsed.categoryRequirements);
           }
         }
-      } catch {}
+      } catch (err) {
+        console.warn("Failed to load cached category requirements:", err);
+      }
     }
     return defaultCategoryRequirements;
   });
@@ -616,7 +620,9 @@ export function App() {
     setCompletedCourses(allPassed);
     try {
       writeAppStorageValue("completed_courses", allPassed);
-    } catch {}
+    } catch (err) {
+      console.warn("Failed to write completed_courses to storage:", err);
+    }
 
     // 1.1 Synchronize active major and plan courses from synced student profile
     if (
@@ -654,7 +660,9 @@ export function App() {
           "failed_course_ids",
           currentStudent.failedCourseIds,
         );
-      } catch {}
+      } catch (err) {
+        console.warn("Failed to write failed_course_ids to storage:", err);
+      }
     }
 
     // 3. Synchronize grades
@@ -676,7 +684,9 @@ export function App() {
         const merged = { ...grades, ...prev };
         try {
           writeAppStorageValue("course_grades", merged);
-        } catch {}
+        } catch (err) {
+          console.warn("Failed to write course_grades to storage:", err);
+        }
         return merged;
       });
     }
@@ -699,7 +709,9 @@ export function App() {
         if (typeof window !== "undefined") {
           localStorage.setItem("selected_planning_semester", upcomingSem);
         }
-      } catch {}
+      } catch (err) {
+        console.warn("Failed to persist selected_planning_semester:", err);
+      }
     }
 
     // 5. Clean and sync planned courses:
@@ -1924,7 +1936,9 @@ export function App() {
                         localStorage.removeItem(key);
                       }
                     }
-                  } catch {}
+                  } catch (err) {
+                    console.warn("Failed to clear previous major cache:", err);
+                  }
 
                   setCurrentStudent(profile);
                   const studentMajorId =
@@ -1953,7 +1967,9 @@ export function App() {
                           categoryRequirements: profile.categoryRequirements,
                         }),
                       );
-                    } catch {}
+                    } catch (err) {
+                      console.warn("Failed to cache major plan:", err);
+                    }
                   }
                   if (
                     profile.categoryRequirements &&
@@ -2256,7 +2272,12 @@ export function App() {
                 }
                 try {
                   writeAppStorageValue("completed_courses", next);
-                } catch {}
+                } catch (err) {
+                  console.warn(
+                    "Failed to update completed_courses storage:",
+                    err,
+                  );
+                }
 
                 try {
                   const cached = getCachedStudentProfile();
@@ -2275,7 +2296,12 @@ export function App() {
                     );
                     setCurrentStudent({ ...cached });
                   }
-                } catch {}
+                } catch (err) {
+                  console.warn(
+                    "Failed to persist updated student profile:",
+                    err,
+                  );
+                }
 
                 return next;
               });
