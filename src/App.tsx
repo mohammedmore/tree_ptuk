@@ -937,6 +937,17 @@ export function App() {
   const [isSystemHealthModalOpen, setIsSystemHealthModalOpen] = useState(false);
   const [isAdvisorModalOpen, setIsAdvisorModalOpen] = useState(false);
 
+  const isAdmin = useMemo(() => {
+    if (typeof window === "undefined") return false;
+    const isProfileAdmin =
+      (currentStudent as any)?.role === "admin" ||
+      (currentStudent as any)?.isAdmin === true;
+    const isLocalAdmin =
+      window.localStorage?.getItem("ptuk_admin_mode") === "true" ||
+      window.sessionStorage?.getItem("ptuk_admin_authorized") === "true";
+    return Boolean(isProfileAdmin || isLocalAdmin);
+  }, [currentStudent]);
+
   // Global keyboard shortcut for Command Palette (Ctrl+K / Cmd+K)
   useEffect(() => {
     const handleGlobalKeyDown = (e: KeyboardEvent) => {
@@ -1461,7 +1472,19 @@ export function App() {
                 typeof navigator !== "undefined" ? navigator.onLine : true
               }
               lastSyncText={syncTimeText}
-              onClick={() => setIsSystemHealthModalOpen(true)}
+              onClick={() => {
+                if (isAdmin) {
+                  setIsSystemHealthModalOpen(true);
+                } else {
+                  const online =
+                    typeof navigator !== "undefined" ? navigator.onLine : true;
+                  showAppToast(
+                    online
+                      ? `حالة الاتصال: متصل • آخر تحديث لقواعد البيانات: ${syncTimeText}`
+                      : "أنت تعمل حالياً في وضع عدم الاتصال (Offline).",
+                  );
+                }
+              }}
             />
           </div>
 
@@ -2388,10 +2411,15 @@ export function App() {
             setIsCommandPaletteOpen(false);
             setIsCalendarModalOpen(true);
           }}
-          onOpenSystemHealth={() => {
-            setIsCommandPaletteOpen(false);
-            setIsSystemHealthModalOpen(true);
-          }}
+          onOpenSystemHealth={
+            isAdmin
+              ? () => {
+                  setIsCommandPaletteOpen(false);
+                  setIsSystemHealthModalOpen(true);
+                }
+              : undefined
+          }
+          isAdmin={isAdmin}
           onOpenAdvisor={() => {
             setIsCommandPaletteOpen(false);
             setIsAdvisorModalOpen(true);

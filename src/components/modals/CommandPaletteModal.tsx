@@ -51,6 +51,7 @@ export interface CommandPaletteProps {
   onOpenAdvisor?: () => void;
   onPrintTranscript?: () => void;
   activeMajorId?: string;
+  isAdmin?: boolean;
 }
 
 interface PaletteAction {
@@ -79,6 +80,7 @@ export const CommandPaletteModal: React.FC<CommandPaletteProps> = ({
   onOpenAdvisor,
   onPrintTranscript,
   activeMajorId,
+  isAdmin = false,
 }) => {
   const [query, setQuery] = useState("");
   const [selectedIndex, setSelectedIndex] = useState(0);
@@ -176,31 +178,36 @@ export const CommandPaletteModal: React.FC<CommandPaletteProps> = ({
           "dates",
         ],
       },
-      {
-        id: "action-system-health",
-        title: "مراقبة واستقرار النظام (Observability)",
-        subtitle:
-          "تتبع زمن الاستجابة، حالة قاطع دورة Edugate، واستهلاك الذاكرة",
-        category: "actions",
-        icon: <Activity size={16} className="text-emerald-500" />,
-        perform: () => {
-          if (onOpenSystemHealth) onOpenSystemHealth();
-        },
-        keywords: [
-          "حالة",
-          "النظام",
-          "مراقبة",
-          "أداء",
-          "استقرار",
-          "سيرفر",
-          "health",
-          "status",
-          "latency",
-          "observability",
-          "metrics",
-          "edugate",
-        ],
-      },
+      ...(isAdmin
+        ? [
+            {
+              id: "action-system-health",
+              title: "مراقبة واستقرار النظام (Admin Observability)",
+              subtitle:
+                "تتبع زمن الاستجابة، حالة قاطع دورة Edugate، واستهلاك الذاكرة للمشرفين",
+              category: "actions" as const,
+              icon: <Activity size={16} className="text-emerald-500" />,
+              perform: () => {
+                if (onOpenSystemHealth) onOpenSystemHealth();
+              },
+              keywords: [
+                "حالة",
+                "النظام",
+                "مراقبة",
+                "أداء",
+                "استقرار",
+                "سيرفر",
+                "health",
+                "status",
+                "latency",
+                "observability",
+                "metrics",
+                "edugate",
+                "admin",
+              ],
+            },
+          ]
+        : []),
       {
         id: "action-academic-advisor",
         title: "المرشد الأكاديمي والمسار الحرج (Academic Advisor)",

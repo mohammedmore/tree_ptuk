@@ -10,7 +10,6 @@ import {
   ReactFlow,
   ReactFlowProvider,
   useReactFlow,
-  MiniMap,
   type Node,
   type Edge,
   type NodeProps,
@@ -20,13 +19,10 @@ import "@xyflow/react/dist/style.css";
 import {
   Search,
   Plus,
-  Minus,
-  Maximize2,
   ChevronDown,
   ChevronUp,
   Pin,
   Download,
-  Layers,
   Map as MapIcon,
   LayoutList,
   X,
@@ -190,7 +186,7 @@ function PlanFlowContent({
   setPlannedCourses,
   categoryRequirements,
 }: PlanPageProps) {
-  const { zoomIn, zoomOut, fitView } = useReactFlow();
+  const { fitView } = useReactFlow();
 
   // Modals state
   const [isTransferModalOpen, setIsTransferModalOpen] = useState(false);
@@ -214,9 +210,8 @@ function PlanFlowContent({
   // Layout mode: "catalog" (default official PTUK study plan) vs "prerequisite" (chains depth)
   const [layoutMode, setLayoutMode] = useState<LayoutMode>("catalog");
 
-  // Feature Toggles: Grades Overlay, MiniMap, Multiple Critical Paths
+  // Feature Toggles: Grades Overlay, Multiple Critical Paths
   const [showGrades, setShowGrades] = useState(false);
-  const [showMiniMap, setShowMiniMap] = useState(false);
   const [activeCriticalPathId, setActiveCriticalPathId] = useState<
     string | "all" | null
   >(null);
@@ -1983,116 +1978,6 @@ function PlanFlowContent({
                 className="bg-[var(--bg)]"
                 proOptions={{ hideAttribution: true }}
               />
-
-              {/* MiniMap */}
-              {showMiniMap && (
-                <MiniMap
-                  nodeColor={(n) => {
-                    if (n.type === "columnHeader") return "transparent";
-                    const d = n.data as CourseNodeData;
-                    if (d.isCompleted) return "var(--accent)";
-                    if (d.isAvailable) return "var(--line-control)";
-                    return "var(--line)";
-                  }}
-                  maskColor="var(--scrim)"
-                  position="bottom-left"
-                  className="!bottom-16 !left-4 border border-[var(--line-control)] !bg-[var(--surface)] rounded-[var(--r-control)] shadow-[var(--shadow-pop)] overflow-hidden"
-                  style={{ width: 140, height: 90 }}
-                  zoomable
-                  pannable
-                />
-              )}
-
-              {/* Calm Zoom Controls & Quick Viewport Presets (Item 8) */}
-              <div className="absolute bottom-4 left-4 z-10 flex items-center gap-1.5 p-1 bg-[var(--surface)] border border-[var(--line-control)] rounded-[var(--r-control)] shadow-[var(--shadow-pop)]">
-                <button
-                  type="button"
-                  onClick={() => zoomIn({ duration: 150 })}
-                  aria-label="تكبير"
-                  className="w-8 h-8 flex items-center justify-center rounded-[var(--r-control)] text-[var(--text)] hover:bg-[var(--sunken)] transition-colors cursor-pointer"
-                >
-                  <Plus size={16} />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => zoomOut({ duration: 150 })}
-                  aria-label="تصغير"
-                  className="w-8 h-8 flex items-center justify-center rounded-[var(--r-control)] text-[var(--text)] hover:bg-[var(--sunken)] transition-colors cursor-pointer"
-                >
-                  <Minus size={16} />
-                </button>
-                <div className="w-[1px] h-4 bg-[var(--line)] mx-0.5" />
-                <button
-                  type="button"
-                  onClick={() =>
-                    fitView({
-                      padding: 0.15,
-                      duration: 250,
-                    })
-                  }
-                  aria-label="ملاءمة الشاشة"
-                  title="ملاءمة الشاشة بالكامل"
-                  className="w-8 h-8 flex items-center justify-center rounded-[var(--r-control)] text-[var(--text)] hover:bg-[var(--sunken)] transition-colors cursor-pointer"
-                >
-                  <Maximize2 size={15} />
-                </button>
-                <div className="w-[1px] h-4 bg-[var(--line)] mx-0.5" />
-                <button
-                  type="button"
-                  onClick={() => {
-                    const y12Nodes = baseLayout.nodes.filter(
-                      (n) => ((n.data?.column as number) ?? 0) <= 3,
-                    );
-                    if (y12Nodes.length > 0)
-                      fitView({
-                        nodes: y12Nodes,
-                        padding: 0.15,
-                        duration: 250,
-                      });
-                  }}
-                  className="px-2 h-7 text-[11px] font-semibold rounded-[var(--r-control)] text-[var(--text-2)] hover:text-[var(--text)] hover:bg-[var(--sunken)] transition-colors cursor-pointer"
-                  title="تركيز العرض على السنة الأولى والثانية"
-                >
-                  س1-2
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    const y35Nodes = baseLayout.nodes.filter(
-                      (n) => ((n.data?.column as number) ?? 0) >= 4,
-                    );
-                    if (y35Nodes.length > 0)
-                      fitView({
-                        nodes: y35Nodes,
-                        padding: 0.15,
-                        duration: 250,
-                      });
-                  }}
-                  className="px-2 h-7 text-[11px] font-semibold rounded-[var(--r-control)] text-[var(--text-2)] hover:text-[var(--text)] hover:bg-[var(--sunken)] transition-colors cursor-pointer"
-                  title="تركيز العرض على السنوات المتقدمة والتخرج"
-                >
-                  س3-5
-                </button>
-                <div className="w-[1px] h-4 bg-[var(--line)] mx-0.5" />
-                <button
-                  type="button"
-                  onClick={() => setShowMiniMap((prev) => !prev)}
-                  aria-label="تبديل الخريطة المصغرة"
-                  title={
-                    showMiniMap
-                      ? "إخفاء الخريطة المصغرة"
-                      : "عرض الخريطة المصغرة"
-                  }
-                  className={cn(
-                    "w-8 h-8 flex items-center justify-center rounded-[var(--r-control)] transition-colors cursor-pointer",
-                    showMiniMap
-                      ? "bg-[var(--accent)] text-[var(--text-on-accent)]"
-                      : "text-[var(--text)] hover:bg-[var(--sunken)]",
-                  )}
-                >
-                  <Layers size={15} />
-                </button>
-              </div>
             </div>
           )}
 

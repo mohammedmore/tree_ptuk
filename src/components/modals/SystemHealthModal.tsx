@@ -15,6 +15,8 @@ import {
   Check,
   Radio,
   FileCode2,
+  Lock,
+  Key,
 } from "lucide-react";
 import { cn } from "../../utils";
 
@@ -101,6 +103,9 @@ export const SystemHealthModal: React.FC<SystemHealthModalProps> = ({
   const [error, setError] = useState<string | null>(null);
   const [refreshInterval, setRefreshInterval] = useState<number>(3000);
   const [copied, setCopied] = useState<boolean>(false);
+  const [adminKeyInput, setAdminKeyInput] = useState("");
+  const [isAuthRequired, setIsAuthRequired] = useState(false);
+  const [authSubmitting, setAuthSubmitting] = useState(false);
   const abortControllerRef = useRef<AbortController | null>(null);
 
   const fetchStats = useCallback(async () => {
@@ -110,11 +115,30 @@ export const SystemHealthModal: React.FC<SystemHealthModalProps> = ({
     const controller = new AbortController();
     abortControllerRef.current = controller;
 
+    const savedKey =
+      typeof window !== "undefined"
+        ? window.sessionStorage?.getItem("ptuk_admin_key") || ""
+        : "";
+    const token =
+      typeof window !== "undefined"
+        ? window.localStorage?.getItem("ptuk_student_token") || ""
+        : "";
+
+    const headers: Record<string, string> = { Accept: "application/json" };
+    if (savedKey) headers["x-api-key"] = savedKey;
+    if (token) headers["Authorization"] = `Bearer ${token}`;
+
     try {
       const res = await fetch("/api/observability/stats", {
         signal: controller.signal,
-        headers: { Accept: "application/json" },
+        headers,
       });
+
+      if (res.status === 401 || res.status === 403) {
+        setIsAuthRequired(true);
+        setError("يتطلب صلاحيات المشرفين (Admin Access) لعرض مؤشرات النظام.");
+        return;
+      }
 
       if (!res.ok) {
         throw new Error(`HTTP ${res.status}: ${res.statusText}`);
@@ -123,6 +147,7 @@ export const SystemHealthModal: React.FC<SystemHealthModalProps> = ({
       const payload = (await res.json()) as ObservabilityData;
       setData(payload);
       setError(null);
+      setIsAuthRequired(false);
     } catch (err: any) {
       if (err.name !== "AbortError") {
         setError(err.message || "تعذر جلب مقاييس الأداء والمراقبة.");
@@ -131,6 +156,36 @@ export const SystemHealthModal: React.FC<SystemHealthModalProps> = ({
       setLoading(false);
     }
   }, []);
+
+  const handleAdminAuthSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!adminKeyInput.trim()) return;
+    setAuthSubmitting(true);
+    try {
+      const res = await fetch("/api/observability/stats", {
+        headers: {
+          Accept: "application/json",
+          "x-api-key": adminKeyInput.trim(),
+        },
+      });
+      if (res.ok) {
+        if (typeof window !== "undefined") {
+          window.sessionStorage?.setItem("ptuk_admin_key", adminKeyInput.trim());
+          window.sessionStorage?.setItem("ptuk_admin_authorized", "true");
+        }
+        setIsAuthRequired(false);
+        setError(null);
+        const payload = (await res.json()) as ObservabilityData;
+        setData(payload);
+      } else {
+        setError("مفتاح الإدارة غير صالح. تم رفض الوصول.");
+      }
+    } catch {
+      setError("حدث خطأ أثناء الاتصال بالخادم للتحقق من الصلاحيات.");
+    } finally {
+      setAuthSubmitting(false);
+    }
+  };
 
   useEffect(() => {
     if (!isOpen) return;
@@ -280,12 +335,48 @@ export const SystemHealthModal: React.FC<SystemHealthModalProps> = ({
 
         {/* Content Body */}
         <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-6">
-          {error && (
-            <div className="p-4 rounded-2xl bg-rose-500/10 border border-rose-500/20 text-rose-600 dark:text-rose-400 flex items-center gap-3 text-xs sm:text-sm">
-              <AlertTriangle size={18} className="shrink-0" />
-              <span>{error}</span>
+          {isAuthRequired && !data ? (
+            <div className="max-w-md mx-auto py-10 text-center space-y-5">
+              <div className="w-16 h-16 rounded-2xl bg-amber-500/10 border border-amber-500/20 text-amber-500 flex items-center justify-center mx-auto shadow-sm">
+                <Lock size={30} />
+              </div>
+              <div className="space-y-1.5">
+                <h3 className="text-base sm:text-lg font-bold text-[var(--text)]">
+                  لوحة مراقبة الخادم (Admin Restricted)
+                </h3>
+                <p className="text-xs text-[var(--text-3)] leading-relaxed">
+                  هذه اللوحة مخصصة لمسؤولي ومطوري النظام فقط لمتابعة صحة السيرفر وحركة الطلبات. يرجى إدخال مفتاح الإدارة للمتابعة.
+                </p>
+              </div>
+
+              <form onSubmit={handleAdminAuthSubmit} className="space-y-3">
+                <input
+                  type="password"
+                  value={adminKeyInput}
+                  onChange={(e) => setAdminKeyInput(e.target.value)}
+                  placeholder="أدخل مفتاح الإدارة (ADMIN_API_KEY)..."
+                  className="w-full h-11 px-4 text-xs sm:text-sm bg-[var(--surface-sunken)] border border-[var(--line-control)] rounded-xl focus:outline-hidden focus:border-[var(--accent)] text-[var(--text)] text-center font-mono placeholder:text-[var(--text-3)]"
+                />
+                {error && (
+                  <p className="text-xs font-semibold text-rose-500">{error}</p>
+                )}
+                <button
+                  type="submit"
+                  disabled={authSubmitting || !adminKeyInput.trim()}
+                  className="w-full h-10 px-4 rounded-xl bg-[var(--accent)] text-[var(--text-on-accent)] text-xs font-bold hover:brightness-105 active:scale-[0.98] transition-all disabled:opacity-50 cursor-pointer shadow-sm"
+                >
+                  {authSubmitting ? "جاري التحقق..." : "تأكيد والوصول إلى اللوحة"}
+                </button>
+              </form>
             </div>
-          )}
+          ) : (
+            <>
+              {error && (
+                <div className="p-4 rounded-2xl bg-rose-500/10 border border-rose-500/20 text-rose-600 dark:text-rose-400 flex items-center gap-3 text-xs sm:text-sm">
+                  <AlertTriangle size={18} className="shrink-0" />
+                  <span>{error}</span>
+                </div>
+              )}
 
           {/* Key Metric Cards */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
@@ -556,6 +647,8 @@ export const SystemHealthModal: React.FC<SystemHealthModalProps> = ({
                 </table>
               </div>
             </div>
+          )}
+            </>
           )}
         </div>
 

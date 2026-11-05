@@ -24,6 +24,8 @@ import {
   additionalSecurityHeaders,
   verifyCsrfOrigin,
   extractClientIdentity,
+  authenticateStudentSession,
+  requireAdminAuth,
 } from "./middleware/security.js";
 import {
   globalLimiter,
@@ -252,10 +254,15 @@ app.get("/api/health/ready", (req, res) => {
   });
 });
 
-// ─── Live Observability Telemetry API (for Frontend Dashboard) ────────────
-app.get("/api/observability/stats", (req, res) => {
-  return res.json(getMetricsSummary());
-});
+// ─── Live Observability Telemetry API (Admin Only) ────────────────────────
+app.get(
+  "/api/observability/stats",
+  authenticateStudentSession,
+  requireAdminAuth,
+  (req, res) => {
+    return res.json(getMetricsSummary());
+  },
+);
 
 // ─── OpenAPI Documentation ────────────────────────────────────────────────
 app.get("/api/docs", (req, res) => {
