@@ -6,10 +6,15 @@ on:
   pull_request:
     branches: ["main"]
 
+permissions:
+  contents: read
+
 jobs:
   quality-check:
     name: 🎨 Code Quality (ESLint & Prettier)
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
@@ -31,9 +36,38 @@ jobs:
         # سيفشل البناء إذا وجد أي تحذير (Warning) وليس فقط الأخطاء
         run: npx eslint . --max-warnings=0
 
+  type-check-and-test:
+    name: 🧪 Type Safety, Academic Integrity & Automated Tests
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: TypeScript Static Typecheck
+        run: npm run lint
+
+      - name: Run PTUK Academic Integrity & All Automated Tests
+        run: npm test
+
+      - name: Production Build Check
+        run: npm run build
+
   security-audit:
     name: 🔒 Dependencies Security (SCA)
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
@@ -51,7 +85,9 @@ jobs:
     name: 🛡️ CodeQL (OWASP Top 10)
     runs-on: ubuntu-latest
     permissions:
+      contents: read
       security-events: write
+      actions: read
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4

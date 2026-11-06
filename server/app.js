@@ -12,7 +12,11 @@ import { startScheduler } from "./services/scheduler.js";
 import { getSyncStatus } from "./db.js";
 import { getSqliteDb, getSqliteMetrics } from "./sqliteDb.js";
 import { edugateCircuitBreaker } from "./utils/circuitBreaker.js";
-import { openApiSpec } from "./openapi.js";
+import { openApiSpec, renderOpenApiHtml } from "./openapi.js";
+import {
+  getMetricsSummary,
+  toPrometheusFormat,
+} from "./services/observability.js";
 import {
   sanitizeQuery,
   sanitizeBody,
@@ -20,6 +24,8 @@ import {
   additionalSecurityHeaders,
   verifyCsrfOrigin,
   extractClientIdentity,
+  authenticateStudentSession,
+  requireAdminAuth,
 } from "./middleware/security.js";
 import {
   globalLimiter,
@@ -176,6 +182,12 @@ app.use(verifyCsrfOrigin(allowedOrigins));
 
 export { authLimiter, syncLimiter, registrationLimiter, globalLimiter };
 
+// ─── Prometheus Metrics Endpoint ──────────────────────────────────────────
+app.get("/metrics", (req, res) => {
+  res.setHeader("Content-Type", "text/plain; version=0.0.4; charset=utf-8");
+  return res.send(toPrometheusFormat());
+});
+
 // ─── Health & Metrics Endpoint ──────────────────────────────────────────
 app.get("/api/health", (req, res) => {
   const isProduction = process.env.NODE_ENV === "production";
@@ -214,8 +226,60 @@ app.get("/api/health", (req, res) => {
   return res.json(response);
 });
 
+// ─── Kubernetes/Container Liveness Probe ──────────────────────────────────
+app.get("/api/health/live", (req, res) => {
+  return res.status(200).json({
+    status: "ok",
+    timestamp: new Date().toISOString(),
+  });
+});
+
+// ─── Readiness Probe ──────────────────────────────────────────────────────
+app.get("/api/health/ready", (req, res) => {
+  let sqliteHealthy = false;
+  try {
+    const sqlite = getSqliteDb();
+    sqlite.prepare("SELECT 1").get();
+    sqliteHealthy = true;
+  } catch {}
+
+  const circuitStatus = edugateCircuitBreaker.getStatus();
+  const isReady = sqliteHealthy && circuitStatus.state !== "OPEN";
+
+  return res.status(isReady ? 200 : 503).json({
+    status: isReady ? "ready" : "not_ready",
+    timestamp: new Date().toISOString(),
+    sqliteHealthy,
+    circuitState: circuitStatus.state,
+  });
+});
+
+// ─── Live Observability Telemetry API (Admin Only) ────────────────────────
+app.get(
+  "/api/observability/stats",
+  authenticateStudentSession,
+  requireAdminAuth,
+  (req, res) => {
+    return res.json(getMetricsSummary());
+  },
+);
+
 // ─── OpenAPI Documentation ────────────────────────────────────────────────
 app.get("/api/docs", (req, res) => {
+  const accept = req.headers.accept || "";
+  if (accept.includes("text/html") && !req.query.json) {
+    res.setHeader("Content-Type", "text/html; charset=utf-8");
+    return res.send(renderOpenApiHtml(openApiSpec));
+  }
+  return res.json(openApiSpec);
+});
+
+app.get("/api/docs/ui", (req, res) => {
+  res.setHeader("Content-Type", "text/html; charset=utf-8");
+  return res.send(renderOpenApiHtml(openApiSpec));
+});
+
+app.get("/api/docs/json", (req, res) => {
   return res.json(openApiSpec);
 });
 

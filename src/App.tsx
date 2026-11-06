@@ -33,6 +33,7 @@ import {
   Printer,
   Eye,
   EyeOff,
+  Languages,
 } from "lucide-react";
 import { useAppRoute } from "./router";
 import { themeManager } from "./themeManager";
@@ -99,56 +100,13 @@ const SemesterPlanningPage = lazyWithRetry(
 );
 const LoginPage = lazyWithRetry(() => import("./pages/LoginPage"));
 
-// Lazy-loaded Modals
-const ResetConfirmationModal = lazyWithRetry(() =>
-  import("./components/modals/ResetConfirmationModal").then((m) => ({
-    default: m.ResetConfirmationModal,
-  })),
-);
-const MajorSelectorModal = lazyWithRetry(() =>
-  import("./components/modals/MajorSelectorModal").then((m) => ({
-    default: m.MajorSelectorModal,
-  })),
-);
-const SupportModal = lazyWithRetry(
-  () => import("./components/modals/SupportModal"),
-);
-const ExportModal = lazyWithRetry(
-  () => import("./components/modals/ExportModal"),
-);
-const WeeklyScheduleModal = lazyWithRetry(() =>
-  import("./components/modals/WeeklyScheduleModal").then((m) => ({
-    default: m.WeeklyScheduleModal,
-  })),
-);
-const AddCourseModal = lazyWithRetry(() =>
-  import("./components/modals/AddCourseModal").then((m) => ({
-    default: m.AddCourseModal,
-  })),
-);
-const StudentRecordsModal = lazyWithRetry(() =>
-  import("./components/modals/StudentRecordsModal").then((m) => ({
-    default: m.StudentRecordsModal,
-  })),
-);
-const AcademicCalendarModal = lazyWithRetry(() =>
-  import("./components/modals/AcademicCalendarModal").then((m) => ({
-    default: m.AcademicCalendarModal,
-  })),
-);
-import {
-  ShareScheduleModal,
-  LoadScheduleModal,
-  SharedSchedulePreviewModal,
-} from "./components/modals/SharedScheduleModals";
-import {
-  CommandPaletteModal,
-  CourseComparisonDrawer,
-} from "./components/modals";
+// Global Modals Container (Centralized, Lazy Loaded & Decoupled)
+import { GlobalModalsContainer } from "./components/modals/GlobalModalsContainer";
 import { AcademicAuditPrint } from "./components/planner/AcademicAuditPrint";
 import { SyncStatusPill } from "./components/common/SyncStatusPill";
 import { ErrorBoundary } from "./components/common/ErrorBoundary";
 import { usePrivacyMask } from "./hooks/usePrivacyMask";
+import { useLanguageStore } from "./i18n";
 import { cn } from "./utils";
 
 const PageLoadingFallback = () => (
@@ -243,6 +201,7 @@ function sanitizeCategoryRequirements(
 
 export function App() {
   const [currentRoute, navigateTo] = useAppRoute();
+  const { language, toggleLanguage } = useLanguageStore();
 
   // Storage issue logger
   const reportStorageIssue = useCallback((msg: string) => {
@@ -924,6 +883,19 @@ export function App() {
   const [isCalendarModalOpen, setIsCalendarModalOpen] = useState(false);
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
   const [isComparisonOpen, setIsComparisonOpen] = useState(false);
+  const [isSystemHealthModalOpen, setIsSystemHealthModalOpen] = useState(false);
+  const [isAdvisorModalOpen, setIsAdvisorModalOpen] = useState(false);
+
+  const isAdmin = useMemo(() => {
+    if (typeof window === "undefined") return false;
+    const isProfileAdmin =
+      (currentStudent as any)?.role === "admin" ||
+      (currentStudent as any)?.isAdmin === true;
+    const isLocalAdmin =
+      window.localStorage?.getItem("ptuk_admin_mode") === "true" ||
+      window.sessionStorage?.getItem("ptuk_admin_authorized") === "true";
+    return Boolean(isProfileAdmin || isLocalAdmin);
+  }, [currentStudent]);
 
   // Global keyboard shortcut for Command Palette (Ctrl+K / Cmd+K)
   useEffect(() => {
@@ -1342,6 +1314,14 @@ export function App() {
         isPrivacyMasked && "privacy-mask-active",
       )}
     >
+      {/* Skip to Main Content Link for WCAG 2.1 AA Accessibility */}
+      <a
+        href="#main-content"
+        className="sr-only focus:not-sr-only focus:fixed focus:top-4 focus:right-4 focus:z-50 focus:px-4 focus:py-2 focus:bg-indigo-600 focus:text-white focus:font-bold focus:rounded-xl focus:shadow-xl focus:outline-hidden"
+      >
+        تخطي إلى المحتوى الرئيسي
+      </a>
+
       {/* Offline Status Alert Banner */}
       <OfflineBanner />
 
@@ -1449,11 +1429,19 @@ export function App() {
                 typeof navigator !== "undefined" ? navigator.onLine : true
               }
               lastSyncText={syncTimeText}
-              onClick={() =>
-                showAppToast(
-                  `حالة المزامنة: متزامن مع بوابة الجامعة (${syncTimeText})`,
-                )
-              }
+              onClick={() => {
+                if (isAdmin) {
+                  setIsSystemHealthModalOpen(true);
+                } else {
+                  const online =
+                    typeof navigator !== "undefined" ? navigator.onLine : true;
+                  showAppToast(
+                    online
+                      ? `حالة الاتصال: متصل • آخر تحديث لقواعد البيانات: ${syncTimeText}`
+                      : "أنت تعمل حالياً في وضع عدم الاتصال (Offline).",
+                  );
+                }
+              }}
             />
           </div>
 
@@ -1539,6 +1527,31 @@ export function App() {
             )}
           >
             {isPrivacyMasked ? <EyeOff size={18} /> : <Eye size={18} />}
+          </button>
+
+          {/* Language Switcher Pill (Bilingual i18n: Arabic / English) */}
+          <button
+            type="button"
+            onClick={() => {
+              triggerHaptic("selection");
+              toggleLanguage();
+            }}
+            aria-label={
+              language === "ar"
+                ? "Switch interface language to English"
+                : "التبديل إلى اللغة العربية"
+            }
+            title={
+              language === "ar"
+                ? "Switch to English (LTR)"
+                : "التبديل إلى العربية (RTL)"
+            }
+            className="h-9 px-2.5 flex items-center gap-1.5 rounded-[var(--r-control)] text-xs font-bold text-[var(--text)] hover:bg-[var(--sunken)] active:scale-95 transition-all cursor-pointer border border-[var(--line-control)] shadow-2xs"
+          >
+            <Languages size={15} className="text-[var(--accent)] shrink-0" />
+            <span className="font-mono text-[11px] font-bold">
+              {language === "ar" ? "EN" : "عربي"}
+            </span>
           </button>
 
           {/* Tri-cycle Theme Toggle Button (Item 85: Dark -> Light -> System) */}
@@ -1804,7 +1817,11 @@ export function App() {
       </header>
 
       {/* Main Page View Switching based on Route (Item 35: Error Boundary protected) */}
-      <main className="flex-1 flex flex-col pb-14 md:pb-0">
+      <main
+        id="main-content"
+        tabIndex={-1}
+        className="flex-1 flex flex-col pb-14 md:pb-0 outline-hidden"
+      >
         <ErrorBoundary>
           <React.Suspense fallback={<PageLoadingFallback />}>
             {(currentRoute === "plan" || currentRoute === "calendar") && (
@@ -2143,231 +2160,117 @@ export function App() {
       )}
 
       <React.Suspense fallback={null}>
-        {/* Reset Confirmation Modal */}
-        {showResetConfirm && (
-          <ResetConfirmationModal
-            showResetConfirm={showResetConfirm}
-            onClose={() => setShowResetConfirm(false)}
-            onConfirm={handleConfirmReset}
-          />
-        )}
-
-        {/* Major Selector Modal */}
-        {showMajorSelector && (
-          <MajorSelectorModal
-            isOpen={showMajorSelector}
-            onClose={() => setShowMajorSelector(false)}
-            onSelectMajor={handleSelectMajor}
-            currentMajorId={activeMajorId}
-          />
-        )}
-
-        {/* Support / Feedback Modal */}
-        {showSupportModal && (
-          <SupportModal
-            isSupportModalOpen={showSupportModal}
-            onClose={() => setShowSupportModal(false)}
-          />
-        )}
-
-        {/* Export Plan Modal */}
-        {isExportModalOpen && (
-          <ExportModal
-            isExportModalOpen={isExportModalOpen}
-            onClose={() => setIsExportModalOpen(false)}
-            completedCredits={earnedCredits}
-            plannedCourses={plannedCourses}
-            completedCourses={completedCourses}
-            courses={courses}
-            courseGrades={courseGrades}
-            weeklySchedule={weeklySchedule}
-            selectedElectives={selectedElectives}
-            failedCourseIds={failedCourseIds}
-            planStartSemester={planStartSemester}
-            planEndSemester={planEndSemester}
-            hidePastSemesters={hidePastSemesters}
-            darkMode={isDarkMode}
-            categoryRequirements={categoryRequirements}
-            totalDegreeCredits={degreeTotalCredits}
-          />
-        )}
-
-        {/* Share Schedule Modal */}
-        {isShareScheduleOpen && (
-          <ShareScheduleModal
-            isOpen={isShareScheduleOpen}
-            onClose={() => setIsShareScheduleOpen(false)}
-            code={shareCode}
-            loading={isSharing}
-            error={shareError}
-            onCreate={handleCreateSharedLink}
-          />
-        )}
-
-        {/* Retrieve / Load Schedule Modal */}
-        {isLoadScheduleOpen && (
-          <LoadScheduleModal
-            isOpen={isLoadScheduleOpen}
-            onClose={() => setIsLoadScheduleOpen(false)}
-            loading={isLoadScheduleLoading}
-            error={loadScheduleError}
-            onLoad={handleLoadSharedSchedule}
-          />
-        )}
-
-        {/* Shared Schedule Preview Modal */}
-        {loadedSchedule && (
-          <SharedSchedulePreviewModal
-            schedule={loadedSchedule.schedule}
-            code={loadedSchedule.code}
-            warning={loadedSchedule.viewCountWarning}
-            onClose={() => setLoadedSchedule(null)}
-            onApply={applySharedSchedule}
-          />
-        )}
-
-        {/* Smart Schedule Solver Modal */}
-        {isWeeklyScheduleModalOpen && (
-          <WeeklyScheduleModal
-            isOpen={isWeeklyScheduleModalOpen}
-            onClose={() => setIsWeeklyScheduleModalOpen(false)}
-            plannedCourses={plannedCourses}
-            courses={courses}
-            weeklySchedule={weeklySchedule}
-            setWeeklySchedule={setWeeklySchedule}
-            completedCourses={completedCourses}
-          />
-        )}
-
-        {/* Add Custom Course Modal */}
-        {isAddCourseModalOpen && (
-          <AddCourseModal
-            isOpen={isAddCourseModalOpen}
-            onClose={() => setIsAddCourseModalOpen(false)}
-            onAddCourse={handleAddCustomCourse}
-          />
-        )}
-
-        {/* Student Official Records Modal (Financial & Transcript) */}
-        {isRecordsModalOpen && (
-          <StudentRecordsModal
-            isOpen={isRecordsModalOpen}
-            onClose={() => setIsRecordsModalOpen(false)}
-            profile={currentStudent}
-            onOpenSyncModal={() => {
-              setIsRecordsModalOpen(false);
-              navigateTo("login");
-            }}
-            completedCourseIds={completedCourses}
-            onApplyExemption={(courseCode, shouldExempt) => {
-              setCompletedCourses((prev) => {
-                const next = new Set(prev);
-                if (shouldExempt) {
-                  next.add(courseCode);
-                  if (courseCode === "15200106") {
-                    next.add("15200099");
-                  }
-                } else {
-                  next.delete(courseCode);
-                }
-                try {
-                  writeAppStorageValue("completed_courses", next);
-                } catch (err) {
-                  console.warn(
-                    "Failed to update completed_courses storage:",
-                    err,
-                  );
-                }
-
-                try {
-                  const cached = getCachedStudentProfile();
-                  if (cached) {
-                    const passed = new Set(cached.passedCourseIds || []);
-                    if (shouldExempt) {
-                      passed.add(courseCode);
-                      if (courseCode === "15200106") passed.add("15200099");
-                    } else {
-                      passed.delete(courseCode);
-                    }
-                    cached.passedCourseIds = Array.from(passed);
-                    localStorage.setItem(
-                      "ptuk_synced_student_profile",
-                      JSON.stringify(cached),
-                    );
-                    setCurrentStudent({ ...cached });
-                  }
-                } catch (err) {
-                  console.warn(
-                    "Failed to persist updated student profile:",
-                    err,
-                  );
-                }
-
-                return next;
-              });
-            }}
-          />
-        )}
-
-        {/* PTUK Official Academic Calendar Modal */}
-        {(isCalendarModalOpen || currentRoute === "calendar") && (
-          <AcademicCalendarModal
-            isOpen={true}
-            onClose={() => {
-              setIsCalendarModalOpen(false);
-              if (currentRoute === "calendar") {
-                navigateTo("plan");
-              }
-            }}
-          />
-        )}
-
-        {/* Command Palette Modal (Ctrl+K) */}
-        <CommandPaletteModal
-          isOpen={isCommandPaletteOpen}
-          onClose={() => setIsCommandPaletteOpen(false)}
-          courses={courses}
-          completedCourses={completedCourses}
-          onNavigate={(route) => {
-            navigateTo(route);
-            setIsCommandPaletteOpen(false);
-          }}
-          onOpenExport={() => {
-            setIsCommandPaletteOpen(false);
-            setIsExportModalOpen(true);
-          }}
-          onOpenMajorSelector={() => {
-            setIsCommandPaletteOpen(false);
-            setShowMajorSelector(true);
-          }}
-          onSelectMajor={(majorId) => {
-            handleSelectMajor(majorId);
-            setIsCommandPaletteOpen(false);
-          }}
-          onOpenComparison={() => {
-            setIsCommandPaletteOpen(false);
-            setIsComparisonOpen(true);
-          }}
-          onOpenCalendar={() => {
-            setIsCommandPaletteOpen(false);
-            setIsCalendarModalOpen(true);
-          }}
-          onPrintTranscript={() => {
-            setIsCommandPaletteOpen(false);
-            window.print();
-          }}
-          activeMajorId={activeMajorId}
-        />
-
-        {/* Course Comparison Drawer */}
-        <CourseComparisonDrawer
-          isOpen={isComparisonOpen}
-          onClose={() => setIsComparisonOpen(false)}
+        {/* Centralized Global Modals */}
+        <GlobalModalsContainer
+          currentRoute={currentRoute}
+          navigateTo={navigateTo}
+          isAdmin={isAdmin}
+          isDarkMode={isDarkMode}
+          earnedCredits={earnedCredits}
+          selectedElectives={selectedElectives}
+          failedCourseIds={failedCourseIds}
+          planStartSemester={planStartSemester}
+          planEndSemester={planEndSemester}
+          hidePastSemesters={hidePastSemesters}
+          degreeTotalCredits={degreeTotalCredits}
           courses={courses}
           completedCourses={completedCourses}
           plannedCourses={plannedCourses}
+          courseGrades={courseGrades}
+          categoryRequirements={categoryRequirements}
+          weeklySchedule={weeklySchedule}
+          setWeeklySchedule={setWeeklySchedule}
+          currentStudent={currentStudent}
+          activeMajorId={activeMajorId}
+          activeMajorName={activeMajorName}
           onToggleComplete={handleToggleComplete}
           onPlanCourse={handlePlanCourse}
+          shareCode={shareCode}
+          isSharing={isSharing}
+          shareError={shareError}
+          isLoadScheduleLoading={isLoadScheduleLoading}
+          loadScheduleError={loadScheduleError}
+          showResetConfirm={showResetConfirm}
+          setShowResetConfirm={setShowResetConfirm}
+          showMajorSelector={showMajorSelector}
+          setShowMajorSelector={setShowMajorSelector}
+          showSupportModal={showSupportModal}
+          setShowSupportModal={setShowSupportModal}
+          isExportModalOpen={isExportModalOpen}
+          setIsExportModalOpen={setIsExportModalOpen}
+          isShareScheduleOpen={isShareScheduleOpen}
+          setIsShareScheduleOpen={setIsShareScheduleOpen}
+          isLoadScheduleOpen={isLoadScheduleOpen}
+          setIsLoadScheduleOpen={setIsLoadScheduleOpen}
+          loadedSchedule={loadedSchedule}
+          setLoadedSchedule={setLoadedSchedule}
+          isWeeklyScheduleModalOpen={isWeeklyScheduleModalOpen}
+          setIsWeeklyScheduleModalOpen={setIsWeeklyScheduleModalOpen}
+          isAddCourseModalOpen={isAddCourseModalOpen}
+          setIsAddCourseModalOpen={setIsAddCourseModalOpen}
+          isRecordsModalOpen={isRecordsModalOpen}
+          setIsRecordsModalOpen={setIsRecordsModalOpen}
+          isCalendarModalOpen={isCalendarModalOpen}
+          setIsCalendarModalOpen={setIsCalendarModalOpen}
+          isSystemHealthModalOpen={isSystemHealthModalOpen}
+          setIsSystemHealthModalOpen={setIsSystemHealthModalOpen}
+          isAdvisorModalOpen={isAdvisorModalOpen}
+          setIsAdvisorModalOpen={setIsAdvisorModalOpen}
+          isCommandPaletteOpen={isCommandPaletteOpen}
+          setIsCommandPaletteOpen={setIsCommandPaletteOpen}
+          isComparisonOpen={isComparisonOpen}
+          setIsComparisonOpen={setIsComparisonOpen}
+          onConfirmReset={handleConfirmReset}
+          onSelectMajor={handleSelectMajor}
+          onCreateSharedLink={handleCreateSharedLink}
+          onLoadSharedSchedule={handleLoadSharedSchedule}
+          onApplySharedSchedule={applySharedSchedule}
+          onAddCustomCourse={handleAddCustomCourse}
+          onApplyExemption={(courseCode, shouldExempt) => {
+            setCompletedCourses((prev) => {
+              const next = new Set(prev);
+              if (shouldExempt) {
+                next.add(courseCode);
+                if (courseCode === "15200106") {
+                  next.add("15200099");
+                }
+              } else {
+                next.delete(courseCode);
+              }
+              try {
+                writeAppStorageValue("completed_courses", next);
+              } catch (err) {
+                console.warn(
+                  "Failed to update completed_courses storage:",
+                  err,
+                );
+              }
+
+              try {
+                const cached = getCachedStudentProfile();
+                if (cached) {
+                  const passed = new Set(cached.passedCourseIds || []);
+                  if (shouldExempt) {
+                    passed.add(courseCode);
+                    if (courseCode === "15200106") passed.add("15200099");
+                  } else {
+                    passed.delete(courseCode);
+                  }
+                  cached.passedCourseIds = Array.from(passed);
+                  localStorage.setItem(
+                    "ptuk_synced_student_profile",
+                    JSON.stringify(cached),
+                  );
+                  setCurrentStudent({ ...cached });
+                }
+              } catch (err) {
+                console.warn("Failed to persist updated student profile:", err);
+              }
+
+              return next;
+            });
+          }}
+          showAppToast={showAppToast}
         />
 
         {/* Academic Audit Official Printable A4 Document */}

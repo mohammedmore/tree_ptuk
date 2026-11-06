@@ -106,6 +106,18 @@ function initTables(db) {
       updated_at TEXT NOT NULL
     );
 
+    CREATE TABLE IF NOT EXISTS student_tracked_seats (
+      student_id TEXT NOT NULL,
+      course_code TEXT NOT NULL,
+      sec_number TEXT NOT NULL,
+      course_name TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      PRIMARY KEY (student_id, course_code, sec_number)
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_tracked_seats_student ON student_tracked_seats(student_id);
+
     CREATE INDEX IF NOT EXISTS idx_sections_course ON sections(course_code);
     CREATE INDEX IF NOT EXISTS idx_sections_course_sec ON sections(course_code, sec_number);
     CREATE INDEX IF NOT EXISTS idx_sections_instructor ON sections(instructor);
@@ -533,4 +545,76 @@ export function sqlitePruneExpiredSecurityState() {
   } catch (err) {
     console.warn("⚠️ SQLite security prune warning:", err.message);
   }
+}
+
+/**
+ * Persists tracked seats for a student in SQLite.
+ */
+export function sqliteSaveTrackedSeats(studentId, seats = []) {
+  if (!studentId || !Array.isArray(seats)) return;
+  const db = getSqliteDb();
+  const now = new Date().toISOString();
+
+  const insert = db.prepare(`
+    INSERT INTO student_tracked_seats (student_id, course_code, sec_number, course_name, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?)
+    ON CONFLICT(student_id, course_code, sec_number) DO UPDATE SET
+      course_name = excluded.course_name,
+      updated_at = excluded.updated_at
+  `);
+
+  const deleteObsolete = db.prepare(`
+    DELETE FROM student_tracked_seats WHERE student_id = ?
+  `);
+
+  const tx = db.transaction(() => {
+    deleteObsolete.run(studentId);
+    for (const seat of seats) {
+      if (seat.courseCode && seat.sec) {
+        insert.run(
+          studentId,
+          seat.courseCode.trim(),
+          String(seat.sec).trim(),
+          seat.courseName || null,
+          now,
+          now,
+        );
+      }
+    }
+  });
+
+  tx();
+}
+
+/**
+ * Retrieves tracked seats for a student from SQLite.
+ */
+export function sqliteGetTrackedSeats(studentId) {
+  if (!studentId) return [];
+  const db = getSqliteDb();
+  const rows = db
+    .prepare(
+      `
+    SELECT course_code as courseCode, sec_number as sec, course_name as courseName, created_at as createdAt
+    FROM student_tracked_seats
+    WHERE student_id = ?
+    ORDER BY created_at ASC
+  `,
+    )
+    .all(studentId);
+  return rows;
+}
+
+/**
+ * Removes a specific tracked seat for a student.
+ */
+export function sqliteRemoveTrackedSeat(studentId, courseCode, secNumber) {
+  if (!studentId || !courseCode || !secNumber) return;
+  const db = getSqliteDb();
+  db.prepare(
+    `
+    DELETE FROM student_tracked_seats
+    WHERE student_id = ? AND course_code = ? AND sec_number = ?
+  `,
+  ).run(studentId, courseCode.trim(), String(secNumber).trim());
 }

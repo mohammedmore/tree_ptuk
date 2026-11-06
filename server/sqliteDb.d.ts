@@ -31,3 +31,15 @@ export function sqliteUpsertCohortPlan(
   planData: any,
 ): void;
 export function sqliteGetCohortPlan(majorId: string, cohortYear: string): any;
+export function sqliteSaveTrackedSeats(
+  studentId: string,
+  seats: Array<{ courseCode: string; sec: string; courseName?: string }>,
+): void;
+export function sqliteGetTrackedSeats(
+  studentId: string,
+): Array<{ courseCode: string; sec: string; courseName?: string }>;
+export function sqliteRemoveTrackedSeat(
+  studentId: string,
+  courseCode: string,
+  secNumber: string,
+): void;

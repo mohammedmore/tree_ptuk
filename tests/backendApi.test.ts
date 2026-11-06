@@ -367,3 +367,105 @@ test("GET /api/health reports comprehensive database metrics and circuit status"
     server.close();
   }
 });
+
+test("GET /api/registration/stream establishes real-time SSE connection and receives broadcast events", async () => {
+  const http = await import("node:http");
+  const server = http.createServer(app);
+
+  await new Promise<void>((resolve) => server.listen(0, resolve));
+  const address = server.address() as any;
+  const baseUrl = `http://127.0.0.1:${address.port}`;
+
+  const { broadcastRegistrationEvent, closeAllSseClients } =
+    await import("../server/routes/registration.js");
+
+  const controller = new AbortController();
+  try {
+    const res = await fetch(`${baseUrl}/api/registration/stream`, {
+      signal: controller.signal,
+    });
+
+    assert.equal(res.status, 200);
+    assert.ok(res.headers.get("content-type")?.includes("text/event-stream"));
+
+    const reader = res.body?.getReader();
+    assert.ok(reader, "Should have a readable stream body");
+
+    const firstChunk = await reader.read();
+    const text = new TextDecoder().decode(firstChunk.value);
+    assert.ok(text.includes("event: connected"));
+    assert.ok(text.includes('"status":"connected"'));
+
+    // Test broadcasting to the active SSE client
+    broadcastRegistrationEvent("seat_update", {
+      courseCode: "12140101",
+      opened: true,
+    });
+
+    const secondChunk = await reader.read();
+    const secondText = new TextDecoder().decode(secondChunk.value);
+    assert.ok(secondText.includes("event: seat_update"));
+    assert.ok(secondText.includes("12140101"));
+
+    // Test graceful shutdown termination
+    closeAllSseClients();
+    const thirdChunk = await reader.read();
+    const thirdText = new TextDecoder().decode(thirdChunk.value);
+    assert.ok(thirdText.includes("event: shutdown"));
+  } finally {
+    controller.abort();
+    server.close();
+  }
+});
+
+test("GET /api/docs and /api/docs/ui serve complete OpenAPI 3.1 specification and HTML developer portal", async () => {
+  const http = await import("node:http");
+  const server = http.createServer(app);
+
+  await new Promise<void>((resolve) => server.listen(0, resolve));
+  const address = server.address() as any;
+  const baseUrl = `http://127.0.0.1:${address.port}`;
+
+  try {
+    // 1. JSON Specification
+    const resJson = await fetch(`${baseUrl}/api/docs`, {
+      headers: { Accept: "application/json" },
+    });
+    assert.equal(resJson.status, 200);
+    const spec = await resJson.json();
+    assert.equal(spec.openapi, "3.1.0");
+    assert.ok(spec.info?.title?.includes("PTUK"));
+    assert.ok(spec.paths["/courses"]);
+    assert.ok(spec.paths["/courses/{code}"]);
+    assert.ok(spec.paths["/student/sync"]);
+    assert.ok(spec.paths["/registration/stream"]);
+    assert.ok(spec.paths["/registration/execute"]);
+    assert.ok(spec.paths["/registration/snipe-check"]);
+    assert.ok(spec.paths["/calendar"]);
+    assert.ok(spec.paths["/sync/status"]);
+
+    // 2. HTML UI Portal at /api/docs/ui
+    const resUi = await fetch(`${baseUrl}/api/docs/ui`);
+    assert.equal(resUi.status, 200);
+    assert.ok(resUi.headers.get("content-type")?.includes("text/html"));
+    const html = await resUi.text();
+    assert.ok(html.includes("PTUK Academic Planner"));
+    assert.ok(html.includes("OpenAPI 3.1.0"));
+    assert.ok(html.includes("apiSearch"));
+
+    // 3. GET /api/docs with Accept: text/html content-negotiation
+    const resNegotiated = await fetch(`${baseUrl}/api/docs`, {
+      headers: { Accept: "text/html" },
+    });
+    assert.equal(resNegotiated.status, 200);
+    assert.ok(resNegotiated.headers.get("content-type")?.includes("text/html"));
+
+    // 4. GET /api/docs/json
+    const resExplicitJson = await fetch(`${baseUrl}/api/docs/json`);
+    assert.equal(resExplicitJson.status, 200);
+    const explicitSpec = await resExplicitJson.json();
+    assert.equal(explicitSpec.openapi, "3.1.0");
+  } finally {
+    server.close();
+  }
+});

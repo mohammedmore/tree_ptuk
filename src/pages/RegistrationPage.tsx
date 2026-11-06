@@ -108,6 +108,12 @@ import {
   EnrolledCourse,
 } from "../services/studentService";
 import { getOfficialTuitionRate } from "../services/tuitionFeesService";
+import {
+  PrewarmStatusCard,
+  TuitionSummaryWidget,
+  SeatWatcherPanel,
+  PlanItemsTable,
+} from "../components/registration";
 import { parseSemesterWeight } from "../utils/semesterUtils";
 import { cn } from "../utils";
 import { triggerHaptic } from "../utils/haptics";
@@ -1957,151 +1963,18 @@ export const RegistrationPage: React.FC<RegistrationPageProps> = ({
       </div>
 
       {/* Registration Mode Selector Card */}
-      <div className="p-4 rounded-3xl bg-[var(--surface)] border border-[var(--line)] shadow-xs space-y-3.5">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <div className="flex items-center gap-2">
-            <span className="text-xs font-bold text-[var(--text-3)] uppercase tracking-wider">
-              نمط التشغيل:
-            </span>
-            <div className="flex items-center bg-[var(--sunken)] p-1 rounded-2xl border border-[var(--line)]">
-              <button
-                type="button"
-                onClick={() => {
-                  triggerHaptic("selection");
-                  setIsLiveMode(false);
-                }}
-                className={cn(
-                  "px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5",
-                  !isLiveMode
-                    ? "bg-[var(--surface)] text-[var(--accent)] shadow-2xs border border-[var(--line-control)]"
-                    : "text-[var(--text-2)] hover:text-[var(--text)]",
-                )}
-              >
-                <Sparkles size={13} />
-                <span>محاكاة وتخطيط أسبوعي</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  triggerHaptic("selection");
-                  setIsLiveMode(true);
-                  if (!livePassword) {
-                    setShowLiveAuthModal(true);
-                  }
-                }}
-                className={cn(
-                  "px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5",
-                  isLiveMode
-                    ? "bg-rose-500 text-white shadow-2xs"
-                    : "text-[var(--text-2)] hover:text-[var(--text)]",
-                )}
-              >
-                <Zap
-                  size={13}
-                  className={isLiveMode ? "text-amber-300" : "text-rose-500"}
-                />
-                <span>تسجيل إلكتروني حقيقي (Edugate Live)</span>
-              </button>
-            </div>
-          </div>
-
-          <a
-            href="https://edugate.ptuk.edu.ps/student/onlineRegistration"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-xs text-[var(--accent)] hover:underline inline-flex items-center gap-1 font-semibold"
-          >
-            <span>رابط البوابة: onlineRegistration</span>
-            <ArrowRight size={12} className="rotate-180" />
-          </a>
-        </div>
-
-        {/* Dynamic Mode Details */}
-        {!isLiveMode ? (
-          <div className="p-3 rounded-2xl bg-amber-500/10 border border-amber-500/20 text-xs text-[var(--text-2)] flex items-start gap-2.5">
-            <ShieldAlert size={16} className="text-amber-500 shrink-0 mt-0.5" />
-            <div className="space-y-0.5 leading-relaxed">
-              <span className="font-bold text-amber-700 dark:text-amber-300 block">
-                وضع المحاكاة والتخطيط الأسبوعي (Local Simulation)
-              </span>
-              <span>
-                يقوم بحساب التعارضات واعتماد الخطة محلياً في جدولك داخل التطبيق.
-                للانتقال للتسجيل الرسمي الفعلي في سيرفرات خضوري، فعّل وضع{" "}
-                <strong>(Edugate Live)</strong> أعلاه.
-              </span>
-            </div>
-          </div>
-        ) : (
-          <div className="p-3.5 rounded-2xl bg-rose-500/10 border border-rose-500/25 text-xs text-[var(--text)] space-y-2.5">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
-              <div className="flex items-center gap-2">
-                <span className="w-2.5 h-2.5 rounded-full bg-rose-500 animate-pulse" />
-                <span className="font-bold text-rose-700 dark:text-rose-300">
-                  متصل بمسار البوابة الرسمي:
-                  https://edugate.ptuk.edu.ps/student/onlineRegistration
-                </span>
-              </div>
-
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={handleCheckPortalStatus}
-                  disabled={isCheckingPortal}
-                  className="px-3 py-1.5 rounded-xl font-bold text-xs bg-[var(--surface)] hover:bg-[var(--sunken)] border border-[var(--line-control)] text-[var(--text)] shadow-2xs flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
-                >
-                  {isCheckingPortal ? (
-                    <RefreshCw size={13} className="animate-spin" />
-                  ) : (
-                    <Gauge size={13} className="text-indigo-500" />
-                  )}
-                  <span>فحص جاهزية نافذة التسجيل الآن</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setShowLiveAuthModal(true)}
-                  className="px-3 py-1.5 rounded-xl font-bold text-xs bg-[var(--surface)] hover:bg-[var(--sunken)] border border-[var(--line-control)] text-[var(--text-2)] shadow-2xs cursor-pointer"
-                >
-                  {livePassword ? "تعديل كلمة المرور" : "إدخال كلمة المرور"}
-                </button>
-              </div>
-            </div>
-
-            {portalStatus && (
-              <div
-                className={cn(
-                  "p-2.5 rounded-xl border text-xs flex items-start gap-2",
-                  portalStatus.isOpen
-                    ? "bg-emerald-500/10 border-emerald-500/25 text-emerald-700 dark:text-emerald-300"
-                    : "bg-amber-500/10 border-amber-500/25 text-amber-700 dark:text-amber-300",
-                )}
-              >
-                {portalStatus.isOpen ? (
-                  <CheckCircle2
-                    size={16}
-                    className="shrink-0 mt-0.5 text-emerald-500"
-                  />
-                ) : (
-                  <AlertTriangle
-                    size={16}
-                    className="shrink-0 mt-0.5 text-amber-500"
-                  />
-                )}
-                <div className="space-y-0.5">
-                  <span className="font-bold block">
-                    {portalStatus.isOpen
-                      ? "نافذة التسجيل مفتوحة رسمياً ومتاحة للإرسال"
-                      : "نافذة التسجيل غير متاحة حالياً"}
-                  </span>
-                  <p className="text-[11px] opacity-90">
-                    {portalStatus.message}
-                  </p>
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-      </div>
+      <PrewarmStatusCard
+        isLiveMode={isLiveMode}
+        onToggleMode={setIsLiveMode}
+        livePassword={livePassword}
+        onOpenAuthModal={() => setShowLiveAuthModal(true)}
+        isCheckingPortal={isCheckingPortal}
+        portalStatus={portalStatus}
+        onCheckPortalStatus={handleCheckPortalStatus}
+        isOnline={isOnline}
+        isSlowNetwork={isLiteMode}
+        networkRtt={prewarmStatus?.pingMs}
+      />
 
       {/* Clean 1-Row Plan Selection Tabs */}
       <div className="flex items-center gap-2 p-1 bg-[var(--sunken)] rounded-2xl border border-[var(--line)] text-xs">
@@ -2423,350 +2296,22 @@ export const RegistrationPage: React.FC<RegistrationPageProps> = ({
       )}
 
       {/* Main Course Items List (Unified View - Point 4) */}
-      {currentPlan.items.length === 0 ? (
-        <div className="py-16 text-center space-y-4 px-4 border-2 border-dashed border-[var(--line-control)] rounded-3xl bg-[var(--surface)]/50">
-          <div className="w-14 h-14 rounded-3xl bg-indigo-500/10 text-indigo-500 flex items-center justify-center mx-auto">
-            <BookOpen size={28} />
-          </div>
-          <div className="space-y-1.5 max-w-md mx-auto">
-            <h3 className="font-bold text-base text-[var(--text)]">
-              هذه الخطة فارغة حالياً
-            </h3>
-            <p className="text-xs text-[var(--text-3)] leading-relaxed">
-              يمكنك استيراد مواد جدولك الأسبوعي بضغطة زر، أو إضافة مساقات وشعب
-              مخصصة يدوياً لتجهيزها للإرسال الفوري عند فتح التسجيل.
-            </p>
-          </div>
-          <div className="flex flex-wrap items-center justify-center gap-3 pt-2">
-            <button
-              type="button"
-              onClick={() => setIsAddModalOpen(true)}
-              className="px-4 py-2 rounded-2xl text-xs font-bold bg-[var(--accent)] text-white shadow-sm hover:opacity-90 transition-all cursor-pointer flex items-center gap-1.5"
-            >
-              <Plus size={14} />
-              <span>إضافة مادة</span>
-            </button>
-            {activeTab === "A" &&
-              Object.keys(currentWeeklySchedule).length > 0 && (
-                <button
-                  type="button"
-                  onClick={handleImportFromWeeklySchedule}
-                  className="px-4 py-2 rounded-2xl text-xs font-semibold bg-indigo-500/10 text-indigo-700 dark:text-indigo-300 border border-indigo-500/30 hover:bg-indigo-500/20 transition-all cursor-pointer flex items-center gap-1.5"
-                >
-                  <Calendar size={14} />
-                  <span>استيراد جدولك الأسبوعي الحالي</span>
-                </button>
-              )}
-          </div>
-        </div>
-      ) : (
-        <div className="space-y-3">
-          <div className="flex items-center justify-between text-xs text-[var(--text-3)] px-1">
-            <span>
-              المساقات المجهزة في هذه الخطة ({currentPlan.items.length})
-            </span>
-            <span>الأولوية تُحسب تلقائياً (المختبرات والشعب الحرجة أولاً)</span>
-          </div>
-
-          <div className="divide-y divide-[var(--line)] border border-[var(--line)] rounded-3xl overflow-hidden bg-[var(--surface)] shadow-2xs">
-            {sortRegistrationItemsByPriority(currentPlan.items).map(
-              (item, idx) => {
-                const catalogCourse = courseMap.get(item.courseId);
-                const availableSections = catalogCourse?.sections || [];
-                const secObj = availableSections.find(
-                  (s) => String(s.sec).trim() === String(item.section).trim(),
-                );
-                const secSat = calculateSectionSaturation(
-                  secObj?.registered,
-                  secObj?.capacity,
-                );
-                const isEnrolledInPortal = enrolledCoursesMap.has(
-                  item.courseId,
-                );
-                const enrolledSec = enrolledCoursesMap.get(item.courseId)?.sec;
-
-                return (
-                  <div
-                    key={item.courseId}
-                    className="p-4 sm:p-4.5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 hover:bg-[var(--sunken)]/30 transition-colors"
-                  >
-                    <div className="flex items-start gap-3 flex-1">
-                      {/* Priority Reordering Buttons (Point 26) */}
-                      <div className="flex flex-col gap-0.5 shrink-0 pt-0.5">
-                        <button
-                          type="button"
-                          disabled={idx === 0}
-                          onClick={() =>
-                            handleMovePriority(item.courseId, "up")
-                          }
-                          title="تقديم أولوية الإرسال"
-                          className="p-1 rounded-md text-[var(--text-3)] hover:text-[var(--text)] hover:bg-[var(--sunken)] disabled:opacity-20 disabled:cursor-not-allowed cursor-pointer"
-                        >
-                          <ArrowUp size={13} />
-                        </button>
-                        <button
-                          type="button"
-                          disabled={idx === currentPlan.items.length - 1}
-                          onClick={() =>
-                            handleMovePriority(item.courseId, "down")
-                          }
-                          title="تأخير أولوية الإرسال"
-                          className="p-1 rounded-md text-[var(--text-3)] hover:text-[var(--text)] hover:bg-[var(--sunken)] disabled:opacity-20 disabled:cursor-not-allowed cursor-pointer"
-                        >
-                          <ArrowDown size={13} />
-                        </button>
-                      </div>
-
-                      <div className="space-y-1.5 flex-1">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <span className="font-bold text-sm sm:text-base text-[var(--text)]">
-                            {item.courseName}
-                          </span>
-                          <span className="font-mono text-xs text-[var(--text-3)]">
-                            ({item.courseId})
-                          </span>
-                          <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-indigo-500/10 text-indigo-700 dark:text-indigo-300 border border-indigo-500/20">
-                            {item.credits} ساعات
-                          </span>
-                          {item.priority === 1 && (
-                            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-500/10 text-rose-700 dark:text-rose-300 border border-rose-500/25">
-                              أولوية أولى (إرسال فوري)
-                            </span>
-                          )}
-                          {/* Enrolled in Portal Badge (Point 30) */}
-                          {isEnrolledInPortal && (
-                            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30 flex items-center gap-1">
-                              <CheckCheck size={12} />
-                              <span>
-                                مسجل فعلياً بالبوابة (شعبة {enrolledSec})
-                              </span>
-                            </span>
-                          )}
-                        </div>
-
-                        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-[var(--text-3)]">
-                          <span>المدرس: {item.instructor || "غير محدد"}</span>
-                          <span>•</span>
-                          <span>
-                            الموعد: {item.timeText || "حسب جدول الشعبة"}
-                          </span>
-                          {item.room && (
-                            <>
-                              <span>•</span>
-                              <span>القاعة: {item.room}</span>
-                            </>
-                          )}
-                        </div>
-
-                        {/* Section Saturation Indicator (Point 15) */}
-                        {secObj && (
-                          <div className="flex items-center gap-2 pt-0.5">
-                            <span
-                              className={cn(
-                                "px-2 py-0.5 rounded-full text-[10px] font-bold border",
-                                secSat.status === "full"
-                                  ? "bg-rose-500/10 text-rose-700 dark:text-rose-300 border-rose-500/25"
-                                  : secSat.status === "critical"
-                                    ? "bg-amber-500/10 text-amber-700 dark:text-amber-300 border-amber-500/25"
-                                    : "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border-emerald-500/25",
-                              )}
-                            >
-                              {secSat.badgeText} ({secSat.registered}/
-                              {secSat.capacity})
-                            </span>
-                            <div className="w-16 bg-[var(--sunken)] rounded-full h-1.5 overflow-hidden">
-                              <div
-                                className={cn(
-                                  "h-full rounded-full transition-all",
-                                  secSat.status === "full"
-                                    ? "bg-rose-500"
-                                    : secSat.status === "critical"
-                                      ? "bg-amber-500"
-                                      : "bg-emerald-500",
-                                )}
-                                style={{ width: `${secSat.percent}%` }}
-                              />
-                            </div>
-                            {secSat.status === "full" &&
-                              !seatWatchList.some(
-                                (w) =>
-                                  w.courseId === item.courseId &&
-                                  String(w.section) === String(item.section),
-                              ) && (
-                                <button
-                                  type="button"
-                                  onClick={() =>
-                                    handleAddWatchedSection(
-                                      item.courseId,
-                                      item.section,
-                                    )
-                                  }
-                                  className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-500/30 hover:bg-amber-500 hover:text-white transition-all cursor-pointer flex items-center gap-1"
-                                  title="الشعبة مغلقة - اضغط لمراقبتها وتنبيهك عند شغر مقعد فوراً"
-                                >
-                                  <Radio size={10} />
-                                  <span>مراقبة المقعد</span>
-                                </button>
-                              )}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-
-                    <div className="flex flex-wrap items-center gap-3 self-end sm:self-auto shrink-0">
-                      {/* Primary Section Selector */}
-                      <div className="flex items-center gap-1.5 text-xs">
-                        <label className="text-[var(--text-3)] font-semibold">
-                          الشعبة:
-                        </label>
-                        {availableSections.length > 0 ? (
-                          <select
-                            value={item.section}
-                            onChange={(e) =>
-                              handleUpdateSection(item.courseId, e.target.value)
-                            }
-                            className={cn(
-                              "h-8 px-2 text-xs rounded-xl bg-[var(--sunken)] border text-[var(--text)] focus:outline-none focus:border-[var(--accent)] font-bold",
-                              isSectionClosed(
-                                secSat?.registered,
-                                secSat?.capacity,
-                              )
-                                ? "border-rose-500/50 text-rose-600 dark:text-rose-400"
-                                : "border-[var(--line-control)]",
-                            )}
-                          >
-                            {availableSections.map((s: CourseSectionInfo) => {
-                              const isFull = isSectionClosed(
-                                s.registered,
-                                s.capacity,
-                              );
-                              const avail = Math.max(
-                                0,
-                                (s.capacity || 40) - (s.registered || 0),
-                              );
-                              return (
-                                <option key={s.sec} value={s.sec}>
-                                  شعبة {s.sec} - {s.instructor || "مدرس"} (
-                                  {isFull
-                                    ? "مغلقة (ممتلئة)"
-                                    : `${avail} مقعد شاغر`}
-                                  )
-                                </option>
-                              );
-                            })}
-                          </select>
-                        ) : (
-                          <input
-                            type="text"
-                            value={item.section}
-                            onChange={(e) =>
-                              handleUpdateSection(item.courseId, e.target.value)
-                            }
-                            className="w-14 h-8 text-center font-bold text-xs rounded-xl bg-[var(--sunken)] border border-[var(--line-control)] text-[var(--text)] focus:outline-none focus:border-[var(--accent)]"
-                          />
-                        )}
-                      </div>
-
-                      {/* Reserve Section Fallback Selector (Point 10) */}
-                      {availableSections.length > 1 && (
-                        <div className="flex items-center gap-1.5 text-xs">
-                          <label
-                            className="text-[var(--text-3)] font-semibold"
-                            title="شعبة بديلة للتسجيل فوراً في حال امتلاء الشعبة الأساسية"
-                          >
-                            الاحتياطية:
-                          </label>
-                          <select
-                            value={item.reserveSection || ""}
-                            onChange={(e) =>
-                              handleSetReserveSection(
-                                item.courseId,
-                                e.target.value,
-                              )
-                            }
-                            className={cn(
-                              "h-8 px-2 text-xs rounded-xl bg-[var(--sunken)] border transition-colors focus:outline-none font-semibold",
-                              item.reserveSection
-                                ? "border-amber-500/50 text-amber-700 dark:text-amber-300 font-bold"
-                                : "border-[var(--line-control)] text-[var(--text-3)]",
-                            )}
-                            title="شعبة احتياطية للتسجيل فوراً في جزء من الثانية إذا أغلقت الشعبة الأساسية"
-                          >
-                            <option value="">(بدون احتياط)</option>
-                            {availableSections
-                              .filter(
-                                (s) =>
-                                  String(s.sec).trim() !==
-                                  String(item.section).trim(),
-                              )
-                              .map((s: CourseSectionInfo) => {
-                                const isFull = isSectionClosed(
-                                  s.registered,
-                                  s.capacity,
-                                );
-                                const avail = Math.max(
-                                  0,
-                                  (s.capacity || 40) - (s.registered || 0),
-                                );
-                                return (
-                                  <option key={s.sec} value={s.sec}>
-                                    شعبة {s.sec} - {s.instructor || "مدرس"} (
-                                    {isFull
-                                      ? "مغلقة (ممتلئة)"
-                                      : `${avail} مقعد شاغر`}
-                                    )
-                                  </option>
-                                );
-                              })}
-                          </select>
-                        </div>
-                      )}
-
-                      {/* Safe Swap Action (Point 22) */}
-                      {availableSections.length > 1 && (
-                        <button
-                          type="button"
-                          onClick={() => setSafeSwapCourseId(item.courseId)}
-                          className="px-2.5 py-1.5 rounded-xl text-xs font-semibold bg-[var(--surface)] hover:bg-[var(--sunken)] text-[var(--text-2)] hover:text-[var(--text)] border border-[var(--line-control)] transition-all cursor-pointer flex items-center gap-1"
-                          title="التبديل الآمن إلى شعبة بديلة أخرى دون تعارض"
-                        >
-                          <ArrowLeftRight
-                            size={13}
-                            className="text-indigo-500"
-                          />
-                          <span>تبديل</span>
-                        </button>
-                      )}
-
-                      {/* Add to Seat Watcher (Point 21) */}
-                      <button
-                        type="button"
-                        onClick={() =>
-                          handleAddWatchedSection(item.courseId, item.section)
-                        }
-                        className="p-1.5 rounded-xl text-[var(--text-3)] hover:text-amber-500 hover:bg-amber-500/10 transition-colors cursor-pointer"
-                        title="مراقبة المقاعد الشاغرة لهذه الشعبة"
-                      >
-                        <Radio size={15} />
-                      </button>
-
-                      {/* Delete Item */}
-                      <button
-                        type="button"
-                        onClick={() => handleRemoveItem(item.courseId)}
-                        className="p-1.5 text-rose-500 hover:bg-rose-500/10 rounded-xl transition-colors cursor-pointer"
-                        title="إزالة المساق من هذه الخطة"
-                      >
-                        <Trash2 size={16} />
-                      </button>
-                    </div>
-                  </div>
-                );
-              },
-            )}
-          </div>
-        </div>
-      )}
+      <PlanItemsTable
+        items={currentPlan.items}
+        activeTab={activeTab}
+        courseMap={courseMap}
+        enrolledCoursesMap={enrolledCoursesMap}
+        seatWatchList={seatWatchList}
+        currentWeeklySchedule={currentWeeklySchedule}
+        onMovePriority={handleMovePriority}
+        onUpdateSection={handleUpdateSection}
+        onSetReserveSection={handleSetReserveSection}
+        onRemoveItem={handleRemoveItem}
+        onOpenAddModal={() => setIsAddModalOpen(true)}
+        onImportWeeklySchedule={handleImportFromWeeklySchedule}
+        onAddWatchedSection={handleAddWatchedSection}
+        onOpenSafeSwap={(courseId) => setSafeSwapCourseId(courseId)}
+      />
 
       {/* Direct Registration Dispatcher */}
       <div className="p-5 sm:p-6 rounded-3xl bg-gradient-to-br from-indigo-500/10 via-purple-500/5 to-transparent border border-[var(--line)] space-y-4 shadow-xs">
@@ -3461,120 +3006,14 @@ export const RegistrationPage: React.FC<RegistrationPageProps> = ({
       )}
 
       {/* Seat Watcher Modal / Drawer (Point 21) */}
-      {showSeatWatcher && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 bg-black/60 backdrop-blur-sm animate-in fade-in duration-150"
-          dir="rtl"
-        >
-          <div
-            className="w-full max-w-2xl bg-[var(--surface)] border border-[var(--line)] rounded-3xl text-[var(--text)] shadow-2xl overflow-hidden flex flex-col max-h-[85vh]"
-            role="dialog"
-            aria-modal="true"
-          >
-            <div className="p-4 sm:p-5 border-b border-[var(--line)] flex items-center justify-between shrink-0">
-              <div className="flex items-center gap-2.5">
-                <Radio size={20} className="text-amber-500 animate-pulse" />
-                <div>
-                  <h3 className="font-bold text-base text-[var(--text)]">
-                    مراقبة المقاعد الشاغرة (Seat Watcher)
-                  </h3>
-                  <p className="text-xs text-[var(--text-3)]">
-                    متابعة الشعب الممتلئة والتنبيه فور قيام طالب آخر بسحبها
-                    (Drop) لحجزها فوراً
-                  </p>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => setShowSeatWatcher(false)}
-                className="p-1.5 rounded-2xl text-[var(--text-3)] hover:text-[var(--text)] hover:bg-[var(--sunken)] transition-colors cursor-pointer"
-              >
-                <X size={20} />
-              </button>
-            </div>
-
-            <div className="p-4 sm:p-6 overflow-y-auto space-y-4 flex-1">
-              <div className="flex items-center justify-between">
-                <span className="text-xs text-[var(--text-3)]">
-                  قائمة الشعب قيد المراقبة ({seatWatchList.length}):
-                </span>
-                <button
-                  type="button"
-                  onClick={handleCheckWatchedSeats}
-                  disabled={isCheckingSeats || seatWatchList.length === 0}
-                  className="px-3 py-1.5 rounded-xl bg-[var(--accent)] text-white text-xs font-bold flex items-center gap-1.5 shadow-2xs hover:opacity-90 disabled:opacity-50 cursor-pointer"
-                >
-                  <RefreshCw
-                    size={13}
-                    className={isCheckingSeats ? "animate-spin" : ""}
-                  />
-                  <span>تحديث السعة الآن</span>
-                </button>
-              </div>
-
-              {seatWatchList.length === 0 ? (
-                <div className="py-12 text-center text-xs text-[var(--text-3)] border-2 border-dashed border-[var(--line)] rounded-3xl">
-                  لم تقم بإضافة أي شعبة للمراقبة بعد. اضغط أيقونة الرادار بجانب
-                  أي شعبة في خطتك لإدراجها هنا.
-                </div>
-              ) : (
-                <div className="divide-y divide-[var(--line)] border border-[var(--line)] rounded-3xl overflow-hidden bg-[var(--surface)]">
-                  {seatWatchList.map((item) => (
-                    <div
-                      key={`${item.courseId}-${item.section}`}
-                      className="p-3.5 flex items-center justify-between gap-3 text-xs"
-                    >
-                      <div className="space-y-0.5">
-                        <div className="flex items-center gap-2">
-                          <span className="font-bold text-[var(--text)]">
-                            {item.courseName}
-                          </span>
-                          <span className="font-semibold text-indigo-600 dark:text-indigo-400 font-mono">
-                            شعبة {item.section}
-                          </span>
-                        </div>
-                        <div className="text-[11px] text-[var(--text-3)]">
-                          {item.instructor && `المدرس: ${item.instructor} • `}
-                          {item.lastChecked && `آخر فحص: ${item.lastChecked}`}
-                        </div>
-                      </div>
-
-                      <div className="flex items-center gap-3">
-                        <span
-                          className={cn(
-                            "px-2.5 py-0.5 rounded-full text-[11px] font-bold border",
-                            item.isAvailable
-                              ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border-emerald-500/30 animate-bounce"
-                              : "bg-rose-500/10 text-rose-700 dark:text-rose-300 border-rose-500/25",
-                          )}
-                        >
-                          {item.isAvailable
-                            ? `شاغر (${item.available} مقعد!)`
-                            : `ممتلئة (${item.registered}/${item.capacity})`}
-                        </span>
-
-                        <button
-                          type="button"
-                          onClick={() =>
-                            handleRemoveWatchedSection(
-                              item.courseId,
-                              item.section,
-                            )
-                          }
-                          className="p-1.5 text-rose-500 hover:bg-rose-500/10 rounded-xl transition-colors cursor-pointer"
-                          title="حذف من المراقبة"
-                        >
-                          <Trash2 size={14} />
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
+      <SeatWatcherPanel
+        isOpen={showSeatWatcher}
+        onClose={() => setShowSeatWatcher(false)}
+        seatWatchList={seatWatchList}
+        isCheckingSeats={isCheckingSeats}
+        onCheckWatchedSeats={handleCheckWatchedSeats}
+        onRemoveWatchedSection={handleRemoveWatchedSection}
+      />
 
       {/* Safe Swap Modal (Point 22) */}
       {safeSwapCourseId && (
@@ -4185,139 +3624,19 @@ export const RegistrationPage: React.FC<RegistrationPageProps> = ({
         </div>
       )}
 
-      {/* Tuition Financial Calculator Modal (Point 21) */}
-      {showTuitionModal && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 bg-black/60 backdrop-blur-sm animate-in fade-in duration-150"
-          dir="rtl"
-        >
-          <div className="w-full max-w-lg bg-[var(--surface)] border border-[var(--line)] rounded-3xl text-[var(--text)] shadow-2xl p-5 space-y-4">
-            <div className="flex items-center justify-between border-b border-[var(--line)] pb-3">
-              <div className="flex items-center gap-2">
-                <Calculator size={18} className="text-emerald-500" />
-                <h3 className="font-bold text-base text-[var(--text)]">
-                  حاسبة الرسوم المتوقعة للفصل
-                </h3>
-              </div>
-              <button
-                type="button"
-                onClick={() => setShowTuitionModal(false)}
-                className="p-1.5 rounded-2xl text-[var(--text-3)] hover:text-[var(--text)] hover:bg-[var(--sunken)] transition-colors cursor-pointer"
-              >
-                <X size={18} />
-              </button>
-            </div>
-
-            <div className="p-3.5 rounded-2xl bg-[var(--sunken)]/50 border border-[var(--line)] space-y-2 text-xs">
-              <div className="flex justify-between items-center">
-                <span className="text-[var(--text-3)]">
-                  الساعات المعتمدة في {currentPlan.title}:
-                </span>
-                <span className="font-bold text-sm text-[var(--text)]">
-                  {currentPlan.totalCredits} ساعة
-                </span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-[var(--text-3)]">
-                  تكلفة الساعات ({currentPlan.totalCredits} ×{" "}
-                  {detailedTuition.hourlyRate} د.أ):
-                </span>
-                <span className="font-bold text-sm text-[var(--text)]">
-                  {detailedTuition.creditsCostJOD} دينار (~
-                  {detailedTuition.creditsCostILS} شيكل)
-                </span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-[var(--text-3)]">
-                  رسوم التسجيل والخدمات الثابتة:
-                </span>
-                <span className="font-bold text-sm text-[var(--text)]">
-                  {detailedTuition.fixedFees} دينار (~
-                  {Math.round(
-                    detailedTuition.fixedFees * tuitionConfig.exchangeRate,
-                  )}{" "}
-                  شيكل)
-                </span>
-              </div>
-              <div className="border-t border-[var(--line)] pt-2 flex justify-between items-center text-sm">
-                <span className="font-bold text-[var(--text)]">
-                  إجمالي الرسوم المقدرة:
-                </span>
-                <span className="font-bold text-base text-emerald-600 dark:text-emerald-400">
-                  {detailedTuition.totalJOD} دينار أردني (
-                  {detailedTuition.totalILS} شيكل)
-                </span>
-              </div>
-            </div>
-
-            {/* Comparison with student balance */}
-            <div className="p-3 rounded-2xl bg-indigo-500/5 border border-indigo-500/20 text-xs space-y-1">
-              <div className="flex justify-between">
-                <span className="text-[var(--text-3)]">
-                  رصيدك المالي المتاح في حسابك الجامعي:
-                </span>
-                <span className="font-mono font-bold text-[var(--text)] privacy-sensitive">
-                  {formatDisplayBalance(cachedProfile?.financialBalance)}
-                </span>
-              </div>
-              <p className="text-[11px] text-[var(--text-3)] leading-relaxed">
-                يُنصح بسداد الرسوم عبر القنوات المعتمدة قبل موعد فتح التسجيل
-                بوقت كافٍ لضمان تغطية الرصيد وتفادي رفض المواد.
-              </p>
-            </div>
-
-            {/* Config Inputs */}
-            <div className="grid grid-cols-2 gap-3 pt-1 text-xs">
-              <div className="space-y-1">
-                <label className="text-[var(--text-3)] font-semibold">
-                  سعر الساعة المعتمدة (دينار):
-                </label>
-                <input
-                  type="number"
-                  min={10}
-                  max={100}
-                  value={tuitionConfig.hourlyRate}
-                  onChange={(e) =>
-                    setTuitionConfig((p) => ({
-                      ...p,
-                      hourlyRate: Number(e.target.value) || 25,
-                    }))
-                  }
-                  className="w-full h-9 px-3 rounded-xl bg-[var(--sunken)] border border-[var(--line-control)] text-[var(--text)] font-mono text-xs focus:outline-none focus:border-[var(--accent)]"
-                />
-              </div>
-              <div className="space-y-1">
-                <label className="text-[var(--text-3)] font-semibold">
-                  الرسوم الثابتة للفصل (دينار):
-                </label>
-                <input
-                  type="number"
-                  min={0}
-                  max={200}
-                  value={tuitionConfig.fixedFees}
-                  onChange={(e) =>
-                    setTuitionConfig((p) => ({
-                      ...p,
-                      fixedFees: Number(e.target.value) || 25,
-                    }))
-                  }
-                  className="w-full h-9 px-3 rounded-xl bg-[var(--sunken)] border border-[var(--line-control)] text-[var(--text)] font-mono text-xs focus:outline-none focus:border-[var(--accent)]"
-                />
-              </div>
-            </div>
-
-            <div className="pt-2 flex justify-end">
-              <button
-                type="button"
-                onClick={() => setShowTuitionModal(false)}
-                className="px-4 py-2 rounded-xl text-xs font-bold bg-[var(--accent)] text-white hover:opacity-90 shadow-2xs cursor-pointer"
-              >
-                إغلاق
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* Tuition Financial Calculator & Floating Mini-Bar (Point 21 & 46) */}
+      <TuitionSummaryWidget
+        isOpen={showTuitionModal}
+        onClose={() => setShowTuitionModal(false)}
+        planTitle={currentPlan.title}
+        totalCredits={currentPlan.totalCredits}
+        detailedTuition={detailedTuition}
+        studentBalance={cachedProfile?.financialBalance}
+        tuitionConfig={tuitionConfig}
+        setTuitionConfig={setTuitionConfig}
+        onOpenModal={() => setShowTuitionModal(true)}
+        formatDisplayBalance={formatDisplayBalance}
+      />
 
       {/* Rename Plan Title Modal (Point 27) */}
       {editingPlanTitle && (
@@ -4464,32 +3783,6 @@ export const RegistrationPage: React.FC<RegistrationPageProps> = ({
               </button>
             </div>
           </div>
-        </div>
-      )}
-
-      {/* Point 46: Floating Tuition Mini-Bar */}
-      {currentPlan.totalCredits > 0 && (
-        <div
-          dir="rtl"
-          className="fixed bottom-4 left-4 z-40 hidden sm:flex items-center gap-3 px-3.5 py-2 rounded-2xl bg-[var(--surface)]/95 backdrop-blur-md border border-[var(--line-control)] shadow-lg text-xs animate-in fade-in"
-        >
-          <div className="flex items-center gap-1.5 text-[var(--text)] font-semibold">
-            <Wallet size={14} className="text-[var(--accent)]" />
-            <span>الساعات: {currentPlan.totalCredits}</span>
-          </div>
-          <span className="w-px h-3.5 bg-[var(--line)]" />
-          <div className="text-[var(--text-2)] font-mono">
-            {detailedTuition.totalJOD} دينار{" "}
-            <span className="text-[10px] text-[var(--text-3)]">
-              ({detailedTuition.totalILS} ₪)
-            </span>
-          </div>
-          <button
-            onClick={() => setShowTuitionModal(true)}
-            className="text-[11px] font-bold text-[var(--accent)] hover:underline cursor-pointer"
-          >
-            تعديل الرسوم
-          </button>
         </div>
       )}
     </div>

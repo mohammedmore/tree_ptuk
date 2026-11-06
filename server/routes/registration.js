@@ -14,7 +14,9 @@ import {
   registrationExecuteSchema,
   registrationTestRequestSchema,
   registrationCheckSeatsSchema,
+  registrationSnipeCheckSchema,
 } from "../validators.js";
+import { snipeAndRegister } from "../services/seatSniperService.js";
 
 const router = express.Router();
 
@@ -40,6 +42,75 @@ function cleanupIdempotencyStore() {
     }
   }
 }
+
+// Active Server-Sent Events (SSE) subscriber connections
+const activeSseClients = new Set();
+
+/**
+ * Broadcasts real-time events to all connected clients (e.g. seat openings, registration results)
+ */
+export function broadcastRegistrationEvent(eventType, payload = {}) {
+  const message = `event: ${eventType}\ndata: ${JSON.stringify(payload)}\n\n`;
+  for (const client of activeSseClients) {
+    try {
+      client.write(message);
+    } catch {
+      activeSseClients.delete(client);
+    }
+  }
+}
+
+/**
+ * Gracefully terminates all active SSE connections during server shutdown or deployment.
+ */
+export function closeAllSseClients() {
+  for (const client of activeSseClients) {
+    try {
+      client.write(
+        'event: shutdown\ndata: {"message":"Server gracefully closing connection"}\n\n',
+      );
+      client.end();
+    } catch {}
+  }
+  activeSseClients.clear();
+}
+
+/**
+ * GET /api/registration/stream
+ * Real-time SSE channel for seat sniping, section status changes, and registration status.
+ */
+router.get("/stream", (req, res) => {
+  res.writeHead(200, {
+    "Content-Type": "text/event-stream",
+    "Cache-Control": "no-cache, no-transform",
+    Connection: "keep-alive",
+    "X-Accel-Buffering": "no",
+  });
+
+  const initialPayload = {
+    status: "connected",
+    connectedClients: activeSseClients.size + 1,
+    timestamp: new Date().toISOString(),
+  };
+  res.write(`event: connected\ndata: ${JSON.stringify(initialPayload)}\n\n`);
+
+  activeSseClients.add(res);
+
+  // Keep-alive heartbeat every 20 seconds
+  const heartbeatTimer = setInterval(() => {
+    try {
+      res.write(":ping\n\n");
+    } catch {
+      clearInterval(heartbeatTimer);
+      activeSseClients.delete(res);
+    }
+  }, 20000);
+
+  req.on("close", () => {
+    clearInterval(heartbeatTimer);
+    activeSseClients.delete(res);
+  });
+});
 
 /**
  * POST /api/registration/prewarm
@@ -248,6 +319,87 @@ router.post(
     } catch (err) {
       console.error("Check seats error:", err.message || err);
       return res.status(500).json({ error: "فشل التحقق من سعة الشعب." });
+    }
+  },
+);
+
+/**
+ * POST /api/registration/snipe-check
+ * Inspects target closed sections, identifies vacancies, and triggers instant registration if autoExecute is enabled.
+ */
+router.post(
+  "/snipe-check",
+  authenticateStudentSession,
+  validateBody(registrationSnipeCheckSchema),
+  async (req, res) => {
+    try {
+      const {
+        studentId,
+        password,
+        targetSeats,
+        autoExecute,
+        plan,
+        semester,
+        demoMode,
+      } = req.body;
+
+      // Require authenticated session for sniper checks
+      if (!req.studentSession && !demoMode) {
+        return res.status(401).json({
+          error:
+            "طلب غير مصرح به: يجب تسجيل الدخول واستخدام جلسة صالحة لمراقبة المقاعد.",
+        });
+      }
+
+      // OWASP BOLA Mitigation: verify that authenticated student matches payload
+      if (req.studentSession && !demoMode) {
+        const sessionStudentId = req.studentSession.studentId;
+        const actualStudentId = req.studentSession.actualStudentId;
+        const isSelf =
+          sessionStudentId === studentId || actualStudentId === studentId;
+        if (!isSelf && req.studentSession.role !== "admin") {
+          return res.status(403).json({
+            error:
+              "طلب مرفوض: غير مصرح لك بمراقبة مقاعد لحساب طالب آخر (BOLA Violation).",
+          });
+        }
+      }
+
+      const outcome = await snipeAndRegister({
+        studentId,
+        password,
+        targetSeats,
+        autoExecute: Boolean(autoExecute),
+        plan,
+        semester: semester || "20241",
+        demoMode: Boolean(demoMode),
+      });
+
+      if (
+        outcome &&
+        (outcome.openedCount > 0 || outcome.registrationAttempted)
+      ) {
+        broadcastRegistrationEvent("seat_update", {
+          studentId: req.studentSession?.studentId || "student",
+          openedCount: outcome.openedCount,
+          openedSeats: outcome.openedSeats,
+          registrationAttempted: outcome.registrationAttempted,
+          registrationResult: outcome.registrationResult,
+          timestamp: new Date().toISOString(),
+        });
+      }
+
+      return res.json({
+        success: true,
+        data: outcome,
+      });
+    } catch (err) {
+      console.error("Seat sniper check error:", err.message || err);
+      return res.status(500).json({
+        error: "فشل التحقق من توفر المقاعد للقناص.",
+        message:
+          process.env.NODE_ENV === "production" ? undefined : err.message,
+      });
     }
   },
 );

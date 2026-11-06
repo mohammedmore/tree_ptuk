@@ -187,6 +187,11 @@ export function validateSsrfTarget(
  * Authenticates admin operations using constant-time comparison against configured API keys.
  */
 export function requireAdminAuth(req, res, next) {
+  // Check if session has admin role
+  if (req.studentSession && req.studentSession.role === "admin") {
+    return next();
+  }
+
   const adminKey =
     process.env.ADMIN_API_KEY ||
     process.env.SYNC_API_KEY ||

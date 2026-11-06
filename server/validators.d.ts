@@ -7,6 +7,7 @@ export const registrationPortalStatusSchema: any;
 export const registrationExecuteSchema: any;
 export const registrationTestRequestSchema: any;
 export const registrationCheckSeatsSchema: any;
+export const registrationSnipeCheckSchema: any;
 export const syncPtukSchema: any;
 export const coursesQuerySchema: any;
 export const courseCodeParamSchema: any;

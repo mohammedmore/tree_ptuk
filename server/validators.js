@@ -116,6 +116,33 @@ export const registrationCheckSeatsSchema = z.object({
     .default([]),
 });
 
+export const registrationSnipeCheckSchema = z.object({
+  studentId: studentIdRule,
+  password: z.string().max(128).optional().nullable(),
+  targetSeats: z
+    .array(
+      z.object({
+        courseCode: z
+          .string()
+          .trim()
+          .min(2, "رمز المساق غير صالح")
+          .max(20, "رمز المساق غير صالح"),
+        sec: z
+          .string()
+          .trim()
+          .min(1, "رقم الشعبة غير صالح")
+          .max(10, "رقم الشعبة غير صالح"),
+        courseName: z.string().max(200).optional(),
+      }),
+    )
+    .min(1, "يجب تحديد شعبة واحدة على الأقل للمراقبة")
+    .max(50, "لا يمكن مراقبة أكثر من 50 شعبة في طلب واحد"),
+  autoExecute: z.boolean().optional().default(false),
+  plan: z.any().optional(),
+  semester: z.string().max(20).optional().default("20241"),
+  demoMode: z.boolean().optional().default(false),
+});
+
 export const syncPtukSchema = z.object({
   cookie: z
     .string({ required_error: "مطلوب إرسال cookie في جسم الطلب" })

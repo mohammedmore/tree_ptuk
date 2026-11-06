@@ -169,12 +169,19 @@ const CourseNodeComponent = ({
         isInActiveCriticalPath &&
           !isCompleted &&
           "border-amber-500 ring-2 ring-amber-500/70 bg-amber-500/10 shadow-xs",
-        isDimmed && "opacity-45 grayscale-[35%] contrast-125",
+        isPrerequisite &&
+          "shadow-[0_0_14px_rgba(59,130,246,0.35)] ring-1 ring-blue-500/50",
+        isDependent &&
+          "shadow-[0_0_14px_rgba(16,185,129,0.35)] ring-1 ring-emerald-500/50",
+        isDimmed &&
+          "opacity-25 grayscale-[60%] transition-opacity duration-200",
         !isDimmed && "opacity-100",
         isHighlighted &&
           "ring-2 ring-[var(--accent)] ring-offset-2 ring-offset-[var(--bg)] shadow-sm",
         !isHighlighted &&
           !isInActiveCriticalPath &&
+          !isPrerequisite &&
+          !isDependent &&
           "hover:border-[var(--accent)]",
       )}
       onClick={handleDetails}
@@ -445,6 +452,9 @@ function areCourseNodePropsEqual(
     p.isInPath === n.isInPath &&
     p.isElective === n.isElective &&
     p.opacity === n.opacity &&
+    p.isDimmed === n.isDimmed &&
+    p.isInActiveCriticalPath === n.isInActiveCriticalPath &&
+    p.criticalPathsCount === n.criticalPathsCount &&
     p.grade === n.grade &&
     p.showGrades === n.showGrades &&
     p.minCredits === n.minCredits &&

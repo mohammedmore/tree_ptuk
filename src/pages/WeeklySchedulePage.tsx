@@ -18,6 +18,9 @@ import {
   ChevronDown,
   GraduationCap,
   Layers,
+  Coffee,
+  ArrowLeftRight,
+  CheckCircle2,
 } from "lucide-react";
 import type { Course, ScheduleEntry } from "../data";
 import { SEMESTERS } from "../constants";
@@ -39,12 +42,15 @@ import {
   type ScheduleDraft,
 } from "../core/scheduleDrafts";
 import { triggerHaptic } from "../utils/haptics";
-import { DoctorScheduleModal } from "../components/modals";
+import { DoctorScheduleModal } from "../components/modals/DoctorScheduleModal";
+import { SectionSwapModal } from "../components/modals/SectionSwapModal";
 import { fetchCourses } from "../services/courseService";
 import {
   normalizeDayKey,
   type CatalogCourse,
+  type CatalogSection,
 } from "../services/scheduleSolver";
+import { buildScheduleEntryFromSection } from "../core/sectionSwap";
 
 interface WeeklySchedulePageProps {
   plannedCourses: Record<string, string>;
@@ -109,6 +115,11 @@ export const WeeklySchedulePage: React.FC<WeeklySchedulePageProps> = ({
   const [catalogCoursesMap, setCatalogCoursesMap] = useState<
     Record<string, CatalogCourse>
   >({});
+  const [swapCourseTarget, setSwapCourseTarget] = useState<{
+    courseId: string;
+    courseName: string;
+    currentSection: string;
+  } | null>(null);
 
   // Consolidated Export Menu State (Item 84)
   const [isExportMenuOpen, setIsExportMenuOpen] = useState(false);
@@ -254,6 +265,7 @@ export const WeeklySchedulePage: React.FC<WeeklySchedulePageProps> = ({
       startRow: number;
       durationRows: number;
       isConflict?: boolean;
+      conflictWithNames?: string[];
     }> = [];
 
     Object.entries(currentSchedule).forEach(([courseId, entry]) => {
@@ -313,6 +325,16 @@ export const WeeklySchedulePage: React.FC<WeeklySchedulePageProps> = ({
           if (Math.max(iStart, jStart) < Math.min(iEnd, jEnd)) {
             items[i].isConflict = true;
             items[j].isConflict = true;
+            const iList =
+              items[i].conflictWithNames || (items[i].conflictWithNames = []);
+            if (!iList.includes(items[j].courseName)) {
+              iList.push(items[j].courseName);
+            }
+            const jList =
+              items[j].conflictWithNames || (items[j].conflictWithNames = []);
+            if (!jList.includes(items[i].courseName)) {
+              jList.push(items[i].courseName);
+            }
           }
         }
       }
@@ -320,6 +342,68 @@ export const WeeklySchedulePage: React.FC<WeeklySchedulePageProps> = ({
 
     return items;
   }, [currentSchedule, coursesById]);
+
+  // Feature: Smart Gap Analyzer (idle hours >= 1.5h between classes)
+  const scheduleGaps = useMemo(() => {
+    const gaps: Array<{
+      key: string;
+      dayIndex: number;
+      startRow: number;
+      durationRows: number;
+      minutes: number;
+      prevCourseName: string;
+      nextCourseName: string;
+    }> = [];
+
+    for (let d = 0; d < DAYS.length; d++) {
+      const dayItems = scheduledList
+        .filter((it) => it.dayIndex === d)
+        .sort((a, b) => a.startRow - b.startRow);
+
+      for (let i = 0; i < dayItems.length - 1; i++) {
+        const curr = dayItems[i];
+        const next = dayItems[i + 1];
+        const currEnd = curr.startRow + curr.durationRows;
+        const nextStart = next.startRow;
+        const gapRows = nextStart - currEnd;
+
+        // Detect non-overlapping gaps of at least 1.5 hours (90 minutes)
+        if (gapRows >= 1.5) {
+          gaps.push({
+            key: `gap-${d}-${curr.courseId}-${next.courseId}`,
+            dayIndex: d,
+            startRow: currEnd,
+            durationRows: gapRows,
+            minutes: Math.round(gapRows * 60),
+            prevCourseName: curr.courseName,
+            nextCourseName: next.courseName,
+          });
+        }
+      }
+    }
+    return gaps;
+  }, [scheduledList]);
+
+  const conflictCount = useMemo(() => {
+    return scheduledList.filter((item) => item.isConflict).length;
+  }, [scheduledList]);
+
+  const handleApplySectionSwap = (section: CatalogSection) => {
+    if (!swapCourseTarget) return;
+    const targetId = swapCourseTarget.courseId;
+    const newEntry = buildScheduleEntryFromSection(section);
+
+    setWeeklySchedule((prev) => {
+      const semSchedule = { ...(prev[selectedSemester] || {}) };
+      semSchedule[targetId] = newEntry;
+      const updated = { ...prev, [selectedSemester]: semSchedule };
+      updateDraftSchedule(selectedSemester, activeDraftId, semSchedule);
+      return updated;
+    });
+
+    triggerHaptic("success");
+    setSwapCourseTarget(null);
+  };
 
   // Online / Asynchronous or TBA courses (Pillar 2 & 7)
   const unscheduledOrOnlineList = useMemo(() => {
@@ -761,6 +845,37 @@ export const WeeklySchedulePage: React.FC<WeeklySchedulePageProps> = ({
         </div>
       </header>
 
+      {/* Visual Conflict Banner with Solver Shortcut */}
+      {conflictCount > 0 && (
+        <div className="mx-4 sm:mx-6 mt-4 p-3.5 rounded-2xl bg-rose-500/10 border border-rose-500/20 text-rose-700 dark:text-rose-300 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+          <div className="flex items-center gap-3">
+            <AlertTriangle size={20} className="text-rose-500 shrink-0" />
+            <div>
+              <span className="font-bold text-sm block">
+                تنبيه: يوجد {conflictCount} تعارض زمني في جدولك الحالي!
+              </span>
+              <span className="text-[11.5px] text-rose-600/90 dark:text-rose-400/90">
+                انقر على زر "تبديل" في بطاقة المساق لاختيار شعبة بديلة متوافقة
+                خالية من التعارض.
+              </span>
+            </div>
+          </div>
+          {onOpenScheduleSolver && (
+            <button
+              type="button"
+              onClick={() => {
+                triggerHaptic("selection");
+                onOpenScheduleSolver();
+              }}
+              className="shrink-0 flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold transition-all shadow-xs cursor-pointer text-xs"
+            >
+              <Sparkles size={14} />
+              <span>حل التعارضات تلقائياً</span>
+            </button>
+          )}
+        </div>
+      )}
+
       {/* Mobile Day Agenda View (Point 35: Responsive Day-by-Day View) */}
       <div className="block md:hidden p-4 space-y-4">
         {/* Day Switcher Tabs */}
@@ -854,6 +969,28 @@ export const WeeklySchedulePage: React.FC<WeeklySchedulePageProps> = ({
                         <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-[var(--surface)] border border-[var(--line)] text-[var(--text-3)]">
                           شعبة {item.entry.section || (item.entry as any).sec}
                         </span>
+                        {item.isConflict && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              triggerHaptic("selection");
+                              setSwapCourseTarget({
+                                courseId: item.courseId,
+                                courseName: item.courseName,
+                                currentSection: String(
+                                  item.entry.section ||
+                                    (item.entry as any).sec ||
+                                    "",
+                                ),
+                              });
+                            }}
+                            className="flex items-center gap-1 px-2 py-0.5 rounded-lg bg-rose-500 text-white text-[10px] font-bold cursor-pointer"
+                          >
+                            <ArrowLeftRight size={10} />
+                            <span>تبديل</span>
+                          </button>
+                        )}
                       </div>
                       <div className="flex items-center gap-2 text-[11px] text-[var(--text-2)]">
                         <span className="font-mono">
@@ -1008,15 +1145,38 @@ export const WeeklySchedulePage: React.FC<WeeklySchedulePageProps> = ({
                       </div>
 
                       {/* Course ID and Section # */}
-                      <div className="flex items-center gap-1.5 text-[10.5px] text-[var(--text-2)] tabular-nums flex-wrap">
-                        <span className="font-mono bg-[var(--surface)] px-1 py-0.2 rounded text-[10px] border border-[var(--line-control)] text-[var(--text-3)] font-semibold">
-                          {item.courseId}
-                        </span>
-                        <span className="font-medium text-[var(--text)]">
-                          {item.entry.section
-                            ? `شعبة ${item.entry.section}`
-                            : "—"}
-                        </span>
+                      <div className="flex items-center justify-between gap-1 text-[10.5px] text-[var(--text-2)] tabular-nums flex-wrap">
+                        <div className="flex items-center gap-1.5">
+                          <span className="font-mono bg-[var(--surface)] px-1 py-0.2 rounded text-[10px] border border-[var(--line-control)] text-[var(--text-3)] font-semibold">
+                            {item.courseId}
+                          </span>
+                          <span className="font-medium text-[var(--text)]">
+                            {item.entry.section
+                              ? `شعبة ${item.entry.section}`
+                              : "—"}
+                          </span>
+                        </div>
+                        {isConflict && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              triggerHaptic("selection");
+                              setSwapCourseTarget({
+                                courseId: item.courseId,
+                                courseName: item.courseName,
+                                currentSection: String(
+                                  item.entry.section || "",
+                                ),
+                              });
+                            }}
+                            className="flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-rose-500 hover:bg-rose-600 text-white text-[9.5px] font-bold transition-all cursor-pointer shadow-2xs"
+                            title="استبدال الشعبة الحالية بشعبة أخرى غير متعارضة"
+                          >
+                            <ArrowLeftRight size={10} />
+                            <span>تبديل</span>
+                          </button>
+                        )}
                       </div>
 
                       {/* Instructor / الدكتور */}
@@ -1047,6 +1207,45 @@ export const WeeklySchedulePage: React.FC<WeeklySchedulePageProps> = ({
                       </span>
                     </div>
                   </div>
+                </div>
+              );
+            })}
+
+            {/* Smart Gap Analyzer: Idle hours >= 1.5h between classes */}
+            {scheduleGaps.map((gap) => {
+              const colIdx = gap.dayIndex;
+              const topPx = gap.startRow * 80;
+              const heightPx = gap.durationRows * 80;
+              const hours = Math.floor(gap.minutes / 60);
+              const mins = gap.minutes % 60;
+              const timeLabel =
+                hours > 0 && mins > 0
+                  ? `${hours} س و ${mins} د`
+                  : hours > 0
+                    ? `${hours} ${hours === 1 ? "ساعة" : hours === 2 ? "ساعتان" : "ساعات"}`
+                    : `${mins} دقيقة`;
+
+              return (
+                <div
+                  key={gap.key}
+                  style={{
+                    position: "absolute",
+                    top: `${topPx + 4}px`,
+                    height: `${heightPx - 8}px`,
+                    right: `calc((100% / 7) * ${colIdx + 1})`,
+                    width: `calc(100% / 7 - 4px)`,
+                  }}
+                  className="flex flex-col items-center justify-center p-1 rounded-[var(--r-control)] border border-dashed border-[var(--line-control)]/60 bg-[var(--surface-sunken)]/30 text-[var(--text-3)] select-none transition-colors hover:border-[var(--line-control)] pointer-events-auto text-center"
+                  title={`فترة فراغ: ${timeLabel} بين ${gap.prevCourseName} و ${gap.nextCourseName}`}
+                >
+                  <div className="flex items-center gap-1 text-[10.5px] font-medium text-[var(--text-2)]">
+                    <Coffee size={12} className="text-amber-500/80 shrink-0" />
+                    <span className="font-semibold">فراغ: {timeLabel}</span>
+                  </div>
+                  <span className="text-[9px] text-[var(--text-3)] truncate max-w-[90%]">
+                    بين {gap.prevCourseName.split(" ")[0]} و{" "}
+                    {gap.nextCourseName.split(" ")[0]}
+                  </span>
                 </div>
               );
             })}
@@ -1247,6 +1446,24 @@ export const WeeklySchedulePage: React.FC<WeeklySchedulePageProps> = ({
               >
                 إزالة من الجدول
               </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const cId = selectedEntryDetails.courseId;
+                  const cName = selectedEntryDetails.courseName;
+                  const cSec = String(selectedEntryDetails.entry.section || "");
+                  setSelectedEntryDetails(null);
+                  setSwapCourseTarget({
+                    courseId: cId,
+                    courseName: cName,
+                    currentSection: cSec,
+                  });
+                }}
+                className="w-full min-h-[var(--control-h)] px-4 bg-[var(--surface-sunken)] hover:bg-[var(--line-control)]/30 text-[var(--text)] font-semibold text-[13.5px] rounded-[var(--r-control)] border border-[var(--line-control)] transition-colors cursor-pointer flex items-center justify-center gap-2"
+              >
+                <ArrowLeftRight size={15} className="text-indigo-500" />
+                <span>استبدال الشعبة (شعب بديلة خالية من التعارض)</span>
+              </button>
             </div>
           </div>
         </div>
@@ -1260,6 +1477,21 @@ export const WeeklySchedulePage: React.FC<WeeklySchedulePageProps> = ({
         catalogCourses={catalogCoursesMap}
         courses={courses}
       />
+
+      {/* Feature: Section Swap Modal for Conflict Resolution */}
+      {swapCourseTarget && (
+        <SectionSwapModal
+          isOpen={Boolean(swapCourseTarget)}
+          onClose={() => setSwapCourseTarget(null)}
+          courseId={swapCourseTarget.courseId}
+          courseName={swapCourseTarget.courseName}
+          currentSection={swapCourseTarget.currentSection}
+          catalogCourse={catalogCoursesMap[swapCourseTarget.courseId]}
+          currentSchedule={currentSchedule}
+          coursesById={coursesById}
+          onSelectSection={handleApplySectionSwap}
+        />
+      )}
     </div>
   );
 };

@@ -16,6 +16,7 @@ class CircuitBreaker {
     this.failureThreshold = options.failureThreshold || 3; // Trips after 3 consecutive failures
     this.cooldownMs = options.cooldownMs || 60 * 1000; // 60 seconds cooldown before half-open probe
     this.consecutiveFailures = 0;
+    this.tripCount = 0;
     this.state = STATE.CLOSED;
     this.lastFailureTime = null;
     this.lastSuccessTime = null;
@@ -93,6 +94,9 @@ class CircuitBreaker {
     this.lastErrorMessage = msg;
 
     if (this.consecutiveFailures >= this.failureThreshold) {
+      if (this.state !== STATE.OPEN) {
+        this.tripCount++;
+      }
       this.state = STATE.OPEN;
       console.warn(
         `🚨 [CIRCUIT BREAKER] ${this.name} TRIPPED to OPEN after ${this.consecutiveFailures} consecutive upstream failures. Reason: ${msg}`,
@@ -105,6 +109,7 @@ class CircuitBreaker {
       name: this.name,
       state: this.state,
       consecutiveFailures: this.consecutiveFailures,
+      tripCount: this.tripCount,
       lastFailureTime: this.lastFailureTime
         ? new Date(this.lastFailureTime).toISOString()
         : null,
@@ -115,6 +120,7 @@ class CircuitBreaker {
 
   reset() {
     this.consecutiveFailures = 0;
+    this.tripCount = 0;
     this.state = STATE.CLOSED;
     this.lastFailureTime = null;
     this.lastErrorMessage = null;

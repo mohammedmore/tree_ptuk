@@ -25,6 +25,7 @@ import {
   Printer,
   Contrast,
   X,
+  Activity,
 } from "lucide-react";
 import type { Course } from "../../data";
 import type { AppRoute } from "../../router";
@@ -46,8 +47,11 @@ export interface CommandPaletteProps {
   onSelectMajor?: (majorId: string) => void;
   onOpenComparison?: () => void;
   onOpenCalendar?: () => void;
+  onOpenSystemHealth?: () => void;
+  onOpenAdvisor?: () => void;
   onPrintTranscript?: () => void;
   activeMajorId?: string;
+  isAdmin?: boolean;
 }
 
 interface PaletteAction {
@@ -72,8 +76,11 @@ export const CommandPaletteModal: React.FC<CommandPaletteProps> = ({
   onSelectMajor,
   onOpenComparison,
   onOpenCalendar,
+  onOpenSystemHealth,
+  onOpenAdvisor,
   onPrintTranscript,
   activeMajorId,
+  isAdmin = false,
 }) => {
   const [query, setQuery] = useState("");
   const [selectedIndex, setSelectedIndex] = useState(0);
@@ -169,6 +176,61 @@ export const CommandPaletteModal: React.FC<CommandPaletteProps> = ({
           "إضافة",
           "calendar",
           "dates",
+        ],
+      },
+      ...(isAdmin
+        ? [
+            {
+              id: "action-system-health",
+              title: "مراقبة واستقرار النظام (Admin Observability)",
+              subtitle:
+                "تتبع زمن الاستجابة، حالة قاطع دورة Edugate، واستهلاك الذاكرة للمشرفين",
+              category: "actions" as const,
+              icon: <Activity size={16} className="text-emerald-500" />,
+              perform: () => {
+                if (onOpenSystemHealth) onOpenSystemHealth();
+              },
+              keywords: [
+                "حالة",
+                "النظام",
+                "مراقبة",
+                "أداء",
+                "استقرار",
+                "سيرفر",
+                "health",
+                "status",
+                "latency",
+                "observability",
+                "metrics",
+                "edugate",
+                "admin",
+              ],
+            },
+          ]
+        : []),
+      {
+        id: "action-academic-advisor",
+        title: "المرشد الأكاديمي والمسار الحرج (Academic Advisor)",
+        subtitle:
+          "كشف المواد العنقودية، محاكاة تأخير التخرج، والتوصية بالفصل القادم",
+        category: "actions",
+        icon: <Compass size={16} className="text-indigo-500" />,
+        perform: () => {
+          if (onOpenAdvisor) onOpenAdvisor();
+        },
+        keywords: [
+          "مرشد",
+          "أكاديمي",
+          "مسار",
+          "حرج",
+          "اختناق",
+          "تخرج",
+          "معدل",
+          "توصية",
+          "advisor",
+          "critical",
+          "path",
+          "gpa",
         ],
       },
       {

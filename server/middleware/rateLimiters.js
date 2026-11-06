@@ -62,6 +62,7 @@ export const registrationLimiter = rateLimit({
       "تم تجاوز الحد الأقصى لعمليات التسجيل السريع. يرجى الانتظار بضع دقائق.",
   },
   skip: (req) => {
+    if (req.path === "/stream") return true;
     if (process.env.NODE_ENV !== "production") {
       const ip = req.ip || "";
       if (
@@ -93,6 +94,11 @@ let activeConnections = 0;
 const MAX_CONCURRENT = 20;
 
 export function concurrencyLimiter(req, res, next) {
+  // Never hold concurrency slots for long-lived real-time streaming connections
+  if (req.path === "/stream") {
+    return next();
+  }
+
   if (activeConnections >= MAX_CONCURRENT) {
     return res.status(429).json({
       error: "الخادم مشغول حالياً بمعالجة طلبات أخرى. يرجى الانتظار بضع ثوانٍ.",
