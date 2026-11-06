@@ -43,6 +43,75 @@ function cleanupIdempotencyStore() {
   }
 }
 
+// Active Server-Sent Events (SSE) subscriber connections
+const activeSseClients = new Set();
+
+/**
+ * Broadcasts real-time events to all connected clients (e.g. seat openings, registration results)
+ */
+export function broadcastRegistrationEvent(eventType, payload = {}) {
+  const message = `event: ${eventType}\ndata: ${JSON.stringify(payload)}\n\n`;
+  for (const client of activeSseClients) {
+    try {
+      client.write(message);
+    } catch {
+      activeSseClients.delete(client);
+    }
+  }
+}
+
+/**
+ * Gracefully terminates all active SSE connections during server shutdown or deployment.
+ */
+export function closeAllSseClients() {
+  for (const client of activeSseClients) {
+    try {
+      client.write(
+        'event: shutdown\ndata: {"message":"Server gracefully closing connection"}\n\n',
+      );
+      client.end();
+    } catch {}
+  }
+  activeSseClients.clear();
+}
+
+/**
+ * GET /api/registration/stream
+ * Real-time SSE channel for seat sniping, section status changes, and registration status.
+ */
+router.get("/stream", (req, res) => {
+  res.writeHead(200, {
+    "Content-Type": "text/event-stream",
+    "Cache-Control": "no-cache, no-transform",
+    Connection: "keep-alive",
+    "X-Accel-Buffering": "no",
+  });
+
+  const initialPayload = {
+    status: "connected",
+    connectedClients: activeSseClients.size + 1,
+    timestamp: new Date().toISOString(),
+  };
+  res.write(`event: connected\ndata: ${JSON.stringify(initialPayload)}\n\n`);
+
+  activeSseClients.add(res);
+
+  // Keep-alive heartbeat every 20 seconds
+  const heartbeatTimer = setInterval(() => {
+    try {
+      res.write(":ping\n\n");
+    } catch {
+      clearInterval(heartbeatTimer);
+      activeSseClients.delete(res);
+    }
+  }, 20000);
+
+  req.on("close", () => {
+    clearInterval(heartbeatTimer);
+    activeSseClients.delete(res);
+  });
+});
+
 /**
  * POST /api/registration/prewarm
  * Warm up session cookies and check university registration gateway latency.
@@ -305,6 +374,20 @@ router.post(
         semester: semester || "20241",
         demoMode: Boolean(demoMode),
       });
+
+      if (
+        outcome &&
+        (outcome.openedCount > 0 || outcome.registrationAttempted)
+      ) {
+        broadcastRegistrationEvent("seat_update", {
+          studentId: req.studentSession?.studentId || "student",
+          openedCount: outcome.openedCount,
+          openedSeats: outcome.openedSeats,
+          registrationAttempted: outcome.registrationAttempted,
+          registrationResult: outcome.registrationResult,
+          timestamp: new Date().toISOString(),
+        });
+      }
 
       return res.json({
         success: true,

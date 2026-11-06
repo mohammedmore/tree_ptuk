@@ -2,6 +2,7 @@ import app, { startServer } from "./server/app.js";
 import { supabase, persistStateSync } from "./server/db.js";
 import { getSqliteDb } from "./server/sqliteDb.js";
 import { closeSharedBrowser } from "./server/services/studentPortalService.js";
+import { closeAllSseClients } from "./server/routes/registration.js";
 
 const PORT = process.env.PORT || 3001;
 
@@ -14,6 +15,10 @@ function handleShutdown(signal) {
   // Close HTTP server to stop accepting new requests
   server.close(async () => {
     console.log("🔒 HTTP server closed.");
+    try {
+      closeAllSseClients();
+      console.log("📡 Active SSE clients closed gracefully.");
+    } catch {}
     try {
       persistStateSync();
       console.log("💾 State persisted to disk.");

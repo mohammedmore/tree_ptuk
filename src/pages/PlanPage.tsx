@@ -66,7 +66,7 @@ import {
 import { CourseSidebar } from "../components/planner/CourseSidebar";
 import { PlanMobileView } from "../components/planner/PlanMobileView";
 import ListView from "../components/planner/ListView";
-import { MajorTransferModal } from "../components/modals";
+import { MajorTransferModal } from "../components/modals/MajorTransferModal";
 const ExportModal = React.lazy(
   () => import("../components/modals/ExportModal"),
 );

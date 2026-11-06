@@ -11,6 +11,8 @@
     "preview": "vite preview",
     "clean": "node -e \"require('node:fs').rmSync('dist', { recursive: true, force: true })\"",
     "lint": "tsc --noEmit",
+    "format": "npx prettier --write .",
+    "format:check": "npx prettier --check .",
     "sync": "node scripts/autoSync.js",
     "sync:schedule": "node scripts/localAutoSync.js",
     "test": "node scripts/audit-illusions.js && node --import tsx --test \"tests/*.test.ts\""
@@ -47,7 +49,8 @@
     "react-dom": "^19.0.1",
     "tailwind-merge": "^3.5.0",
     "vite": "^6.2.3",
-    "zod": "^4.6.7"
+    "zod": "^4.6.7",
+    "zustand": "^4.5.7"
   },
   "overrides": {
     "qs": "^6.17.1",

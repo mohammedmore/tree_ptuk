@@ -21,3 +21,4 @@ export { AcademicCalendarModal } from "./AcademicCalendarModal";
 export { default as SystemHealthModal } from "./SystemHealthModal";
 export { default as AcademicAdvisorModal } from "./AcademicAdvisorModal";
 export { default as SectionSwapModal } from "./SectionSwapModal";
+export { GlobalModalsContainer } from "./GlobalModalsContainer";

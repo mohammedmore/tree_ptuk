@@ -170,7 +170,10 @@ export const SystemHealthModal: React.FC<SystemHealthModalProps> = ({
       });
       if (res.ok) {
         if (typeof window !== "undefined") {
-          window.sessionStorage?.setItem("ptuk_admin_key", adminKeyInput.trim());
+          window.sessionStorage?.setItem(
+            "ptuk_admin_key",
+            adminKeyInput.trim(),
+          );
           window.sessionStorage?.setItem("ptuk_admin_authorized", "true");
         }
         setIsAuthRequired(false);
@@ -345,7 +348,8 @@ export const SystemHealthModal: React.FC<SystemHealthModalProps> = ({
                   لوحة مراقبة الخادم (Admin Restricted)
                 </h3>
                 <p className="text-xs text-[var(--text-3)] leading-relaxed">
-                  هذه اللوحة مخصصة لمسؤولي ومطوري النظام فقط لمتابعة صحة السيرفر وحركة الطلبات. يرجى إدخال مفتاح الإدارة للمتابعة.
+                  هذه اللوحة مخصصة لمسؤولي ومطوري النظام فقط لمتابعة صحة السيرفر
+                  وحركة الطلبات. يرجى إدخال مفتاح الإدارة للمتابعة.
                 </p>
               </div>
 
@@ -365,7 +369,9 @@ export const SystemHealthModal: React.FC<SystemHealthModalProps> = ({
                   disabled={authSubmitting || !adminKeyInput.trim()}
                   className="w-full h-10 px-4 rounded-xl bg-[var(--accent)] text-[var(--text-on-accent)] text-xs font-bold hover:brightness-105 active:scale-[0.98] transition-all disabled:opacity-50 cursor-pointer shadow-sm"
                 >
-                  {authSubmitting ? "جاري التحقق..." : "تأكيد والوصول إلى اللوحة"}
+                  {authSubmitting
+                    ? "جاري التحقق..."
+                    : "تأكيد والوصول إلى اللوحة"}
                 </button>
               </form>
             </div>
@@ -378,276 +384,284 @@ export const SystemHealthModal: React.FC<SystemHealthModalProps> = ({
                 </div>
               )}
 
-          {/* Key Metric Cards */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-            {/* Card 1: Latency */}
-            <div className="p-4 rounded-2xl bg-[var(--surface-sunken)]/50 border border-[var(--line)] flex flex-col justify-between">
-              <div className="flex items-center justify-between text-xs font-semibold text-[var(--text-3)] mb-2">
-                <span>زمن الاستجابة (Latency)</span>
-                <Clock size={16} className="text-sky-500" />
-              </div>
-              <div className="space-y-1">
-                <div className="text-2xl font-black tracking-tight text-[var(--text)]">
-                  {data?.latency?.avg ?? 0}
-                  <span className="text-xs font-bold text-[var(--text-3)] mr-1">
-                    ms
-                  </span>
+              {/* Key Metric Cards */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+                {/* Card 1: Latency */}
+                <div className="p-4 rounded-2xl bg-[var(--surface-sunken)]/50 border border-[var(--line)] flex flex-col justify-between">
+                  <div className="flex items-center justify-between text-xs font-semibold text-[var(--text-3)] mb-2">
+                    <span>زمن الاستجابة (Latency)</span>
+                    <Clock size={16} className="text-sky-500" />
+                  </div>
+                  <div className="space-y-1">
+                    <div className="text-2xl font-black tracking-tight text-[var(--text)]">
+                      {data?.latency?.avg ?? 0}
+                      <span className="text-xs font-bold text-[var(--text-3)] mr-1">
+                        ms
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between text-[11px] text-[var(--text-2)] pt-2 border-t border-[var(--line)]/60">
+                      <span>
+                        p50: <b>{data?.latency?.p50 ?? 0}ms</b>
+                      </span>
+                      <span>
+                        p95: <b>{data?.latency?.p95 ?? 0}ms</b>
+                      </span>
+                      <span>
+                        p99: <b>{data?.latency?.p99 ?? 0}ms</b>
+                      </span>
+                    </div>
+                  </div>
                 </div>
-                <div className="flex items-center justify-between text-[11px] text-[var(--text-2)] pt-2 border-t border-[var(--line)]/60">
-                  <span>
-                    p50: <b>{data?.latency?.p50 ?? 0}ms</b>
-                  </span>
-                  <span>
-                    p95: <b>{data?.latency?.p95 ?? 0}ms</b>
-                  </span>
-                  <span>
-                    p99: <b>{data?.latency?.p99 ?? 0}ms</b>
-                  </span>
-                </div>
-              </div>
-            </div>
 
-            {/* Card 2: Edugate Circuit Breaker */}
-            <div className="p-4 rounded-2xl bg-[var(--surface-sunken)]/50 border border-[var(--line)] flex flex-col justify-between">
-              <div className="flex items-center justify-between text-xs font-semibold text-[var(--text-3)] mb-2">
-                <span>بوابة الجامعة (Edugate)</span>
-                <ShieldCheck
-                  size={16}
-                  className={
-                    circuitState === "CLOSED"
-                      ? "text-emerald-500"
-                      : circuitState === "HALF_OPEN"
-                        ? "text-amber-500"
-                        : "text-rose-500"
-                  }
-                />
-              </div>
-              <div className="space-y-1">
-                <div className="flex items-center gap-2">
-                  <span
-                    className={cn(
-                      "px-2 py-0.5 rounded-lg text-xs font-black uppercase tracking-wider",
-                      circuitState === "CLOSED"
-                        ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400"
-                        : circuitState === "HALF_OPEN"
-                          ? "bg-amber-500/15 text-amber-600 dark:text-amber-400"
-                          : "bg-rose-500/15 text-rose-600 dark:text-rose-400",
-                    )}
-                  >
-                    {circuitState === "CLOSED"
-                      ? "مستقر (Closed)"
-                      : circuitState === "HALF_OPEN"
-                        ? "فحص أولي (Canary)"
-                        : "معزول (Tripped)"}
-                  </span>
+                {/* Card 2: Edugate Circuit Breaker */}
+                <div className="p-4 rounded-2xl bg-[var(--surface-sunken)]/50 border border-[var(--line)] flex flex-col justify-between">
+                  <div className="flex items-center justify-between text-xs font-semibold text-[var(--text-3)] mb-2">
+                    <span>بوابة الجامعة (Edugate)</span>
+                    <ShieldCheck
+                      size={16}
+                      className={
+                        circuitState === "CLOSED"
+                          ? "text-emerald-500"
+                          : circuitState === "HALF_OPEN"
+                            ? "text-amber-500"
+                            : "text-rose-500"
+                      }
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2">
+                      <span
+                        className={cn(
+                          "px-2 py-0.5 rounded-lg text-xs font-black uppercase tracking-wider",
+                          circuitState === "CLOSED"
+                            ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400"
+                            : circuitState === "HALF_OPEN"
+                              ? "bg-amber-500/15 text-amber-600 dark:text-amber-400"
+                              : "bg-rose-500/15 text-rose-600 dark:text-rose-400",
+                        )}
+                      >
+                        {circuitState === "CLOSED"
+                          ? "مستقر (Closed)"
+                          : circuitState === "HALF_OPEN"
+                            ? "فحص أولي (Canary)"
+                            : "معزول (Tripped)"}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between text-[11px] text-[var(--text-2)] pt-2 border-t border-[var(--line)]/60">
+                      <span>
+                        الإخفاقات:{" "}
+                        <b>
+                          {data?.circuitBreaker?.consecutiveFailures ?? 0}/3
+                        </b>
+                      </span>
+                      <span>
+                        مرات الحماية:{" "}
+                        <b>{data?.circuitBreaker?.tripCount ?? 0}</b>
+                      </span>
+                    </div>
+                  </div>
                 </div>
-                <div className="flex items-center justify-between text-[11px] text-[var(--text-2)] pt-2 border-t border-[var(--line)]/60">
-                  <span>
-                    الإخفاقات:{" "}
-                    <b>{data?.circuitBreaker?.consecutiveFailures ?? 0}/3</b>
-                  </span>
-                  <span>
-                    مرات الحماية: <b>{data?.circuitBreaker?.tripCount ?? 0}</b>
-                  </span>
-                </div>
-              </div>
-            </div>
 
-            {/* Card 3: Memory Usage */}
-            <div className="p-4 rounded-2xl bg-[var(--surface-sunken)]/50 border border-[var(--line)] flex flex-col justify-between">
-              <div className="flex items-center justify-between text-xs font-semibold text-[var(--text-3)] mb-2">
-                <span>ذاكرة النظام (Heap Memory)</span>
-                <Cpu size={16} className="text-violet-500" />
+                {/* Card 3: Memory Usage */}
+                <div className="p-4 rounded-2xl bg-[var(--surface-sunken)]/50 border border-[var(--line)] flex flex-col justify-between">
+                  <div className="flex items-center justify-between text-xs font-semibold text-[var(--text-3)] mb-2">
+                    <span>ذاكرة النظام (Heap Memory)</span>
+                    <Cpu size={16} className="text-violet-500" />
+                  </div>
+                  <div className="space-y-1">
+                    <div className="flex items-baseline justify-between">
+                      <div className="text-2xl font-black tracking-tight text-[var(--text)]">
+                        {data?.system?.memory?.heapUsedMb ?? 0}
+                        <span className="text-xs font-bold text-[var(--text-3)] mr-1">
+                          MB
+                        </span>
+                      </div>
+                      <span className="text-xs font-bold text-[var(--text-3)]">
+                        من {data?.system?.memory?.heapTotalMb ?? 0} MB
+                      </span>
+                    </div>
+                    {/* Progress bar */}
+                    <div className="w-full bg-[var(--line)] rounded-full h-1.5 overflow-hidden mt-1">
+                      <div
+                        className="bg-violet-500 h-1.5 rounded-full transition-all duration-500"
+                        style={{
+                          width: `${Math.min(
+                            data?.system?.memory?.heapUtilizationPercent ?? 0,
+                            100,
+                          )}%`,
+                        }}
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Card 4: Database Storage */}
+                <div className="p-4 rounded-2xl bg-[var(--surface-sunken)]/50 border border-[var(--line)] flex flex-col justify-between">
+                  <div className="flex items-center justify-between text-xs font-semibold text-[var(--text-3)] mb-2">
+                    <span>قاعدة البيانات (SQLite)</span>
+                    <Database size={16} className="text-amber-500" />
+                  </div>
+                  <div className="space-y-1">
+                    <div className="text-2xl font-black tracking-tight text-[var(--text)]">
+                      {data?.database?.metrics?.sizeFormatted || "0 KB"}
+                    </div>
+                    <div className="flex items-center justify-between text-[11px] text-[var(--text-2)] pt-2 border-t border-[var(--line)]/60">
+                      <span>
+                        سجل WAL:{" "}
+                        <b>{data?.database?.metrics?.walFormatted || "0 KB"}</b>
+                      </span>
+                      <span>
+                        الطلاب:{" "}
+                        <b>{data?.database?.metrics?.studentsCount ?? 0}</b>
+                      </span>
+                    </div>
+                  </div>
+                </div>
               </div>
-              <div className="space-y-1">
-                <div className="flex items-baseline justify-between">
-                  <div className="text-2xl font-black tracking-tight text-[var(--text)]">
-                    {data?.system?.memory?.heapUsedMb ?? 0}
-                    <span className="text-xs font-bold text-[var(--text-3)] mr-1">
-                      MB
+
+              {/* Runtime & Request Statistics Grid */}
+              <div className="p-4 sm:p-5 rounded-3xl bg-[var(--surface-sunken)]/30 border border-[var(--line)] space-y-4">
+                <h3 className="text-xs font-bold uppercase tracking-wider text-[var(--text-3)]">
+                  إحصائيات التشغيل والطلبات المباشرة
+                </h3>
+
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-center">
+                  <div className="p-3 rounded-2xl bg-[var(--surface)] border border-[var(--line)]">
+                    <span className="text-[11px] font-semibold text-[var(--text-3)] block mb-1">
+                      مدة التشغيل المتواصل
+                    </span>
+                    <span className="text-sm sm:text-base font-black text-[var(--text)]">
+                      {data?.uptime?.formatted || "0s"}
                     </span>
                   </div>
-                  <span className="text-xs font-bold text-[var(--text-3)]">
-                    من {data?.system?.memory?.heapTotalMb ?? 0} MB
-                  </span>
+
+                  <div className="p-3 rounded-2xl bg-[var(--surface)] border border-[var(--line)]">
+                    <span className="text-[11px] font-semibold text-[var(--text-3)] block mb-1">
+                      معدل الطلبات (RPS)
+                    </span>
+                    <span className="text-sm sm:text-base font-black text-sky-600 dark:text-sky-400">
+                      {data?.requests?.rps ?? 0} req/s
+                    </span>
+                  </div>
+
+                  <div className="p-3 rounded-2xl bg-[var(--surface)] border border-[var(--line)]">
+                    <span className="text-[11px] font-semibold text-[var(--text-3)] block mb-1">
+                      تأخر حلقة الأحداث (Event Loop)
+                    </span>
+                    <span
+                      className={cn(
+                        "text-sm sm:text-base font-black",
+                        (data?.system?.eventLoopLagMs ?? 0) > 50
+                          ? "text-amber-500"
+                          : "text-emerald-500",
+                      )}
+                    >
+                      {data?.system?.eventLoopLagMs ?? 0} ms
+                    </span>
+                  </div>
+
+                  <div className="p-3 rounded-2xl bg-[var(--surface)] border border-[var(--line)]">
+                    <span className="text-[11px] font-semibold text-[var(--text-3)] block mb-1">
+                      نسبة الخطأ الإجمالية
+                    </span>
+                    <span
+                      className={cn(
+                        "text-sm sm:text-base font-black",
+                        (data?.requests?.errorRatePercent ?? 0) > 5
+                          ? "text-rose-500"
+                          : "text-emerald-500",
+                      )}
+                    >
+                      {data?.requests?.errorRatePercent ?? 0}%
+                    </span>
+                  </div>
                 </div>
-                {/* Progress bar */}
-                <div className="w-full bg-[var(--line)] rounded-full h-1.5 overflow-hidden mt-1">
-                  <div
-                    className="bg-violet-500 h-1.5 rounded-full transition-all duration-500"
-                    style={{
-                      width: `${Math.min(
-                        data?.system?.memory?.heapUtilizationPercent ?? 0,
-                        100,
-                      )}%`,
-                    }}
-                  />
+
+                {/* Status Code Breakdown Pills */}
+                <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-[var(--line)] text-xs text-[var(--text-2)]">
+                  <span>توزيع استجابات الخادم (HTTP Status):</span>
+                  <div className="flex items-center gap-2">
+                    <span className="px-2 py-0.5 rounded-md bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 font-bold">
+                      2xx: {data?.requests?.statusCodes?.["2xx"] ?? 0}
+                    </span>
+                    <span className="px-2 py-0.5 rounded-md bg-sky-500/10 text-sky-600 dark:text-sky-400 font-bold">
+                      3xx: {data?.requests?.statusCodes?.["3xx"] ?? 0}
+                    </span>
+                    <span className="px-2 py-0.5 rounded-md bg-amber-500/10 text-amber-600 dark:text-amber-400 font-bold">
+                      4xx: {data?.requests?.statusCodes?.["4xx"] ?? 0}
+                    </span>
+                    <span className="px-2 py-0.5 rounded-md bg-rose-500/10 text-rose-600 dark:text-rose-400 font-bold">
+                      5xx: {data?.requests?.statusCodes?.["5xx"] ?? 0}
+                    </span>
+                  </div>
                 </div>
               </div>
-            </div>
 
-            {/* Card 4: Database Storage */}
-            <div className="p-4 rounded-2xl bg-[var(--surface-sunken)]/50 border border-[var(--line)] flex flex-col justify-between">
-              <div className="flex items-center justify-between text-xs font-semibold text-[var(--text-3)] mb-2">
-                <span>قاعدة البيانات (SQLite)</span>
-                <Database size={16} className="text-amber-500" />
-              </div>
-              <div className="space-y-1">
-                <div className="text-2xl font-black tracking-tight text-[var(--text)]">
-                  {data?.database?.metrics?.sizeFormatted || "0 KB"}
-                </div>
-                <div className="flex items-center justify-between text-[11px] text-[var(--text-2)] pt-2 border-t border-[var(--line)]/60">
-                  <span>
-                    سجل WAL:{" "}
-                    <b>{data?.database?.metrics?.walFormatted || "0 KB"}</b>
-                  </span>
-                  <span>
-                    الطلاب: <b>{data?.database?.metrics?.studentsCount ?? 0}</b>
-                  </span>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Runtime & Request Statistics Grid */}
-          <div className="p-4 sm:p-5 rounded-3xl bg-[var(--surface-sunken)]/30 border border-[var(--line)] space-y-4">
-            <h3 className="text-xs font-bold uppercase tracking-wider text-[var(--text-3)]">
-              إحصائيات التشغيل والطلبات المباشرة
-            </h3>
-
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-center">
-              <div className="p-3 rounded-2xl bg-[var(--surface)] border border-[var(--line)]">
-                <span className="text-[11px] font-semibold text-[var(--text-3)] block mb-1">
-                  مدة التشغيل المتواصل
-                </span>
-                <span className="text-sm sm:text-base font-black text-[var(--text)]">
-                  {data?.uptime?.formatted || "0s"}
-                </span>
-              </div>
-
-              <div className="p-3 rounded-2xl bg-[var(--surface)] border border-[var(--line)]">
-                <span className="text-[11px] font-semibold text-[var(--text-3)] block mb-1">
-                  معدل الطلبات (RPS)
-                </span>
-                <span className="text-sm sm:text-base font-black text-sky-600 dark:text-sky-400">
-                  {data?.requests?.rps ?? 0} req/s
-                </span>
-              </div>
-
-              <div className="p-3 rounded-2xl bg-[var(--surface)] border border-[var(--line)]">
-                <span className="text-[11px] font-semibold text-[var(--text-3)] block mb-1">
-                  تأخر حلقة الأحداث (Event Loop)
-                </span>
-                <span
-                  className={cn(
-                    "text-sm sm:text-base font-black",
-                    (data?.system?.eventLoopLagMs ?? 0) > 50
-                      ? "text-amber-500"
-                      : "text-emerald-500",
-                  )}
-                >
-                  {data?.system?.eventLoopLagMs ?? 0} ms
-                </span>
-              </div>
-
-              <div className="p-3 rounded-2xl bg-[var(--surface)] border border-[var(--line)]">
-                <span className="text-[11px] font-semibold text-[var(--text-3)] block mb-1">
-                  نسبة الخطأ الإجمالية
-                </span>
-                <span
-                  className={cn(
-                    "text-sm sm:text-base font-black",
-                    (data?.requests?.errorRatePercent ?? 0) > 5
-                      ? "text-rose-500"
-                      : "text-emerald-500",
-                  )}
-                >
-                  {data?.requests?.errorRatePercent ?? 0}%
-                </span>
-              </div>
-            </div>
-
-            {/* Status Code Breakdown Pills */}
-            <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-[var(--line)] text-xs text-[var(--text-2)]">
-              <span>توزيع استجابات الخادم (HTTP Status):</span>
-              <div className="flex items-center gap-2">
-                <span className="px-2 py-0.5 rounded-md bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 font-bold">
-                  2xx: {data?.requests?.statusCodes?.["2xx"] ?? 0}
-                </span>
-                <span className="px-2 py-0.5 rounded-md bg-sky-500/10 text-sky-600 dark:text-sky-400 font-bold">
-                  3xx: {data?.requests?.statusCodes?.["3xx"] ?? 0}
-                </span>
-                <span className="px-2 py-0.5 rounded-md bg-amber-500/10 text-amber-600 dark:text-amber-400 font-bold">
-                  4xx: {data?.requests?.statusCodes?.["4xx"] ?? 0}
-                </span>
-                <span className="px-2 py-0.5 rounded-md bg-rose-500/10 text-rose-600 dark:text-rose-400 font-bold">
-                  5xx: {data?.requests?.statusCodes?.["5xx"] ?? 0}
-                </span>
-              </div>
-            </div>
-          </div>
-
-          {/* Top Routes Latency Table */}
-          {data?.topRoutes && data.topRoutes.length > 0 && (
-            <div className="space-y-3">
-              <h3 className="text-xs font-bold uppercase tracking-wider text-[var(--text-3)]">
-                أداء مسارات الـ API الأكثر طلباً (Top Routes)
-              </h3>
-              <div className="border border-[var(--line)] rounded-2xl overflow-hidden bg-[var(--surface)]">
-                <table className="w-full text-right text-xs">
-                  <thead className="bg-[var(--surface-sunken)]/60 text-[var(--text-3)] font-semibold border-b border-[var(--line)]">
-                    <tr>
-                      <th className="py-2.5 px-4">المسار (Route)</th>
-                      <th className="py-2.5 px-4 text-center">الطلبات</th>
-                      <th className="py-2.5 px-4 text-center">متوسط الزمن</th>
-                      <th className="py-2.5 px-4 text-center">أدنى / أقصى</th>
-                      <th className="py-2.5 px-4 text-center">الأخطاء</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-[var(--line)]">
-                    {data.topRoutes.map((r, idx) => (
-                      <tr
-                        key={idx}
-                        className="hover:bg-[var(--surface-hover)]/50 transition-colors"
-                      >
-                        <td className="py-2.5 px-4 font-mono font-medium text-[var(--text)]">
-                          {r.route}
-                        </td>
-                        <td className="py-2.5 px-4 text-center font-bold">
-                          {r.count}
-                        </td>
-                        <td className="py-2.5 px-4 text-center font-bold">
-                          <span
-                            className={cn(
-                              r.avgMs > 150
-                                ? "text-rose-500"
-                                : r.avgMs > 50
-                                  ? "text-amber-500"
-                                  : "text-emerald-500",
-                            )}
+              {/* Top Routes Latency Table */}
+              {data?.topRoutes && data.topRoutes.length > 0 && (
+                <div className="space-y-3">
+                  <h3 className="text-xs font-bold uppercase tracking-wider text-[var(--text-3)]">
+                    أداء مسارات الـ API الأكثر طلباً (Top Routes)
+                  </h3>
+                  <div className="border border-[var(--line)] rounded-2xl overflow-hidden bg-[var(--surface)]">
+                    <table className="w-full text-right text-xs">
+                      <thead className="bg-[var(--surface-sunken)]/60 text-[var(--text-3)] font-semibold border-b border-[var(--line)]">
+                        <tr>
+                          <th className="py-2.5 px-4">المسار (Route)</th>
+                          <th className="py-2.5 px-4 text-center">الطلبات</th>
+                          <th className="py-2.5 px-4 text-center">
+                            متوسط الزمن
+                          </th>
+                          <th className="py-2.5 px-4 text-center">
+                            أدنى / أقصى
+                          </th>
+                          <th className="py-2.5 px-4 text-center">الأخطاء</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-[var(--line)]">
+                        {data.topRoutes.map((r, idx) => (
+                          <tr
+                            key={idx}
+                            className="hover:bg-[var(--surface-hover)]/50 transition-colors"
                           >
-                            {r.avgMs} ms
-                          </span>
-                        </td>
-                        <td className="py-2.5 px-4 text-center text-[var(--text-3)]">
-                          {r.minMs} / {r.maxMs} ms
-                        </td>
-                        <td className="py-2.5 px-4 text-center">
-                          {r.errors > 0 ? (
-                            <span className="px-1.5 py-0.5 rounded-sm bg-rose-500/10 text-rose-500 font-bold">
-                              {r.errors}
-                            </span>
-                          ) : (
-                            <span className="text-[var(--text-3)]">0</span>
-                          )}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
+                            <td className="py-2.5 px-4 font-mono font-medium text-[var(--text)]">
+                              {r.route}
+                            </td>
+                            <td className="py-2.5 px-4 text-center font-bold">
+                              {r.count}
+                            </td>
+                            <td className="py-2.5 px-4 text-center font-bold">
+                              <span
+                                className={cn(
+                                  r.avgMs > 150
+                                    ? "text-rose-500"
+                                    : r.avgMs > 50
+                                      ? "text-amber-500"
+                                      : "text-emerald-500",
+                                )}
+                              >
+                                {r.avgMs} ms
+                              </span>
+                            </td>
+                            <td className="py-2.5 px-4 text-center text-[var(--text-3)]">
+                              {r.minMs} / {r.maxMs} ms
+                            </td>
+                            <td className="py-2.5 px-4 text-center">
+                              {r.errors > 0 ? (
+                                <span className="px-1.5 py-0.5 rounded-sm bg-rose-500/10 text-rose-500 font-bold">
+                                  {r.errors}
+                                </span>
+                              ) : (
+                                <span className="text-[var(--text-3)]">0</span>
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
             </>
           )}
         </div>

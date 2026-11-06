@@ -82,7 +82,7 @@ import {
 } from "../constants";
 import { cn, normalizeArabicText, matchDoctorName, wordsMatch } from "../utils";
 import type { AppRoute } from "../router";
-import { DoctorScheduleModal } from "../components/modals";
+import { DoctorScheduleModal } from "../components/modals/DoctorScheduleModal";
 import {
   analyzeSectionSwap,
   buildScheduleEntryFromSection,

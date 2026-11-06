@@ -6,6 +6,8 @@ import {
   simulateCourseDelayImpact,
   recommendOptimalUpcomingSemester,
   simulateGpaForecast,
+  generateGraduationRoadmap,
+  generateGraduationRoadmapICS,
 } from "../src/core/academicAdvisor.js";
 
 // Realistic curriculum fixture with genuine prerequisites
@@ -169,4 +171,110 @@ test("academicAdvisor: simulateGpaForecast accurately forecasts GPA and warning 
   // (61*20 + 3*50 + 3*45) / 26 = (1220 + 150 + 135) / 26 = 1505 / 26 = 57.88
   assert.equal(forecastBad.projectedGpa, 57.88);
   assert.equal(forecastBad.hasAcademicWarning, true);
+});
+
+test("academicAdvisor: generateGraduationRoadmap generates valid multi-semester plan without prerequisite violations", () => {
+  const result = generateGraduationRoadmap({
+    courses: mockCourses,
+    completedCourses: new Set(),
+    targetCreditsPerSemester: 18,
+    includeSummer: false,
+  });
+
+  assert.equal(result.totalCurriculumCredits, 23);
+  assert.equal(result.completedCredits, 0);
+  assert.equal(result.remainingCredits, 23);
+  assert.equal(result.isFullyResolved, true);
+  assert.equal(result.unresolvedCourses.length, 0);
+
+  // Validate prerequisite progression order:
+  // Prog 1 must be in an earlier semester than Prog 2
+  // Prog 2 must be in an earlier semester than Data Structures
+  // Data Structures must be in an earlier semester than Algorithms
+  // Algorithms must be in an earlier semester than Senior Project 1
+  const courseSemesterIndex = new Map<string, number>();
+  result.semesters.forEach((sem, idx) => {
+    sem.courses.forEach((c) => courseSemesterIndex.set(c.id, idx));
+  });
+
+  assert.ok(
+    courseSemesterIndex.get("15200101")! < courseSemesterIndex.get("15200102")!,
+  );
+  assert.ok(
+    courseSemesterIndex.get("15200102")! < courseSemesterIndex.get("15200211")!,
+  );
+  assert.ok(
+    courseSemesterIndex.get("15200211")! < courseSemesterIndex.get("15200321")!,
+  );
+  assert.ok(
+    courseSemesterIndex.get("15200321")! < courseSemesterIndex.get("15200491")!,
+  );
+
+  // Check first semester priority
+  const firstSem = result.semesters[0];
+  assert.equal(firstSem.semesterLabel, "السنة 1 - الفصل الأول");
+  assert.ok(
+    firstSem.courses.some((c) => c.id === "15200101"),
+    "Programming 1 must be scheduled in Semester 1",
+  );
+});
+
+test("academicAdvisor: generateGraduationRoadmap enforces summer credit limit of 9 hours", () => {
+  const result = generateGraduationRoadmap({
+    courses: mockCourses,
+    completedCourses: new Set(),
+    includeSummer: true,
+  });
+
+  const summerSemesters = result.semesters.filter(
+    (s) => s.termType === "summer",
+  );
+  for (const s of summerSemesters) {
+    assert.equal(s.maxCredits, 9);
+    assert.ok(s.totalCredits <= 9);
+  }
+});
+
+test("academicAdvisor: generateGraduationRoadmap enforces academic warning limit of 14 hours", () => {
+  const result = generateGraduationRoadmap({
+    courses: mockCourses,
+    completedCourses: new Set(),
+    academicWarning: true,
+  });
+
+  for (const s of result.semesters) {
+    if (s.termType !== "summer") {
+      assert.equal(s.maxCredits, 14);
+      assert.ok(s.totalCredits <= 14);
+    }
+  }
+});
+
+test("academicAdvisor: generateGraduationRoadmapICS generates valid RFC 5545 iCalendar data", () => {
+  const result = generateGraduationRoadmap({
+    courses: mockCourses,
+    completedCourses: new Set(),
+    includeSummer: false,
+  });
+
+  const icsData = generateGraduationRoadmapICS(result, {
+    majorName: "علم الحاسوب",
+    startYear: 2026,
+  });
+
+  assert.ok(icsData.startsWith("BEGIN:VCALENDAR"));
+  assert.ok(icsData.endsWith("END:VCALENDAR"));
+  assert.ok(
+    icsData.includes("PRODID:-//PTUK Student Portal//Graduation Roadmap//AR"),
+  );
+  assert.ok(icsData.includes("X-WR-CALNAME:خطة التخرج - علم الحاسوب"));
+  assert.ok(icsData.includes("LOCATION:جامعة فلسطين التقنية - خضوري"));
+  assert.ok(
+    icsData.includes("🎓 حفل التخرج المتوقع - جامعة فلسطين التقنية (خضوري)"),
+  );
+
+  // Must contain an event for each semester
+  for (const sem of result.semesters) {
+    assert.ok(icsData.includes(sem.semesterLabel));
+  }
 });

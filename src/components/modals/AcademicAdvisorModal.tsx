@@ -15,6 +15,10 @@ import {
   HelpCircle,
   ArrowRight,
   Info,
+  GraduationCap,
+  Calendar,
+  Sun,
+  Printer,
 } from "lucide-react";
 import type { Course } from "../../data";
 import {
@@ -22,6 +26,9 @@ import {
   simulateCourseDelayImpact,
   recommendOptimalUpcomingSemester,
   simulateGpaForecast,
+  generateGraduationRoadmap,
+  generateGraduationRoadmapICS,
+  downloadICSFile,
   CourseBottleneckAnalysis,
 } from "../../core/academicAdvisor";
 import { cn } from "../../utils";
@@ -48,11 +55,115 @@ export const AcademicAdvisorModal: React.FC<AcademicAdvisorModalProps> = ({
   onApplyRecommendedPlan,
 }) => {
   const [activeTab, setActiveTab] = useState<
-    "bottlenecks" | "whatif" | "recommendation" | "gpa"
+    "bottlenecks" | "whatif" | "recommendation" | "gpa" | "roadmap"
   >("bottlenecks");
+
+  const [roadmapIncludeSummer, setRoadmapIncludeSummer] = useState(false);
+  const [roadmapCreditsPerTerm, setRoadmapCreditsPerTerm] = useState(18);
+  const [roadmapWarning, setRoadmapWarning] = useState(hasAcademicWarning);
 
   const [selectedCourseForWhatIf, setSelectedCourseForWhatIf] =
     useState<string>("");
+
+  const roadmapResult = useMemo(() => {
+    return generateGraduationRoadmap({
+      courses,
+      completedCourses,
+      currentGpa: studentGpa,
+      academicWarning: roadmapWarning,
+      targetCreditsPerSemester: roadmapCreditsPerTerm,
+      includeSummer: roadmapIncludeSummer,
+      maxYears: 6,
+    });
+  }, [
+    courses,
+    completedCourses,
+    studentGpa,
+    roadmapWarning,
+    roadmapCreditsPerTerm,
+    roadmapIncludeSummer,
+  ]);
+
+  const handlePrintGraduationRoadmap = () => {
+    const printWindow = window.open("", "_blank", "width=850,height=900");
+    if (!printWindow) return;
+
+    const semestersHtml = roadmapResult.semesters
+      .map(
+        (sem) => `
+      <div style="margin-bottom: 1.5rem; page-break-inside: avoid; border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px; background: #ffffff;">
+        <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #edf2f7; padding-bottom: 8px; margin-bottom: 8px;">
+          <h3 style="margin: 0; font-size: 14px; font-weight: 800; color: #1e293b;">${sem.semesterLabel}</h3>
+          <span style="font-size: 12px; font-weight: bold; color: #4f46e5; background: #eef2ff; padding: 2px 8px; border-radius: 4px;">${sem.totalCredits} ساعة معتمدة</span>
+        </div>
+        <table style="width: 100%; border-collapse: collapse; font-size: 12px;">
+          <thead>
+            <tr style="background: #f8fafc; color: #64748b; text-align: right;">
+              <th style="padding: 6px 8px; border-bottom: 1px solid #e2e8f0;">رمز المساق</th>
+              <th style="padding: 6px 8px; border-bottom: 1px solid #e2e8f0;">اسم المساق</th>
+              <th style="padding: 6px 8px; border-bottom: 1px solid #e2e8f0; text-align: center;">الساعات</th>
+              <th style="padding: 6px 8px; border-bottom: 1px solid #e2e8f0;">النوع والتصنيف</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${sem.courses
+              .map(
+                (c) => `
+              <tr style="border-bottom: 1px solid #f1f5f9;">
+                <td style="padding: 6px 8px; font-family: monospace; font-weight: bold; color: #0f172a;">${c.id}</td>
+                <td style="padding: 6px 8px; color: #1e293b; font-weight: 500;">${c.name}</td>
+                <td style="padding: 6px 8px; text-align: center; font-weight: bold; color: #4338ca;">${c.credits}</td>
+                <td style="padding: 6px 8px; color: #64748b; font-size: 11px;">${c.category || "متطلب خطة"}</td>
+              </tr>
+            `,
+              )
+              .join("")}
+          </tbody>
+        </table>
+      </div>
+    `,
+      )
+      .join("");
+
+    printWindow.document.write(`<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <title>خريطة التخرج الأكاديمية - جامعة فلسطين التقنية خضوري</title>
+  <style>
+    body { font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; padding: 24px; color: #0f172a; line-height: 1.5; }
+    @media print {
+      body { padding: 0; }
+      @page { margin: 15mm; size: A4; }
+    }
+  </style>
+</head>
+<body>
+  <div style="text-align: center; border-bottom: 2px solid #0f172a; padding-bottom: 16px; margin-bottom: 20px;">
+    <h2 style="margin: 0 0 6px 0; font-size: 18px; font-weight: 800;">جامعة فلسطين التقنية - خضوري (PTUK)</h2>
+    <h3 style="margin: 0; font-size: 15px; color: #475569;">وثيقة الخطة الاسترشادية للتخرج بحل القيود الأكاديمية (CSP Engine)</h3>
+    <div style="margin-top: 12px; font-size: 12px; color: #334155; display: flex; justify-content: space-around; background: #f8fafc; padding: 8px; border-radius: 6px;">
+      <span>الساعات المنجزة: <strong>${completedHours} س</strong></span>
+      <span>المعدل التراكمي: <strong>${studentGpa}%</strong></span>
+      <span>الفصول المتوقعة للتخرج: <strong>${roadmapResult.estimatedGraduationSemesters} فصول</strong></span>
+      <span>الساعات المتبقية: <strong>${roadmapResult.remainingCredits} س</strong></span>
+    </div>
+  </div>
+  ${semestersHtml}
+  <div style="margin-top: 24px; text-align: center; font-size: 11px; color: #94a3b8; border-top: 1px solid #e2e8f0; padding-top: 12px;">
+    تم إنشاء هذه الوثيقة آلياً عبر نظام المنسق الذكي وجدولة المساقات PTUK Academic Planner.
+  </div>
+  <script>
+    window.onload = function() {
+      setTimeout(function() {
+        window.print();
+      }, 250);
+    };
+  </script>
+</body>
+</html>`);
+    printWindow.document.close();
+  };
 
   // Calculate authentic Critical Path Report
   const criticalPathReport = useMemo(() => {
@@ -212,6 +323,19 @@ export const AcademicAdvisorModal: React.FC<AcademicAdvisorModalProps> = ({
           >
             <Calculator size={15} />
             <span>محاكي المعدل التراكمي (GPA)</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab("roadmap")}
+            className={cn(
+              "flex items-center gap-2 px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap",
+              activeTab === "roadmap"
+                ? "bg-indigo-600 text-white shadow-xs"
+                : "text-[var(--text-2)] hover:bg-[var(--surface-hover)] hover:text-[var(--text)]",
+            )}
+          >
+            <GraduationCap size={15} />
+            <span>خريطة التخرج لأربع سنوات</span>
           </button>
         </div>
 
@@ -622,6 +746,224 @@ export const AcademicAdvisorModal: React.FC<AcademicAdvisorModalProps> = ({
                           <span className="w-12 text-center font-black text-sm text-indigo-600 dark:text-indigo-400 bg-[var(--surface-sunken)] py-1 rounded-lg border border-[var(--line)]">
                             {grade}%
                           </span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* TAB 5: 4-YEAR GRADUATION ROADMAP */}
+          {activeTab === "roadmap" && (
+            <div className="space-y-6">
+              {/* Controls & Preferences */}
+              <div className="p-4 sm:p-5 rounded-3xl bg-[var(--surface-sunken)]/40 border border-[var(--line)] flex flex-wrap items-center justify-between gap-4">
+                <div className="flex flex-wrap items-center gap-3">
+                  <label className="flex items-center gap-2 text-xs font-semibold text-[var(--text)] cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={roadmapIncludeSummer}
+                      onChange={(e) =>
+                        setRoadmapIncludeSummer(e.target.checked)
+                      }
+                      className="rounded accent-indigo-600 cursor-pointer"
+                    />
+                    <Sun size={14} className="text-amber-500" />
+                    <span>تضمين الفصول الصيفية</span>
+                  </label>
+
+                  <div className="h-4 w-px bg-[var(--line)] hidden sm:block" />
+
+                  <div className="flex items-center gap-2 text-xs">
+                    <span className="text-[var(--text-3)] font-medium">
+                      الحد المستهدف للفصل:
+                    </span>
+                    <select
+                      value={roadmapCreditsPerTerm}
+                      onChange={(e) =>
+                        setRoadmapCreditsPerTerm(Number(e.target.value))
+                      }
+                      className="px-2.5 py-1 rounded-lg bg-[var(--surface)] border border-[var(--line)] text-xs font-bold text-[var(--text)] cursor-pointer"
+                    >
+                      <option value={15}>15 ساعة</option>
+                      <option value={16}>16 ساعة</option>
+                      <option value={17}>17 ساعة</option>
+                      <option value={18}>18 ساعة (الافتراضي)</option>
+                      <option value={19}>19 ساعة (الحد الأقصى)</option>
+                    </select>
+                  </div>
+
+                  <div className="h-4 w-px bg-[var(--line)] hidden sm:block" />
+
+                  <label className="flex items-center gap-2 text-xs font-semibold text-[var(--text)] cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={roadmapWarning}
+                      onChange={(e) => setRoadmapWarning(e.target.checked)}
+                      className="rounded accent-rose-600 cursor-pointer"
+                    />
+                    <AlertTriangle size={14} className="text-amber-500" />
+                    <span>حساب قيود الإنذار الأكاديمي (14 س)</span>
+                  </label>
+                </div>
+
+                {roadmapResult.semesters.length > 0 &&
+                  onApplyRecommendedPlan && (
+                    <button
+                      onClick={() => {
+                        if (roadmapResult.semesters[0]) {
+                          onApplyRecommendedPlan(
+                            roadmapResult.semesters[0].courses,
+                          );
+                          onClose();
+                        }
+                      }}
+                      className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold shadow-xs transition-colors cursor-pointer"
+                    >
+                      <CheckCircle2 size={13} />
+                      <span>تطبيق الفصل القادم بالخطة</span>
+                    </button>
+                  )}
+
+                <button
+                  onClick={() => {
+                    const icsData = generateGraduationRoadmapICS(roadmapResult);
+                    downloadICSFile(icsData, "ptuk-graduation-roadmap.ics");
+                  }}
+                  className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl border border-[var(--line-control)] bg-[var(--surface)] hover:bg-[var(--surface-hover)] text-[var(--text)] text-xs font-bold shadow-2xs transition-colors cursor-pointer"
+                  title="تصدير الخطة إلى تقويم Google Calendar أو Apple Calendar"
+                >
+                  <Calendar size={13} className="text-indigo-500" />
+                  <span>تصدير التقويم (.ics)</span>
+                </button>
+
+                <button
+                  onClick={handlePrintGraduationRoadmap}
+                  className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl border border-[var(--line-control)] bg-[var(--surface)] hover:bg-[var(--surface-hover)] text-[var(--text)] text-xs font-bold shadow-2xs transition-colors cursor-pointer"
+                  title="طباعة أو تصدير وثيقة الخطة الأكاديمية (PDF)"
+                >
+                  <Printer size={13} className="text-purple-500" />
+                  <span>طباعة الخطة (PDF)</span>
+                </button>
+              </div>
+
+              {/* Graduation Metrics Banner */}
+              <div className="p-4 sm:p-5 rounded-3xl bg-linear-to-r from-indigo-500/10 via-purple-500/10 to-transparent border border-indigo-500/20 flex flex-col sm:flex-row items-center justify-between gap-4">
+                <div className="space-y-1 text-center sm:text-right">
+                  <span className="text-xs font-bold text-indigo-600 dark:text-indigo-400">
+                    مسار التخرج الكامل بحل القيود الأكاديمية (CSP)
+                  </span>
+                  <div className="flex items-baseline gap-2 justify-center sm:justify-start">
+                    <span className="text-3xl font-black text-[var(--text)]">
+                      {roadmapResult.estimatedGraduationSemesters} فصول دراسية
+                    </span>
+                    <span className="text-xs font-bold px-2 py-0.5 rounded-md bg-indigo-500/10 text-indigo-600 dark:text-indigo-400">
+                      {Math.ceil(
+                        roadmapResult.estimatedGraduationSemesters /
+                          (roadmapIncludeSummer ? 3 : 2),
+                      )}{" "}
+                      سنوات متبقية
+                    </span>
+                  </div>
+                  <p className="text-xs font-medium text-[var(--text-2)]">
+                    {roadmapResult.isFullyResolved
+                      ? "جميع متطلبات التخرج مجدولة بتوافق 100% مع الشروط السابقة وسقوف الساعات."
+                      : `تنبيه: يوجد ${roadmapResult.unresolvedCourses.length} مساقات بحاجة لمعالجة استثنائية.`}
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2 text-center text-xs shrink-0">
+                  <div className="p-3 rounded-2xl bg-[var(--surface)] border border-[var(--line)]">
+                    <span className="text-[10px] text-[var(--text-3)] block mb-1">
+                      الساعات المتبقية
+                    </span>
+                    <span className="font-black text-[var(--text)]">
+                      {roadmapResult.remainingCredits} /{" "}
+                      {roadmapResult.totalCurriculumCredits} س
+                    </span>
+                  </div>
+                  <div className="p-3 rounded-2xl bg-[var(--surface)] border border-[var(--line)]">
+                    <span className="text-[10px] text-[var(--text-3)] block mb-1">
+                      المساقات الحرجة
+                    </span>
+                    <span className="font-black text-indigo-600 dark:text-indigo-400">
+                      {roadmapResult.criticalBottlenecks.length} مساق
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Semesters Progression List */}
+              <div className="space-y-4">
+                <h4 className="text-xs font-bold uppercase tracking-wider text-[var(--text-3)]">
+                  توزيع الفصول الدراسية المقترحة حتى التخرج:
+                </h4>
+
+                <div className="space-y-3">
+                  {roadmapResult.semesters.map((sem, sIdx) => {
+                    const isSummer = sem.termType === "summer";
+                    return (
+                      <div
+                        key={sem.semesterNumber}
+                        className="p-4 rounded-2xl bg-[var(--surface)] border border-[var(--line)] space-y-3 hover:border-indigo-500/30 transition-all shadow-2xs"
+                      >
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <span className="w-6 h-6 rounded-lg bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 text-xs font-black flex items-center justify-center">
+                              {sIdx + 1}
+                            </span>
+                            <span className="font-bold text-sm text-[var(--text)]">
+                              {sem.semesterLabel}
+                            </span>
+                            {isSummer && (
+                              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-600 dark:text-amber-400">
+                                صيفي
+                              </span>
+                            )}
+                          </div>
+
+                          <span className="text-xs font-bold px-2.5 py-0.5 rounded-lg bg-[var(--surface-sunken)] border border-[var(--line)] text-[var(--text-2)] tabular-nums">
+                            {sem.totalCredits} / {sem.maxCredits} س
+                          </span>
+                        </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
+                          {sem.courses.map((c) => {
+                            const isBottleneck =
+                              roadmapResult.criticalBottlenecks.some(
+                                (b) => b.courseId === c.id,
+                              );
+                            return (
+                              <div
+                                key={c.id}
+                                className="p-2.5 rounded-xl bg-[var(--surface-sunken)]/30 border border-[var(--line)]/60 flex items-center justify-between gap-2 text-xs"
+                              >
+                                <div className="min-w-0 flex-1">
+                                  <div className="flex items-center gap-1">
+                                    <span
+                                      className="font-mono text-[10px] text-[var(--text-3)] block"
+                                      dir="ltr"
+                                    >
+                                      {c.id}
+                                    </span>
+                                    {isBottleneck && (
+                                      <span className="text-[9px] font-bold px-1 rounded bg-indigo-500/15 text-indigo-600 dark:text-indigo-400">
+                                        ⚡ حرج
+                                      </span>
+                                    )}
+                                  </div>
+                                  <span className="font-bold text-[var(--text)] truncate block mt-0.5">
+                                    {c.name}
+                                  </span>
+                                </div>
+                                <span className="font-bold text-[11px] text-[var(--text-2)] px-1.5 py-0.5 rounded bg-[var(--surface)] border border-[var(--line)] tabular-nums shrink-0">
+                                  {c.credits} س
+                                </span>
+                              </div>
+                            );
+                          })}
                         </div>
                       </div>
                     );

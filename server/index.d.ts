@@ -224,3 +224,13 @@ declare module "../server/services/scheduler.js" {
   export function startScheduler(): void;
   export function stopScheduler(): void;
 }
+
+declare module "../server/routes/registration.js" {
+  import type { Router } from "express";
+  export function broadcastRegistrationEvent(
+    eventType: string,
+    payload?: any,
+  ): void;
+  const router: Router;
+  export default router;
+}

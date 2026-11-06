@@ -173,7 +173,8 @@ const CourseNodeComponent = ({
           "shadow-[0_0_14px_rgba(59,130,246,0.35)] ring-1 ring-blue-500/50",
         isDependent &&
           "shadow-[0_0_14px_rgba(16,185,129,0.35)] ring-1 ring-emerald-500/50",
-        isDimmed && "opacity-25 grayscale-[60%] transition-opacity duration-200",
+        isDimmed &&
+          "opacity-25 grayscale-[60%] transition-opacity duration-200",
         !isDimmed && "opacity-100",
         isHighlighted &&
           "ring-2 ring-[var(--accent)] ring-offset-2 ring-offset-[var(--bg)] shadow-sm",

@@ -12,7 +12,7 @@ import { startScheduler } from "./services/scheduler.js";
 import { getSyncStatus } from "./db.js";
 import { getSqliteDb, getSqliteMetrics } from "./sqliteDb.js";
 import { edugateCircuitBreaker } from "./utils/circuitBreaker.js";
-import { openApiSpec } from "./openapi.js";
+import { openApiSpec, renderOpenApiHtml } from "./openapi.js";
 import {
   getMetricsSummary,
   toPrometheusFormat,
@@ -266,6 +266,20 @@ app.get(
 
 // ─── OpenAPI Documentation ────────────────────────────────────────────────
 app.get("/api/docs", (req, res) => {
+  const accept = req.headers.accept || "";
+  if (accept.includes("text/html") && !req.query.json) {
+    res.setHeader("Content-Type", "text/html; charset=utf-8");
+    return res.send(renderOpenApiHtml(openApiSpec));
+  }
+  return res.json(openApiSpec);
+});
+
+app.get("/api/docs/ui", (req, res) => {
+  res.setHeader("Content-Type", "text/html; charset=utf-8");
+  return res.send(renderOpenApiHtml(openApiSpec));
+});
+
+app.get("/api/docs/json", (req, res) => {
   return res.json(openApiSpec);
 });
 

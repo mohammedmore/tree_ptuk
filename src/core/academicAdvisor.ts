@@ -429,3 +429,355 @@ export function simulateGpaForecast({
     statusText,
   };
 }
+
+export interface GraduationRoadmapSemester {
+  semesterNumber: number;
+  semesterLabel: string;
+  yearNumber: number;
+  termType: "first" | "second" | "summer";
+  courses: Course[];
+  totalCredits: number;
+  maxCredits: number;
+}
+
+export interface GraduationRoadmapOptions {
+  courses: Course[];
+  completedCourses?: Set<string> | string[];
+  currentGpa?: number;
+  academicWarning?: boolean;
+  targetCreditsPerSemester?: number;
+  includeSummer?: boolean;
+  maxYears?: number;
+}
+
+export interface GraduationRoadmapResult {
+  totalCurriculumCredits: number;
+  completedCredits: number;
+  remainingCredits: number;
+  estimatedGraduationSemesters: number;
+  semesters: GraduationRoadmapSemester[];
+  unresolvedCourses: Course[];
+  isFullyResolved: boolean;
+  criticalBottlenecks: CourseBottleneckAnalysis[];
+}
+
+/**
+ * Generates an automated, constraint-satisfaction multi-year graduation roadmap.
+ * Strictly adheres to PTUK prerequisites, credit ceilings, and critical bottleneck tracks.
+ */
+export function generateGraduationRoadmap({
+  courses,
+  completedCourses = new Set(),
+  currentGpa = 75,
+  academicWarning = false,
+  targetCreditsPerSemester = 18,
+  includeSummer = false,
+  maxYears = 5,
+}: GraduationRoadmapOptions): GraduationRoadmapResult {
+  const completedSet = new Set<string>(
+    Array.isArray(completedCourses)
+      ? completedCourses
+      : Array.from(completedCourses),
+  );
+
+  const courseMap = new Map<string, Course>();
+  courses.forEach((c) => courseMap.set(c.id, c));
+
+  const totalCurriculumCredits = courses.reduce(
+    (sum, c) => sum + Math.max(1, c.credits || 3),
+    0,
+  );
+
+  let accumulatedCredits = courses
+    .filter((c) => completedSet.has(c.id))
+    .reduce((sum, c) => sum + Math.max(1, c.credits || 3), 0);
+
+  const scheduledSet = new Set<string>(completedSet);
+  const remainingCourses = courses.filter((c) => !completedSet.has(c.id));
+  const remainingCredits = totalCurriculumCredits - accumulatedCredits;
+
+  const criticalPathReport = calculateCurriculumCriticalPath(
+    courses,
+    completedSet,
+  );
+  const bottleneckLookup = new Map<string, CourseBottleneckAnalysis>();
+  criticalPathReport.bottlenecks.forEach((b) =>
+    bottleneckLookup.set(b.courseId, b),
+  );
+
+  const semesters: GraduationRoadmapSemester[] = [];
+  const termsPerYear = includeSummer ? 3 : 2;
+  const maxSemesters = maxYears * termsPerYear;
+
+  let semesterIndex = 0;
+
+  while (scheduledSet.size < courses.length && semesterIndex < maxSemesters) {
+    const yearNumber = Math.floor(semesterIndex / termsPerYear) + 1;
+    const termIndexInYear = semesterIndex % termsPerYear;
+
+    let termType: "first" | "second" | "summer" = "first";
+    let termName = "الفصل الأول";
+
+    if (includeSummer) {
+      if (termIndexInYear === 1) {
+        termType = "second";
+        termName = "الفصل الثاني";
+      } else if (termIndexInYear === 2) {
+        termType = "summer";
+        termName = "الفصل الصيفي";
+      }
+    } else {
+      if (termIndexInYear === 1) {
+        termType = "second";
+        termName = "الفصل الثاني";
+      }
+    }
+
+    const isSummerTerm = termType === "summer";
+    const remainingUnscheduledCredits = courses
+      .filter((c) => !scheduledSet.has(c.id))
+      .reduce((sum, c) => sum + Math.max(1, c.credits || 3), 0);
+
+    // Determine max credits based on official PTUK regulations
+    let semMaxCredits = 18;
+    if (isSummerTerm) {
+      semMaxCredits = 9;
+    } else if (academicWarning) {
+      semMaxCredits = 14;
+    } else if (remainingUnscheduledCredits <= 21 || currentGpa >= 80) {
+      semMaxCredits = 21;
+    } else {
+      semMaxCredits = Math.min(19, Math.max(12, targetCreditsPerSemester));
+    }
+
+    // Find eligible candidate courses whose prerequisites are fulfilled in PRIOR semesters
+    const eligibleCandidates = courses.filter((c) => {
+      if (scheduledSet.has(c.id)) return false;
+
+      // Prerequisites check
+      const prereqs = c.prerequisites || [];
+      const prereqsFulfilled = prereqs.every((pId) =>
+        scheduledSet.has(String(pId).trim()),
+      );
+      if (!prereqsFulfilled) return false;
+
+      // Capstone project minimum credit check
+      if (c.minCredits && accumulatedCredits < c.minCredits) return false;
+
+      return true;
+    });
+
+    if (eligibleCandidates.length === 0) {
+      // No more courses can be scheduled due to unmet prerequisites or unfulfilled capstone credits
+      break;
+    }
+
+    // Sort candidates by priority (Bottlenecks -> Specialization -> Credits)
+    eligibleCandidates.sort((a, b) => {
+      const bInfoA = bottleneckLookup.get(a.id);
+      const bInfoB = bottleneckLookup.get(b.id);
+
+      const depthA = bInfoA?.chainDepth || 0;
+      const depthB = bInfoB?.chainDepth || 0;
+      if (depthA !== depthB) return depthB - depthA;
+
+      const downA = bInfoA?.allDownstreamDependents.length || 0;
+      const downB = bInfoB?.allDownstreamDependents.length || 0;
+      if (downA !== downB) return downB - downA;
+
+      const isMajorA = (a.category || "").includes("إجباري تخصص") ? 1 : 0;
+      const isMajorB = (b.category || "").includes("إجباري تخصص") ? 1 : 0;
+      if (isMajorA !== isMajorB) return isMajorB - isMajorA;
+
+      return (b.credits || 3) - (a.credits || 3);
+    });
+
+    const chosenCourses: Course[] = [];
+    let termCredits = 0;
+
+    for (const candidate of eligibleCandidates) {
+      const cCredits = Math.max(1, candidate.credits || 3);
+      if (termCredits + cCredits <= semMaxCredits) {
+        chosenCourses.push(candidate);
+        termCredits += cCredits;
+      }
+    }
+
+    if (chosenCourses.length === 0) {
+      // Cannot fit any eligible course into this semester
+      break;
+    }
+
+    // Register chosen courses into scheduledSet and update accumulated credits for NEXT semester
+    chosenCourses.forEach((c) => {
+      scheduledSet.add(c.id);
+      accumulatedCredits += Math.max(1, c.credits || 3);
+    });
+
+    semesters.push({
+      semesterNumber: semesterIndex + 1,
+      semesterLabel: `السنة ${yearNumber} - ${termName}`,
+      yearNumber,
+      termType,
+      courses: chosenCourses,
+      totalCredits: termCredits,
+      maxCredits: semMaxCredits,
+    });
+
+    semesterIndex++;
+  }
+
+  const unresolvedCourses = courses.filter((c) => !scheduledSet.has(c.id));
+  const isFullyResolved = unresolvedCourses.length === 0;
+
+  return {
+    totalCurriculumCredits,
+    completedCredits: courses
+      .filter((c) => completedSet.has(c.id))
+      .reduce((sum, c) => sum + Math.max(1, c.credits || 3), 0),
+    remainingCredits,
+    estimatedGraduationSemesters: semesters.length,
+    semesters,
+    unresolvedCourses,
+    isFullyResolved,
+    criticalBottlenecks: criticalPathReport.bottlenecks.filter(
+      (b) => b.isCriticalBottleneck,
+    ),
+  };
+}
+
+export interface GraduationRoadmapICSOptions {
+  majorName?: string;
+  studentName?: string;
+  startYear?: number;
+}
+
+/**
+ * Generates an RFC 5545 compliant iCalendar (.ics) string for the student's graduation roadmap.
+ * Allows importing future semester milestones and expected graduation dates into calendars.
+ */
+export function generateGraduationRoadmapICS(
+  roadmap: GraduationRoadmapResult,
+  options: GraduationRoadmapICSOptions = {},
+): string {
+  const pad = (n: number) => String(n).padStart(2, "0");
+  const now = new Date();
+  const dtStamp = `${now.getUTCFullYear()}${pad(now.getUTCMonth() + 1)}${pad(now.getUTCDate())}T${pad(now.getUTCHours())}${pad(now.getUTCMinutes())}${pad(now.getUTCSeconds())}Z`;
+
+  const calendarTitle = options.majorName
+    ? `خطة التخرج - ${options.majorName}`
+    : "خطة التخرج الأكاديمية - جامعة خضوري";
+
+  const lines: string[] = [
+    "BEGIN:VCALENDAR",
+    "VERSION:2.0",
+    "PRODID:-//PTUK Student Portal//Graduation Roadmap//AR",
+    "CALSCALE:GREGORIAN",
+    "METHOD:PUBLISH",
+    `X-WR-CALNAME:${calendarTitle}`,
+    "X-WR-TIMEZONE:Asia/Hebron",
+  ];
+
+  const baseYear = options.startYear || now.getFullYear();
+
+  roadmap.semesters.forEach((sem) => {
+    let startMonth = 9;
+    let startDay = 1;
+    let endMonth = 12;
+    let endDay = 31;
+    let termYear = baseYear + (sem.yearNumber - 1);
+
+    if (sem.termType === "second") {
+      startMonth = 2;
+      startDay = 1;
+      endMonth = 5;
+      endDay = 31;
+      termYear += 1;
+    } else if (sem.termType === "summer") {
+      startMonth = 6;
+      startDay = 15;
+      endMonth = 8;
+      endDay = 15;
+      termYear += 1;
+    }
+
+    const startDateStr = `${termYear}${pad(startMonth)}${pad(startDay)}`;
+    const endDateStr = `${termYear}${pad(endMonth)}${pad(endDay)}`;
+
+    const courseDescriptions = sem.courses
+      .map((c) => `- ${c.name} (${c.id}) [${c.credits} س]`)
+      .join("\\n");
+
+    const eventUid = `ptuk-roadmap-sem-${sem.semesterNumber}-${termYear}@ptuk.edu.ps`;
+
+    lines.push(
+      "BEGIN:VEVENT",
+      `UID:${eventUid}`,
+      `DTSTAMP:${dtStamp}`,
+      `DTSTART;VALUE=DATE:${startDateStr}`,
+      `DTEND;VALUE=DATE:${endDateStr}`,
+      `SUMMARY:[خضوري] ${sem.semesterLabel} (${sem.totalCredits} س)`,
+      `DESCRIPTION:المساقات المخططة لهذا الفصل:\\n${courseDescriptions}`,
+      "LOCATION:جامعة فلسطين التقنية - خضوري",
+      "STATUS:CONFIRMED",
+      "TRANSP:TRANSPARENT",
+      "END:VEVENT",
+    );
+  });
+
+  // Final Graduation Ceremony Milestone Event
+  if (roadmap.semesters.length > 0 && roadmap.isFullyResolved) {
+    const lastSem = roadmap.semesters[roadmap.semesters.length - 1];
+    let gradYear = baseYear + (lastSem.yearNumber - 1);
+    let gradMonth = 6;
+    let gradDay = 25;
+
+    if (lastSem.termType === "first") {
+      gradMonth = 1;
+      gradDay = 20;
+      gradYear += 1;
+    } else if (lastSem.termType === "summer") {
+      gradMonth = 8;
+      gradDay = 30;
+      gradYear += 1;
+    } else {
+      gradYear += 1;
+    }
+
+    const gradDateStr = `${gradYear}${pad(gradMonth)}${pad(gradDay)}`;
+    const nextDayStr = `${gradYear}${pad(gradMonth)}${pad(gradDay + 1)}`;
+
+    lines.push(
+      "BEGIN:VEVENT",
+      `UID:ptuk-graduation-ceremony-${gradYear}@ptuk.edu.ps`,
+      `DTSTAMP:${dtStamp}`,
+      `DTSTART;VALUE=DATE:${gradDateStr}`,
+      `DTEND;VALUE=DATE:${nextDayStr}`,
+      `SUMMARY:🎓 حفل التخرج المتوقع - جامعة فلسطين التقنية (خضوري)`,
+      `DESCRIPTION:إنجاز كافة متطلبات التخرج بنجاح بواقع (${roadmap.totalCurriculumCredits}) ساعة معتمدة في ${options.majorName || "التخصص الأكاديمي"}.`,
+      "LOCATION:جامعة فلسطين التقنية - خضوري",
+      "STATUS:CONFIRMED",
+      "TRANSP:TRANSPARENT",
+      "END:VEVENT",
+    );
+  }
+
+  lines.push("END:VCALENDAR");
+  return lines.join("\r\n");
+}
+
+export function downloadICSFile(
+  icsContent: string,
+  filename: string = "ptuk-graduation-roadmap.ics",
+): void {
+  if (typeof window === "undefined" || !window.document) return;
+  const blob = new Blob([icsContent], { type: "text/calendar;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.setAttribute("download", filename);
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+}

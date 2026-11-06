@@ -228,6 +228,28 @@ function loadState() {
     );
   }
 
+  // Resilient Dual-Engine Rehydration:
+  // If memory courses are empty or uninitialized, rehydrate from SQLite WAL database
+  if (!state.courses || Object.keys(state.courses).length === 0) {
+    try {
+      const sqliteCourses = sqliteGetCourses({ limit: 50000 });
+      if (Array.isArray(sqliteCourses) && sqliteCourses.length > 0) {
+        state.courses = {};
+        for (const c of sqliteCourses) {
+          if (c && c.code) {
+            state.courses[c.code] = c;
+          }
+        }
+        state.syncStatus.totalCourses = Object.keys(state.courses).length;
+      }
+    } catch (sqlErr) {
+      console.warn(
+        "⚠️ Could not rehydrate courses from SQLite:",
+        sqlErr.message,
+      );
+    }
+  }
+
   // Load last sync date from last_sync.txt if present
   if (!state.syncStatus.lastSyncTime && existsSync(LAST_SYNC_FILE)) {
     try {

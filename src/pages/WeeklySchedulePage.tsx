@@ -42,7 +42,8 @@ import {
   type ScheduleDraft,
 } from "../core/scheduleDrafts";
 import { triggerHaptic } from "../utils/haptics";
-import { DoctorScheduleModal, SectionSwapModal } from "../components/modals";
+import { DoctorScheduleModal } from "../components/modals/DoctorScheduleModal";
+import { SectionSwapModal } from "../components/modals/SectionSwapModal";
 import { fetchCourses } from "../services/courseService";
 import {
   normalizeDayKey,
@@ -854,7 +855,8 @@ export const WeeklySchedulePage: React.FC<WeeklySchedulePageProps> = ({
                 تنبيه: يوجد {conflictCount} تعارض زمني في جدولك الحالي!
               </span>
               <span className="text-[11.5px] text-rose-600/90 dark:text-rose-400/90">
-                انقر على زر "تبديل" في بطاقة المساق لاختيار شعبة بديلة متوافقة خالية من التعارض.
+                انقر على زر "تبديل" في بطاقة المساق لاختيار شعبة بديلة متوافقة
+                خالية من التعارض.
               </span>
             </div>
           </div>
@@ -977,7 +979,9 @@ export const WeeklySchedulePage: React.FC<WeeklySchedulePageProps> = ({
                                 courseId: item.courseId,
                                 courseName: item.courseName,
                                 currentSection: String(
-                                  item.entry.section || (item.entry as any).sec || "",
+                                  item.entry.section ||
+                                    (item.entry as any).sec ||
+                                    "",
                                 ),
                               });
                             }}
@@ -1161,7 +1165,9 @@ export const WeeklySchedulePage: React.FC<WeeklySchedulePageProps> = ({
                               setSwapCourseTarget({
                                 courseId: item.courseId,
                                 courseName: item.courseName,
-                                currentSection: String(item.entry.section || ""),
+                                currentSection: String(
+                                  item.entry.section || "",
+                                ),
                               });
                             }}
                             className="flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-rose-500 hover:bg-rose-600 text-white text-[9.5px] font-bold transition-all cursor-pointer shadow-2xs"
@@ -1237,7 +1243,8 @@ export const WeeklySchedulePage: React.FC<WeeklySchedulePageProps> = ({
                     <span className="font-semibold">فراغ: {timeLabel}</span>
                   </div>
                   <span className="text-[9px] text-[var(--text-3)] truncate max-w-[90%]">
-                    بين {gap.prevCourseName.split(" ")[0]} و {gap.nextCourseName.split(" ")[0]}
+                    بين {gap.prevCourseName.split(" ")[0]} و{" "}
+                    {gap.nextCourseName.split(" ")[0]}
                   </span>
                 </div>
               );

@@ -103,7 +103,9 @@ export const SectionSwapModal: React.FC<SectionSwapModalProps> = ({
               </h2>
               <p className="text-xs text-[var(--text-3)] font-medium">
                 {courseName} ({courseId}) • الشعبة الحالية:{" "}
-                <b className="text-[var(--text)] font-mono">{currentSection || "غير محددة"}</b>
+                <b className="text-[var(--text)] font-mono">
+                  {currentSection || "غير محددة"}
+                </b>
               </p>
             </div>
           </div>
@@ -144,90 +146,111 @@ export const SectionSwapModal: React.FC<SectionSwapModalProps> = ({
               <p>لا توجد شعب مطروحة مسجلة لهذا المساق في دليل هذا الفصل.</p>
             </div>
           ) : (
-            filteredSections.map(({ section, isCurrent, hasConflict, conflictingCourse }) => {
-              const firstBlock = section.blocks?.[0];
-              const daysText = firstBlock?.days?.join("، ") || "غير محدد";
-              const timeText = firstBlock?.rawTime || "غير محدد";
+            filteredSections.map(
+              ({ section, isCurrent, hasConflict, conflictingCourse }) => {
+                const firstBlock = section.blocks?.[0];
+                const daysText = firstBlock?.days?.join("، ") || "غير محدد";
+                const timeText = firstBlock?.rawTime || "غير محدد";
 
-              return (
-                <div
-                  key={section.sec}
-                  className={cn(
-                    "p-3.5 rounded-2xl border transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-3",
-                    isCurrent
-                      ? "bg-[var(--accent-soft)]/40 border-[var(--accent)]/50 ring-1 ring-[var(--accent)]/30"
-                      : hasConflict
-                        ? "bg-rose-500/5 border-rose-500/20"
-                        : "bg-[var(--surface-sunken)]/40 border-[var(--line)] hover:border-[var(--accent)]/50",
-                  )}
-                >
-                  <div className="space-y-1.5 flex-1 min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className="font-mono font-bold text-xs px-2 py-0.5 rounded-lg bg-[var(--surface)] border border-[var(--line)] text-[var(--text)]">
-                        شعبة {section.sec}
-                      </span>
-                      {isCurrent && (
-                        <span className="text-[10.5px] font-bold px-2 py-0.5 rounded-full bg-[var(--accent)] text-[var(--text-on-accent)]">
-                          شعبتك الحالية
-                        </span>
-                      )}
-                      {!isCurrent && !hasConflict && (
-                        <span className="inline-flex items-center gap-1 text-[10.5px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
-                          <CheckCircle2 size={11} />
-                          <span>متوافقة تماماً بدون تعارض</span>
-                        </span>
-                      )}
-                      {!isCurrent && hasConflict && (
-                        <span className="inline-flex items-center gap-1 text-[10.5px] font-bold px-2 py-0.5 rounded-full bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20">
-                          <AlertTriangle size={11} />
-                          <span>تعارض مع: {conflictingCourse || "مساق آخر"}</span>
-                        </span>
-                      )}
-                    </div>
-
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-1.5 text-[11px] text-[var(--text-2)] pt-0.5">
-                      <div className="flex items-center gap-1.5 truncate">
-                        <User size={12} className="text-[var(--text-3)] shrink-0" />
-                        <span className="truncate">{section.instructor || "مدرس غير محدد"}</span>
-                      </div>
-                      <div className="flex items-center gap-1.5 truncate">
-                        <Clock size={12} className="text-[var(--text-3)] shrink-0" />
-                        <span className="font-mono truncate">{daysText}: {timeText}</span>
-                      </div>
-                      <div className="flex items-center gap-1.5 truncate">
-                        <MapPin size={12} className="text-[var(--text-3)] shrink-0" />
-                        <span className="truncate">{section.room || "قاعة غير محددة"}</span>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="shrink-0 flex items-center justify-end">
-                    {isCurrent ? (
-                      <span className="text-xs text-[var(--text-3)] font-medium flex items-center gap-1">
-                        <Check size={14} className="text-[var(--accent)]" />
-                        <span>مختارة حالياً</span>
-                      </span>
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          triggerHaptic("selection");
-                          onSelectSection(section);
-                        }}
-                        className={cn(
-                          "px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer shadow-2xs",
-                          hasConflict
-                            ? "bg-[var(--surface)] hover:bg-rose-500 hover:text-white border border-[var(--line-control)] text-[var(--text-2)]"
-                            : "bg-[var(--accent)] hover:brightness-105 text-[var(--text-on-accent)]",
-                        )}
-                      >
-                        {hasConflict ? "اختيار رغم التعارض" : "اختيار هذه الشعبة"}
-                      </button>
+                return (
+                  <div
+                    key={section.sec}
+                    className={cn(
+                      "p-3.5 rounded-2xl border transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-3",
+                      isCurrent
+                        ? "bg-[var(--accent-soft)]/40 border-[var(--accent)]/50 ring-1 ring-[var(--accent)]/30"
+                        : hasConflict
+                          ? "bg-rose-500/5 border-rose-500/20"
+                          : "bg-[var(--surface-sunken)]/40 border-[var(--line)] hover:border-[var(--accent)]/50",
                     )}
+                  >
+                    <div className="space-y-1.5 flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="font-mono font-bold text-xs px-2 py-0.5 rounded-lg bg-[var(--surface)] border border-[var(--line)] text-[var(--text)]">
+                          شعبة {section.sec}
+                        </span>
+                        {isCurrent && (
+                          <span className="text-[10.5px] font-bold px-2 py-0.5 rounded-full bg-[var(--accent)] text-[var(--text-on-accent)]">
+                            شعبتك الحالية
+                          </span>
+                        )}
+                        {!isCurrent && !hasConflict && (
+                          <span className="inline-flex items-center gap-1 text-[10.5px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+                            <CheckCircle2 size={11} />
+                            <span>متوافقة تماماً بدون تعارض</span>
+                          </span>
+                        )}
+                        {!isCurrent && hasConflict && (
+                          <span className="inline-flex items-center gap-1 text-[10.5px] font-bold px-2 py-0.5 rounded-full bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20">
+                            <AlertTriangle size={11} />
+                            <span>
+                              تعارض مع: {conflictingCourse || "مساق آخر"}
+                            </span>
+                          </span>
+                        )}
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-1.5 text-[11px] text-[var(--text-2)] pt-0.5">
+                        <div className="flex items-center gap-1.5 truncate">
+                          <User
+                            size={12}
+                            className="text-[var(--text-3)] shrink-0"
+                          />
+                          <span className="truncate">
+                            {section.instructor || "مدرس غير محدد"}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-1.5 truncate">
+                          <Clock
+                            size={12}
+                            className="text-[var(--text-3)] shrink-0"
+                          />
+                          <span className="font-mono truncate">
+                            {daysText}: {timeText}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-1.5 truncate">
+                          <MapPin
+                            size={12}
+                            className="text-[var(--text-3)] shrink-0"
+                          />
+                          <span className="truncate">
+                            {section.room || "قاعة غير محددة"}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="shrink-0 flex items-center justify-end">
+                      {isCurrent ? (
+                        <span className="text-xs text-[var(--text-3)] font-medium flex items-center gap-1">
+                          <Check size={14} className="text-[var(--accent)]" />
+                          <span>مختارة حالياً</span>
+                        </span>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            triggerHaptic("selection");
+                            onSelectSection(section);
+                          }}
+                          className={cn(
+                            "px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer shadow-2xs",
+                            hasConflict
+                              ? "bg-[var(--surface)] hover:bg-rose-500 hover:text-white border border-[var(--line-control)] text-[var(--text-2)]"
+                              : "bg-[var(--accent)] hover:brightness-105 text-[var(--text-on-accent)]",
+                          )}
+                        >
+                          {hasConflict
+                            ? "اختيار رغم التعارض"
+                            : "اختيار هذه الشعبة"}
+                        </button>
+                      )}
+                    </div>
                   </div>
-                </div>
-              );
-            })
+                );
+              },
+            )
           )}
         </div>
 

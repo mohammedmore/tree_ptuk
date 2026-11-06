@@ -42,14 +42,14 @@ COPY Server.js ./
 COPY scripts/ ./scripts/
 COPY --from=builder /app/dist ./dist
 
-# Create dedicated non-root execution user for security hardening
+# Create dedicated non-root execution user for security hardening and persist data directory
 RUN groupadd -r ptuk && useradd -r -g ptuk -G audio,video ptuk \
-    && mkdir -p /home/ptuk && chown -R ptuk:ptuk /home/ptuk /app
+    && mkdir -p /home/ptuk /app/data && chown -R ptuk:ptuk /home/ptuk /app
 USER ptuk
 
 EXPOSE 3001
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
-  CMD wget --no-verbose --tries=1 --spider http://localhost:3001/api/sync/status || exit 1
+  CMD wget --no-verbose --tries=1 --spider http://localhost:3001/api/health/live || exit 1
 
 CMD ["node", "Server.js"]
