@@ -272,7 +272,12 @@ export function calculateGPA(
 
   if (includeHypothetical) {
     Object.entries(whatIfGrades).forEach(([id, grade]) => {
-      if (!completedCourses.has(id) && !failedCourseIds.has(id) && grade > 0) {
+      if (
+        !completedCourses.has(id) &&
+        !failedCourseIds.has(id) &&
+        typeof grade === "number" &&
+        grade >= 0
+      ) {
         const course = coursesById.get(id);
         if (course && !isRemedialCourse(course)) {
           totalPoints += grade * course.credits;
@@ -487,6 +492,14 @@ export interface AcademicStandingInfo {
   colorClass: string;
 }
 
+export function resolveCapstoneThreshold(totalCredits: number): number {
+  return totalCredits <= 80 ? 45 : totalCredits <= 140 ? 90 : 120;
+}
+
+export function resolveFieldTrainingThreshold(totalCredits: number): number {
+  return totalCredits <= 80 ? 30 : totalCredits <= 140 ? 65 : 90;
+}
+
 /**
  * Evaluates academic standing, honors, and senior standing thresholds.
  */
@@ -499,11 +512,9 @@ export function getAcademicStandingInfo(
   const isWarningZone = currentGPA >= 60 && currentGPA < 65;
   const isHonor = currentGPA >= 85;
 
-  // Dynamic capstone and field training thresholds based on degree requirements (diploma, bachelor 132h, engineering 164h)
-  const capstoneThreshold =
-    totalCredits <= 80 ? 45 : totalCredits <= 136 ? 90 : 120;
-  const fieldTrainingThreshold =
-    totalCredits <= 80 ? 30 : totalCredits <= 136 ? 65 : 90;
+  // Dynamic capstone and field training thresholds based on degree requirements (diploma <=80h, bachelor <=140h, engineering >140h)
+  const capstoneThreshold = resolveCapstoneThreshold(totalCredits);
+  const fieldTrainingThreshold = resolveFieldTrainingThreshold(totalCredits);
 
   const canRegisterGradProject = earnedCredits >= capstoneThreshold;
   const creditsToGradProject = Math.max(0, capstoneThreshold - earnedCredits);

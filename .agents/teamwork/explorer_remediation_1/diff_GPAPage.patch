@@ -1,0 +1,356 @@
+﻿diff --git a/src/pages/GPAPage.tsx b/src/pages/GPAPage.tsx
+index 8dd376d..e159d76 100644
+--- a/src/pages/GPAPage.tsx
++++ b/src/pages/GPAPage.tsx
+@@ -19,7 +19,7 @@ import {
+ import { cn, normalizeArabicText } from "../utils";
+ import { usePrivacyMask } from "../hooks/usePrivacyMask";
+ import type { Course } from "../data";
+-import { TOTAL_CREDITS } from "../constants";
++import { TOTAL_CREDITS, isCseMajor } from "../constants";
+ import { getCachedStudentProfile } from "../services/studentService";
+ import {
+   isRemedialCourse,
+@@ -38,6 +38,7 @@ interface GPAPageProps {
+   failedCourseIds: Set<string>;
+   setFailedCourseIds: (ids: Set<string>) => void;
+   activeMajorName?: string;
++  activeMajorId?: string;
+   onSelectMajor?: () => void;
+   categoryRequirements?: Record<string, number>;
+   totalDegreeCredits?: number;
+@@ -50,6 +51,7 @@ export const GPAPage: React.FC<GPAPageProps> = ({
+   setCourseGrades,
+   failedCourseIds,
+   activeMajorName,
++  activeMajorId,
+   onSelectMajor,
+   categoryRequirements,
+   totalDegreeCredits,
+@@ -80,6 +82,19 @@ export const GPAPage: React.FC<GPAPageProps> = ({
+     return () => window.removeEventListener("resize", handleResize);
+   }, []);
+ 
++  // Close picker on Escape key
++  useEffect(() => {
++    if (!isAddPickerOpen) return;
++    const handleKeyDown = (e: KeyboardEvent) => {
++      if (e.key === "Escape") {
++        setIsAddPickerOpen(false);
++        setSearchQuery("");
++      }
++    };
++    window.addEventListener("keydown", handleKeyDown);
++    return () => window.removeEventListener("keydown", handleKeyDown);
++  }, [isAddPickerOpen]);
++
+   // Visual viewport tracking on mobile to keep picker above virtual keyboard
+   useEffect(() => {
+     if (typeof window === "undefined" || !isAddPickerOpen) return;
+@@ -123,15 +138,12 @@ export const GPAPage: React.FC<GPAPageProps> = ({
+     };
+   }, [isAddPickerOpen]);
+ 
+-  // Remaining courses available to add for what-if scenario (excluding completed and already added what-if)
++  // Remaining courses available to add for what-if scenario (including completed/failed courses for retake simulation, excluding courses already added in what-if)
+   const remainingCoursesToAdd = useMemo(() => {
+     return courses.filter(
+-      (c) =>
+-        !completedCourses.has(c.id) &&
+-        !failedCourseIds.has(c.id) &&
+-        !Object.prototype.hasOwnProperty.call(whatIfGrades, c.id),
++      (c) => !Object.prototype.hasOwnProperty.call(whatIfGrades, c.id),
+     );
+-  }, [courses, completedCourses, failedCourseIds, whatIfGrades]);
++  }, [courses, whatIfGrades]);
+ 
+   // Grouped and filtered courses for the categorized What-If picker
+   const filteredGroupedCourses = useMemo(() => {
+@@ -304,18 +316,15 @@ export const GPAPage: React.FC<GPAPageProps> = ({
+     );
+   }, [courses, courseGrades, completedCourses, failedCourseIds]);
+ 
+-  // Combined GPA with what-if grades
++  // Combined GPA with what-if grades (accurately replaces retake grades without duplicating credits)
+   const projectedGPA = useMemo(() => {
+-    const mergedGrades = { ...courseGrades, ...whatIfGrades };
+-    const mergedCompleted = new Set([
+-      ...Array.from(completedCourses),
+-      ...Object.keys(whatIfGrades),
+-    ]);
+     return calculateGPA(
+       courses,
+-      mergedGrades,
+-      mergedCompleted,
++      courseGrades,
++      completedCourses,
+       failedCourseIds,
++      whatIfGrades,
++      true,
+     );
+   }, [courses, courseGrades, completedCourses, failedCourseIds, whatIfGrades]);
+ 
+@@ -344,20 +353,35 @@ export const GPAPage: React.FC<GPAPageProps> = ({
+       );
+       if (sum >= 60 && sum <= 260) return sum;
+     }
+-    return TOTAL_CREDITS;
+-  }, [totalDegreeCredits, categoryRequirements]);
++    const isCse = isCseMajor(activeMajorId || student?.majorId);
++    return isCse ? TOTAL_CREDITS : 132;
++  }, [totalDegreeCredits, categoryRequirements, activeMajorId]);
+ 
+   const remainingCredits = useMemo(() => {
+     return Math.max(0, effectiveTotalCredits - earnedCredits);
+   }, [effectiveTotalCredits, earnedCredits]);
+ 
+   const projectedCredits = useMemo(() => {
++    const passingWhatIfIds = Object.entries(whatIfGrades)
++      .filter(([, g]) => typeof g === "number" && (g >= 50 || g === -1))
++      .map(([id]) => id);
++
++    const passingAdjustedIds = Object.entries(courseGrades)
++      .filter(
++        ([id, g]) =>
++          failedCourseIds.has(id) &&
++          typeof g === "number" &&
++          (g >= 50 || g === -1),
++      )
++      .map(([id]) => id);
++
+     const mergedCompleted = new Set([
+       ...Array.from(completedCourses),
+-      ...Object.keys(whatIfGrades),
++      ...passingWhatIfIds,
++      ...passingAdjustedIds,
+     ]);
+     return calculateDegreeCredits(courses, mergedCompleted);
+-  }, [courses, completedCourses, whatIfGrades]);
++  }, [courses, completedCourses, whatIfGrades, courseGrades, failedCourseIds]);
+ 
+   // Academic Standing & Warnings
+   const standingInfo = useMemo(() => {
+@@ -791,6 +815,14 @@ export const GPAPage: React.FC<GPAPageProps> = ({
+               </span>
+             </div>
+           )}
++          {cumulativeGPA > 0 && cumulativeGPA < 60 && projectedGPA >= 60 && (
++            <div className="mt-2.5 text-[11px] font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 border border-emerald-500/25 px-2.5 py-1 rounded-lg flex items-center gap-1.5">
++              <Sparkles size={13} className="shrink-0 text-emerald-500" />
++              <span>
++                خروج من الإنذار الأكاديمي: إعادة هذه المواد ترفع معدلك التراكمي فوق عتبة الـ 60%.
++              </span>
++            </div>
++          )}
+         </article>
+       </div>
+ 
+@@ -927,30 +959,47 @@ export const GPAPage: React.FC<GPAPageProps> = ({
+                               </span>
+                             </div>
+                             <div className="space-y-0.5">
+-                              {catCourses.map((c) => (
+-                                <button
+-                                  key={c.id}
+-                                  type="button"
+-                                  onClick={() => {
+-                                    handleAddWhatIfCourse(c.id);
+-                                    setIsAddPickerOpen(false);
+-                                    setSearchQuery("");
+-                                  }}
+-                                  className="w-full px-2.5 py-2 rounded-lg text-right flex items-center justify-between gap-2 hover:bg-[var(--accent-soft)] hover:text-[var(--accent)] group transition-colors cursor-pointer"
+-                                >
+-                                  <div className="min-w-0">
+-                                    <span className="text-[12px] font-semibold text-[var(--text)] group-hover:text-[var(--accent)] block truncate">
+-                                      {c.name}
+-                                    </span>
+-                                    <span className="text-[10px] text-[var(--text-3)] font-mono tabular-nums block">
+-                                      {c.id}
++                              {catCourses.map((c) => {
++                                const isFailedCourse = failedCourseIds.has(c.id);
++                                const isCompletedCourse = completedCourses.has(c.id);
++
++                                return (
++                                  <button
++                                    key={c.id}
++                                    type="button"
++                                    onClick={() => {
++                                      handleAddWhatIfCourse(c.id);
++                                      setIsAddPickerOpen(false);
++                                      setSearchQuery("");
++                                    }}
++                                    className="w-full px-2.5 py-2 rounded-lg text-right flex items-center justify-between gap-2 hover:bg-[var(--accent-soft)] hover:text-[var(--accent)] group transition-colors cursor-pointer"
++                                  >
++                                    <div className="min-w-0">
++                                      <div className="flex items-center gap-1.5 flex-wrap">
++                                        <span className="text-[12px] font-semibold text-[var(--text)] group-hover:text-[var(--accent)] block truncate">
++                                          {c.name}
++                                        </span>
++                                        {isFailedCourse && (
++                                          <span className="px-1.5 py-0.5 text-[9px] font-bold bg-rose-500/10 text-rose-500 border border-rose-500/20 rounded">
++                                            راسب • إعادة للتوقع
++                                          </span>
++                                        )}
++                                        {!isFailedCourse && isCompletedCourse && (
++                                          <span className="px-1.5 py-0.5 text-[9px] font-bold bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20 rounded">
++                                            مجتاز • تحسين علامة
++                                          </span>
++                                        )}
++                                      </div>
++                                      <span className="text-[10px] text-[var(--text-3)] font-mono tabular-nums block">
++                                        {c.id}
++                                      </span>
++                                    </div>
++                                    <span className="text-[11px] font-bold text-[var(--text-2)] shrink-0 bg-[var(--sunken)] px-1.5 py-0.5 rounded">
++                                      {c.credits} س
+                                     </span>
+-                                  </div>
+-                                  <span className="text-[11px] font-bold text-[var(--text-2)] shrink-0 bg-[var(--sunken)] px-1.5 py-0.5 rounded">
+-                                    {c.credits} س
+-                                  </span>
+-                                </button>
+-                              ))}
++                                  </button>
++                                );
++                              })}
+                             </div>
+                           </div>
+                         ),
+@@ -1038,9 +1087,21 @@ export const GPAPage: React.FC<GPAPageProps> = ({
+                         className="hover:bg-[var(--accent)]/5 transition-colors"
+                       >
+                         <td className="p-2 sm:p-3">
+-                          <span className="font-semibold text-[var(--text)] block text-[12px] sm:text-[13px] leading-tight">
+-                            {c.name}
+-                          </span>
++                          <div className="flex items-center gap-1.5 flex-wrap">
++                            <span className="font-semibold text-[var(--text)] block text-[12px] sm:text-[13px] leading-tight">
++                              {c.name}
++                            </span>
++                            {failedCourseIds.has(c.id) && (
++                              <span className="px-1.5 py-0.5 text-[9px] sm:text-[10px] font-bold bg-rose-500/10 text-rose-500 border border-rose-500/20 rounded">
++                                إعادة لمادة راسبة
++                              </span>
++                            )}
++                            {!failedCourseIds.has(c.id) && completedCourses.has(c.id) && (
++                              <span className="px-1.5 py-0.5 text-[9px] sm:text-[10px] font-bold bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20 rounded">
++                                إعادة لتحسين علامة
++                              </span>
++                            )}
++                          </div>
+                           <span className="text-[10px] sm:text-[12px] text-[var(--text-3)] tabular-nums block font-mono">
+                             {c.id}
+                           </span>
+@@ -1071,7 +1132,7 @@ export const GPAPage: React.FC<GPAPageProps> = ({
+                                   handleGradeChange(c.id, String(preset), true)
+                                 }
+                                 className={cn(
+-                                  "px-1 py-0.2 sm:px-1.5 sm:py-0.5 text-[8.5px] sm:text-[9.5px] rounded font-bold cursor-pointer transition-colors tabular-nums",
++                                  "px-1 py-0.5 sm:px-1.5 sm:py-0.5 text-[8.5px] sm:text-[9.5px] rounded font-bold cursor-pointer transition-colors tabular-nums",
+                                   grade === preset
+                                     ? "bg-[var(--accent)] text-[var(--text-on-accent)] shadow-xs"
+                                     : "bg-[var(--sunken)] text-[var(--text-3)] hover:text-[var(--text)] hover:bg-[var(--line-control)]",
+@@ -1200,19 +1261,43 @@ export const GPAPage: React.FC<GPAPageProps> = ({
+                   <tr>
+                     <td
+                       colSpan={4}
+-                      className="p-6 sm:p-8 text-center text-[var(--text-2)] text-[12px] sm:text-[13px]"
++                      className="p-6 sm:p-8 text-center text-[var(--text-2)] text-[12px] sm:text-[13px] space-y-3"
+                     >
+-                      لم يتم سحب درجات أو مواد مجتازة بعد. سجّل الدخول بالرقم
+-                      الجامعي لسحب سجلك الأكاديمي تلقائياً.
++                      <p className="m-0 leading-relaxed font-medium">
++                        لم يتم سحب درجات أو مواد مجتازة بعد. يمكنك تسجيل الدخول بالرقم الجامعي لسحب سجلك تلقائياً، أو استخدام ميزة «إضافة مادة للتوقع» أعلاه لمحاكاة معدلك ودرجاتك كضيف.
++                      </p>
++                      <div className="pt-2 flex items-center justify-center gap-2">
++                        <button
++                          type="button"
++                          onClick={() => { window.location.hash = "#/login"; }}
++                          className="px-3.5 py-1.5 bg-[var(--accent)] text-[var(--text-on-accent)] font-semibold rounded-[var(--r-control)] hover:opacity-90 transition-opacity cursor-pointer text-[12px] shadow-xs"
++                        >
++                          تسجيل الدخول وسحب السجل
++                        </button>
++                      </div>
+                     </td>
+                   </tr>
+                 ) : (
+                   existingCourses.map((c) => {
+                     const currentGrade = courseGrades[c.id];
+                     const isRemedial = isRemedialCourse(c);
++                    const wasFailedOriginally = failedCourseIds.has(c.id);
++                    const isWhatIfActive = Object.prototype.hasOwnProperty.call(
++                      whatIfGrades,
++                      c.id,
++                    );
++                    const whatIfGradeVal = whatIfGrades[c.id];
++                    const effectiveSimulatedGrade = isWhatIfActive
++                      ? whatIfGradeVal
++                      : currentGrade;
++                    const isRetakenPassed =
++                      wasFailedOriginally &&
++                      typeof effectiveSimulatedGrade === "number" &&
++                      effectiveSimulatedGrade >= 50;
+                     const isFailed =
+-                      failedCourseIds.has(c.id) ||
+-                      (typeof currentGrade === "number" && currentGrade < 50);
++                      (wasFailedOriginally && !isRetakenPassed) ||
++                      (typeof effectiveSimulatedGrade === "number" &&
++                        effectiveSimulatedGrade < 50);
+ 
+                     return (
+                       <tr
+@@ -1229,6 +1314,18 @@ export const GPAPage: React.FC<GPAPageProps> = ({
+                                 راسب
+                               </span>
+                             )}
++                            {isRetakenPassed && (
++                              <span className="px-1.5 py-0.5 text-[9px] sm:text-[10px] font-bold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 rounded">
++                                {isWhatIfActive
++                                  ? `مُعاد بالتوقع (${whatIfGradeVal})`
++                                  : "مُعاد (ناجح)"}
++                              </span>
++                            )}
++                            {!wasFailedOriginally && isWhatIfActive && (
++                              <span className="px-1.5 py-0.5 text-[9px] sm:text-[10px] font-bold bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20 rounded">
++                                مُعاد بالتوقع ({whatIfGradeVal})
++                              </span>
++                            )}
+                           </div>
+                           <span className="text-[10px] sm:text-[12px] text-[var(--text-3)] tabular-nums block font-mono">
+                             {c.id}
+@@ -1263,6 +1360,8 @@ export const GPAPage: React.FC<GPAPageProps> = ({
+                                 "h-[28px] w-[42px] sm:h-[32px] sm:w-[72px] mx-auto px-0.5 sm:px-2 text-center rounded-[var(--r-control)] bg-[var(--surface)] text-[var(--text)] text-[12px] sm:text-[14px] font-semibold border transition-all privacy-sensitive",
+                                 isFailed
+                                   ? "border-rose-400 text-rose-500"
++                                  : isRetakenPassed || isWhatIfActive
++                                  ? "border-emerald-500 text-emerald-600 dark:text-emerald-400"
+                                   : "border-[var(--line-control)]",
+                                 "focus:border-[var(--accent)] focus:outline-none tabular-nums shadow-sm",
+                               )}
+@@ -1284,14 +1383,22 @@ export const GPAPage: React.FC<GPAPageProps> = ({
+                             <span className="text-[11px] text-emerald-600 dark:text-emerald-400 font-semibold">
+                               غير نقطي
+                             </span>
+-                          ) : typeof currentGrade === "number" &&
+-                            currentGrade > 0 ? (
++                          ) : typeof effectiveSimulatedGrade === "number" &&
++                            effectiveSimulatedGrade > 0 ? (
+                             <span
+-                              className="font-medium text-[var(--text)] privacy-sensitive"
++                              className={cn(
++                                "font-medium text-[var(--text)] privacy-sensitive",
++                                isWhatIfActive && "text-[var(--accent)] font-bold",
++                              )}
+                               dir="ltr"
+                             >
+-                              {(currentGrade * c.credits).toFixed(0)}{" "}
++                              {(effectiveSimulatedGrade * c.credits).toFixed(0)}{" "}
+                               <span className="hidden sm:inline">نقطة</span>
++                              {isWhatIfActive && (
++                                <span className="text-[10px] block text-[var(--accent)]">
++                                  (متوقع)
++                                </span>
++                              )}
+                             </span>
+                           ) : (
+                             "-"

@@ -34,40 +34,24 @@ test("CSS rules for privacy-sensitive include blur and disable user-select", () 
   );
 });
 
-test("StudentPortalModal marks sensitive student info as privacy-sensitive", () => {
-  const portalModalPath = path.resolve(
+test("GPAPage marks sensitive student GPA and grade data as privacy-sensitive", () => {
+  const gpaPagePath = path.resolve(
     process.cwd(),
-    "src/components/modals/StudentPortalModal.tsx",
+    "src/pages/GPAPage.tsx",
   );
-  const content = fs.readFileSync(portalModalPath, "utf-8");
+  const content = fs.readFileSync(gpaPagePath, "utf-8");
 
   assert.ok(
     content.includes("privacy-sensitive"),
-    "StudentPortalModal must contain privacy-sensitive classes",
+    "GPAPage must contain privacy-sensitive classes",
   );
   assert.ok(
     content.includes("usePrivacyMask"),
-    "StudentPortalModal must use usePrivacyMask hook",
+    "GPAPage must use usePrivacyMask hook",
   );
   assert.ok(
-    content.includes("syncedProfile.studentName"),
-    "StudentPortalModal renders studentName",
-  );
-  assert.ok(
-    content.includes("syncedProfile.studentId"),
-    "StudentPortalModal renders studentId",
-  );
-  assert.ok(
-    content.includes("syncedProfile.financialBalance"),
-    "StudentPortalModal renders financialBalance",
-  );
-  assert.ok(
-    content.includes("syncedProfile.academicAdvisor"),
-    "StudentPortalModal renders academicAdvisor",
-  );
-  assert.ok(
-    content.includes("syncedProfile.academicWarning"),
-    "StudentPortalModal renders academicWarning",
+    content.includes("isPrivacyMasked"),
+    "GPAPage must handle isPrivacyMasked state",
   );
 });
 
@@ -97,6 +81,14 @@ test("StudentRecordsModal marks sensitive records with privacy-sensitive", () =>
   assert.ok(
     content.includes("financial.balance"),
     "StudentRecordsModal renders financial.balance",
+  );
+  assert.ok(
+    content.includes("profile?.academicAdvisor"),
+    "StudentRecordsModal renders academicAdvisor",
+  );
+  assert.ok(
+    content.includes("profile?.academicWarning"),
+    "StudentRecordsModal renders academicWarning",
   );
 });
 

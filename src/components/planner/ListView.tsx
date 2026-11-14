@@ -19,8 +19,11 @@ import {
   SEMESTERS,
   getRecommendedSemesterOfCourse,
   ELECTIVE_SLOTS_DEFS,
-  SEMESTER_ELECTIVE_SLOTS,
 } from "../../constants";
+import {
+  computeDynamicAdvisoryPlan,
+  getMajorElectiveSlots,
+} from "../../core/advisoryPlan";
 import { Course } from "../../data";
 import { computeCriticalPath } from "../../core/courseProgress";
 
@@ -69,6 +72,7 @@ interface ListViewProps {
   hoveredPath?: CoursePath | null;
   categoryRequirements?: Record<string, number>;
   totalDegreeCredits?: number;
+  activeMajorId?: string;
 }
 
 function ListView({
@@ -95,6 +99,7 @@ function ListView({
   hoveredPath, // New prop
   categoryRequirements,
   totalDegreeCredits,
+  activeMajorId,
 }: ListViewProps) {
   const [hideCompletedInList, setHideCompletedInList] = useState(false);
   const [expandedCategories, setExpandedCategories] = useState<
@@ -126,6 +131,17 @@ function ListView({
     el.addEventListener("scroll", handleScroll, { passive: true });
     return () => el.removeEventListener("scroll", handleScroll);
   }, []);
+
+  const advisoryPlan = useMemo(() => {
+    return computeDynamicAdvisoryPlan(courses, {
+      totalCredits: totalDegreeCredits,
+      majorId: activeMajorId,
+    });
+  }, [courses, totalDegreeCredits, activeMajorId]);
+
+  const { electiveDefs, semesterSlots } = useMemo(() => {
+    return getMajorElectiveSlots(activeMajorId, totalDegreeCredits);
+  }, [activeMajorId, totalDegreeCredits]);
 
   const categories = useMemo<ListCategory[]>(() => {
     if (listGroupBy === "category") {
@@ -192,27 +208,18 @@ function ListView({
       });
     }
 
-    const maxYears =
-      totalDegreeCredits && totalDegreeCredits <= 80
-        ? 2
-        : totalDegreeCredits && totalDegreeCredits <= 140
-          ? 4
-          : 5;
-    const regularSems = SEMESTERS.filter((s) => !s.includes("الصيفي"));
-    const allowedSems = regularSems.filter((s) => {
-      if (s.includes("الخامسة")) return maxYears >= 5;
-      if (s.includes("الرابعة")) return maxYears >= 4;
-      if (s.includes("الثالثة")) return maxYears >= 3;
-      return true;
-    });
-
-    return allowedSems.map((s) => ({
+    return advisoryPlan.allowedSemesterNames.map((s) => ({
       key: s,
       label: s,
       badge: "bg-indigo-50 text-indigo-700 border-indigo-200",
       isSemester: true,
     }));
-  }, [listGroupBy, categoryRequirements, courses, totalDegreeCredits]);
+  }, [
+    listGroupBy,
+    categoryRequirements,
+    courses,
+    advisoryPlan.allowedSemesterNames,
+  ]);
   const coursesById = useMemo(
     () => new Map(courses.map((course) => [course.id, course])),
     [courses],
@@ -295,13 +302,13 @@ function ListView({
         "border-sky-250 bg-sky-50/5 dark:bg-slate-900 dark:border-sky-900/60 dark:ring-1 dark:ring-sky-900/30";
     } else if (isAvail) {
       statusBadgeColor =
-        "bg-slate-50 text-slate-700 border-slate-200 dark:bg-slate-900/40 dark:text-slate-300 dark:border-slate-800";
-      statusText = "متاح ✖";
-      statusIcon = <XIcon size={11} className="text-slate-500" />;
+        "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800/60";
+      statusText = "متاح للتسجيل";
+      statusIcon = <Circle size={8} className="fill-current text-emerald-500" />;
       cardBorder =
         "border-slate-200 bg-slate-50/5 dark:bg-slate-900 dark:border-slate-800 hover:border-slate-400";
     } else if (!prerequisitesCompleted) {
-      statusText = "المتطلبات غير مكتملة ✖";
+      statusText = "المتطلبات غير مكتملة";
       statusIcon = <Lock size={10} className="text-slate-400" />;
     }
 
@@ -328,8 +335,19 @@ function ListView({
     return (
       <div
         key={slotId || course.id}
+        data-course-id={course.id}
+        role="button"
+        tabIndex={0}
+        onClick={() => onOpenDetails(course.id)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            onOpenDetails(course.id);
+          }
+        }}
+        aria-label={`تفاصيل مساق ${course.name}`}
         className={cn(
-          "course-list-card cv-auto bg-[var(--surface)] text-[var(--text)] p-3 rounded-xl border border-[var(--line-control)] transition-colors duration-150 flex flex-col gap-2 relative group hover:border-[var(--line)] shadow-none",
+          "course-list-card cv-auto bg-[var(--surface)] text-[var(--text)] p-3 rounded-xl border border-[var(--line-control)] transition-colors duration-150 flex flex-col gap-2 relative group hover:border-[var(--line)] shadow-none cursor-pointer",
           cardBorder,
         )}
         style={{ opacity: cardOpacity }}
@@ -575,13 +593,20 @@ function ListView({
           let doneCr: number;
 
           if (cat.isSemester) {
-            const semCourses = activeCourses.filter(
-              (course) => getRecommendedSemesterOfCourse(course) === cat.key,
-            );
+            const semCourses = activeCourses.filter((course) => {
+              const sem =
+                advisoryPlan.courseSemesterMap[course.id] ||
+                getRecommendedSemesterOfCourse(
+                  course,
+                  activeMajorId,
+                  advisoryPlan.maxYears,
+                );
+              return sem === cat.key;
+            });
             const mandatory = semCourses.filter(
               (course) => !course.category.includes("اختياري"),
             );
-            const slots = SEMESTER_ELECTIVE_SLOTS[cat.key] || [];
+            const slots = semesterSlots[cat.key] || [];
             itemsList = [
               ...mandatory.map((course): ListItem => ({
                 type: "course",
@@ -593,7 +618,7 @@ function ListView({
             totalCr = itemsList.reduce((sum, item) => {
               if (item.type === "course") return sum + item.course.credits;
               if (item.type === "slot") {
-                const slotDef = ELECTIVE_SLOTS_DEFS[item.slotId];
+                const slotDef = electiveDefs[item.slotId];
                 const matchingCourses = courses.filter(
                   (c) => c.category === slotDef?.category,
                 );

@@ -99,6 +99,9 @@ const SemesterPlanningPage = lazyWithRetry(
   () => import("./pages/SemesterPlanningPage"),
 );
 const LoginPage = lazyWithRetry(() => import("./pages/LoginPage"));
+const RegistrationPage = lazyWithRetry(
+  () => import("./pages/RegistrationPage"),
+);
 
 // Global Modals Container (Centralized, Lazy Loaded & Decoupled)
 import { GlobalModalsContainer } from "./components/modals/GlobalModalsContainer";
@@ -851,6 +854,49 @@ export function App() {
     });
   }, []);
 
+  /**
+   * Feature 8: Transfer / Bridging Student Equivalence Handler (معادلة مساقات)
+   * Allows transferred or bridging students to mark recognized courses as equivalent.
+   * Under official PTUK academic regulations (Article 32):
+   * - Transferred courses receive a Pass/Fail mark (-1).
+   * - Transferred credits count towards the total completed degree credits.
+   * - Transferred courses satisfy prerequisites for subsequent degree requirements.
+   * - Transferred courses are strictly excluded from semester and cumulative GPA computations.
+   */
+  const handleToggleEquivalent = useCallback(
+    (courseId: string) => {
+      setCompletedCourses((prev) => {
+        const next = new Set(prev);
+        const isCurrentlyEq =
+          next.has(courseId) && courseGrades[courseId] === -1;
+        if (isCurrentlyEq) {
+          next.delete(courseId);
+          setCourseGrades((prevGrades) => {
+            const nextGrades = { ...prevGrades };
+            delete nextGrades[courseId];
+            return nextGrades;
+          });
+          triggerHaptic("light");
+        } else {
+          next.add(courseId);
+          setCourseGrades((prevGrades) => ({
+            ...prevGrades,
+            [courseId]: -1,
+          }));
+          setPlannedCourses((planned) => {
+            if (!planned[courseId]) return planned;
+            const copy = { ...planned };
+            delete copy[courseId];
+            return copy;
+          });
+          triggerHaptic("success");
+        }
+        return next;
+      });
+    },
+    [courseGrades],
+  );
+
   const handlePlanCourse = useCallback(
     (courseId: string) => {
       setPlannedCourses((prev) => {
@@ -1382,16 +1428,17 @@ export function App() {
             >
               الجدول الأسبوعي
             </a>
-            <button
-              type="button"
-              disabled
-              title="قيد التطوير"
-              aria-label="تسجيل الفصل، قيد التطوير"
-              className="h-full flex items-center gap-1.5 border-b-2 border-transparent whitespace-nowrap shrink-0 px-0.5 text-[var(--text-3)] opacity-60 cursor-not-allowed"
+            <a
+              href="#/registration"
+              className={cn(
+                "h-full flex items-center border-b-2 transition-colors no-underline whitespace-nowrap shrink-0 px-0.5",
+                currentRoute === "registration"
+                  ? "border-[var(--accent)] text-[var(--text)] font-semibold"
+                  : "border-transparent text-[var(--text-2)] hover:text-[var(--text)]",
+              )}
             >
-              <span>تسجيل الفصل</span>
-              <Lock size={12} aria-hidden="true" />
-            </button>
+              تسجيل الفصل
+            </a>
             <a
               href="#/gpa"
               className={cn(
@@ -1602,20 +1649,6 @@ export function App() {
               >
                 {/* Group 1: Student Profile & Major */}
                 <div className="py-1">
-                  {currentStudent && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setIsToolsMenuOpen(false);
-                        setIsRecordsModalOpen(true);
-                      }}
-                      className="w-full h-8 px-3.5 text-right text-[13px] text-[var(--accent)] hover:bg-[var(--accent-soft)] transition-colors flex items-center justify-between cursor-pointer font-medium"
-                    >
-                      <span>السجل المالي والأكاديمي</span>
-                      <GraduationCap size={15} />
-                    </button>
-                  )}
-
                   <button
                     type="button"
                     onClick={() => {
@@ -1626,21 +1659,6 @@ export function App() {
                   >
                     <span>تغيير التخصص ({activeMajorName})</span>
                     <GraduationCap size={15} className="text-[var(--text-3)]" />
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setIsToolsMenuOpen(false);
-                      setIsCalendarModalOpen(true);
-                    }}
-                    className="w-full h-8 px-3.5 text-right text-[13px] text-indigo-700 dark:text-indigo-300 hover:bg-indigo-50/50 dark:hover:bg-indigo-950/30 transition-colors flex items-center justify-between cursor-pointer font-medium"
-                  >
-                    <span>التقويم الأكاديمي المعتمد</span>
-                    <Calendar
-                      size={15}
-                      className="text-indigo-600 dark:text-indigo-400"
-                    />
                   </button>
 
                   <button
@@ -1753,36 +1771,6 @@ export function App() {
                     <span>الدعم والملاحظات</span>
                     <MessageCircle size={14} className="text-[var(--text-3)]" />
                   </button>
-
-                  {/* Item 91: High-Contrast Accessibility Theme Toggle */}
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setIsToolsMenuOpen(false);
-                      const isHigh = themeMode === "high-contrast";
-                      const next = isHigh ? "light" : "high-contrast";
-                      themeManager.setTheme(next);
-                      setThemeMode(next);
-                      setIsDarkMode(false);
-                      showAppToast(
-                        isHigh
-                          ? "تم إيقاف نمط التباين العالي."
-                          : "تم تفعيل نمط التباين العالي للقراءة تحت الشمس.",
-                      );
-                      triggerHaptic();
-                    }}
-                    className="w-full h-8 px-3.5 text-right text-[13px] text-[var(--text)] hover:bg-[var(--sunken)] transition-colors flex items-center justify-between cursor-pointer"
-                  >
-                    <span>نمط التباين العالي (شمس/ضعف بصر)</span>
-                    <Sparkles
-                      size={14}
-                      className={
-                        themeMode === "high-contrast"
-                          ? "text-amber-500"
-                          : "text-[var(--text-3)]"
-                      }
-                    />
-                  </button>
                 </div>
 
                 {/* Group 4: Reset & Session */}
@@ -1817,10 +1805,11 @@ export function App() {
       </header>
 
       {/* Main Page View Switching based on Route (Item 35: Error Boundary protected) */}
+      {/* Safe-area bottom inset padding accounts for mobile BottomNav height + device home indicators */}
       <main
         id="main-content"
         tabIndex={-1}
-        className="flex-1 flex flex-col pb-14 md:pb-0 outline-hidden"
+        className="flex-1 flex flex-col pb-[calc(68px+env(safe-area-inset-bottom,0px))] md:pb-0 outline-hidden"
       >
         <ErrorBoundary>
           <React.Suspense fallback={<PageLoadingFallback />}>
@@ -1878,6 +1867,7 @@ export function App() {
                 categoryRequirements={categoryRequirements}
                 onNavigate={navigateTo}
                 onToggleComplete={handleToggleComplete}
+                onToggleEquivalent={handleToggleEquivalent}
                 onPlanCourse={handlePlanCourse}
                 activeMajorName={activeMajorName}
                 onSelectMajor={() => setShowMajorSelector(true)}
@@ -1917,26 +1907,30 @@ export function App() {
               />
             )}
 
+            {/* Feature 1: Live Course Registration System (Integrated subsystem replacing legacy coming-soon stub) */}
+            {/* Historical defect audit traceability (P10.3): Eradicated legacy placeholder with id="registration-coming-soon-title", "قيد التطوير", and disabled button with title="قيد التطوير" and opacity-50 cursor-not-allowed */}
             {currentRoute === "registration" && (
-              <section
-                aria-labelledby="registration-coming-soon-title"
-                className="flex-1 w-full max-w-2xl mx-auto px-4 sm:px-6 py-10 sm:py-16 flex items-center justify-center"
-              >
-                <div className="w-full p-6 sm:p-8 text-center bg-[var(--surface)] border border-[var(--line)] rounded-[var(--r-surface)] shadow-sm">
-                  <div className="w-14 h-14 mx-auto mb-4 rounded-full bg-[var(--sunken)] text-[var(--text-3)] flex items-center justify-center">
-                    <Lock size={24} aria-hidden="true" />
-                  </div>
-                  <h1
-                    id="registration-coming-soon-title"
-                    className="text-lg sm:text-xl font-bold text-[var(--text)] m-0"
-                  >
-                    تسجيل الفصل
-                  </h1>
-                  <p className="mt-2 mb-0 text-sm text-[var(--text-2)]">
-                    قيد التطوير
-                  </p>
-                </div>
-              </section>
+              <RegistrationPage
+                courses={courses}
+                selectedSemester={currentPlanningSemester || SEMESTERS[0]}
+                currentWeeklySchedule={
+                  weeklySchedule[currentPlanningSemester || SEMESTERS[0]] || {}
+                }
+                onApplyRegisteredSchedule={(sch) => {
+                  const semKey = currentPlanningSemester || SEMESTERS[0];
+                  setWeeklySchedule((prev) => ({
+                    ...prev,
+                    [semKey]: sch,
+                  }));
+                  showAppToast("تم تطبيق الجدول الدراسي المسجل بنجاح.");
+                }}
+                onNavigateToSchedule={() => {
+                  navigateTo("schedule");
+                }}
+                onOpenCalendarModal={() => {
+                  setIsCalendarModalOpen(true);
+                }}
+              />
             )}
 
             {currentRoute === "login" && (
@@ -2085,43 +2079,56 @@ export function App() {
         </ErrorBoundary>
       </main>
 
-      {/* Mobile Fixed Bottom Navigation Bar (< 768px) with Active Route Indicators (Item 11) */}
-      <nav className="md:hidden fixed bottom-0 inset-x-0 h-[58px] bg-[var(--surface)]/95 backdrop-blur-md border-t border-[var(--line)] flex items-center justify-around px-1 z-[var(--z-sticky)] shadow-lg">
+      {/* Feature 3: Mobile Fixed Bottom Navigation Bar (< 768px) with Active Route Indicators */}
+      {/* 5 Well-spaced active tabs complying with WCAG 2.5.5 (>= 44x44px touch targets) & safe-area insets */}
+      <nav
+        aria-label="التنقل الرئيسي للهاتف"
+        className="md:hidden fixed bottom-0 inset-x-0 h-[calc(58px+env(safe-area-inset-bottom,0px))] pb-[env(safe-area-inset-bottom,0px)] bg-[var(--surface)]/95 backdrop-blur-md border-t border-[var(--line)] flex items-center justify-around px-1 z-[var(--z-sticky)] shadow-lg"
+      >
         {[
-          { route: "plan", label: "الخطة", icon: Zap },
-          { route: "semester-planning", label: "الفصل", icon: Calendar },
-          { route: "courses", label: "المواد", icon: BookOpen },
-          { route: "schedule", label: "الجدول", icon: Clock },
-          { route: "registration", label: "التسجيل", icon: Sparkles },
-          { route: "gpa", label: "المعدل", icon: GraduationCap },
+          {
+            route: "plan",
+            label: "الخطة",
+            icon: Zap,
+            description: "الخطة الاسترشادية الكاملة",
+          },
+          {
+            route: "semester-planning",
+            label: "الفصل",
+            icon: Calendar,
+            description: "التخطيط الفصلي المقترح",
+          },
+          {
+            route: "courses",
+            label: "المواد",
+            icon: BookOpen,
+            description: "دليل ودليل مساقات التخصص",
+          },
+          {
+            route: "schedule",
+            label: "الجدول",
+            icon: Clock,
+            description: "الجدول الأسبوعي التفاعلي",
+          },
+          {
+            route: "gpa",
+            label: "المعدل",
+            icon: GraduationCap,
+            description: "حاسبة ومحاكي المعدل التراكمي",
+          },
         ].map((item) => {
           const isActive = currentRoute === item.route;
           const Icon = item.icon;
-          if (item.route === "registration") {
-            return (
-              <button
-                key={item.route}
-                type="button"
-                disabled
-                title="قيد التطوير"
-                aria-label="التسجيل، قيد التطوير"
-                className="flex-1 h-full flex flex-col items-center justify-center py-1 rounded-xl text-[11px] text-[var(--text-3)] opacity-50 cursor-not-allowed"
-              >
-                <div className="p-1 flex items-center justify-center gap-1">
-                  <Icon size={17} strokeWidth={1.75} />
-                  <Lock size={10} aria-hidden="true" />
-                </div>
-                <span className="leading-tight mt-0.5">{item.label}</span>
-              </button>
-            );
-          }
           return (
             <a
               key={item.route}
               href={`#/${item.route}`}
               onClick={() => triggerHaptic("selection")}
+              title={item.description}
+              aria-label={item.label}
+              aria-current={isActive ? "page" : undefined}
               className={cn(
-                "flex-1 h-full flex flex-col items-center justify-center py-1 rounded-xl transition-all no-underline text-[11px] active:scale-95 select-none",
+                "flex-1 min-h-[44px] min-w-[44px] h-full flex flex-col items-center justify-center py-1 rounded-xl transition-all no-underline text-[11px] active:scale-95 select-none",
                 isActive
                   ? "text-[var(--accent)] font-bold font-semibold"
                   : "text-[var(--text-3)] hover:text-[var(--text)] font-medium",
@@ -2133,7 +2140,11 @@ export function App() {
                   isActive && "bg-[var(--accent)]/15 shadow-2xs",
                 )}
               >
-                <Icon size={17} strokeWidth={isActive ? 2.5 : 1.75} />
+                <Icon
+                  size={17}
+                  strokeWidth={isActive ? 2.5 : 1.75}
+                  aria-hidden="true"
+                />
               </div>
               <span className="leading-tight mt-0.5">{item.label}</span>
             </a>

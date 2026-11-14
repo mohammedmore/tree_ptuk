@@ -53,12 +53,41 @@ function getBaseApiUrl(): string {
   return "http://localhost:3001";
 }
 
-export const FALLBACK_MAJORS: MajorSummary[] = [];
+export const FALLBACK_MAJORS: MajorSummary[] = [
+  {
+    id: "cse-2023",
+    code: "CSE-2023",
+    name: "هندسة أنظمة الحاسوب",
+    cohortYear: "2023",
+    displayName: "هندسة أنظمة الحاسوب - دفعة 2023",
+    college: "كلية الهندسة والتكنولوجيا",
+    degree: "بكالوريوس هندسة",
+    totalCredits: 164,
+    categoryRequirements: defaultCategoryRequirements,
+    description: "الخطة الدراسية المعتمدة لتخصص هندسة أنظمة الحاسوب",
+    coursesCount: defaultCseCourses.length,
+  },
+  {
+    id: "الذكاء-الاصطناعي_2024",
+    code: "AI-2024",
+    name: "الذكاء الاصطناعي",
+    cohortYear: "2024",
+    displayName: "الذكاء الاصطناعي - دفعة 2024",
+    college: "كلية تكنولوجيا المعلومات والاتصالات",
+    degree: "بكالوريوس",
+    totalCredits: 124,
+    categoryRequirements: defaultAiCategoryRequirements,
+    description: "الخطة الدراسية المعتمدة لتخصص الذكاء الاصطناعي",
+    coursesCount: defaultAiCourses.length,
+  },
+];
 
 const isValidMajor = (m: any): boolean =>
   Boolean(
     m &&
-    (m.cohortYear || m.name) &&
+    m.name &&
+    m.cohortYear &&
+    m.cohortYear !== "m.m." &&
     !["cse", "swe", "cs", "ee"].includes(m.id?.toLowerCase?.() || ""),
   );
 
@@ -158,6 +187,12 @@ export async function fetchMajors(): Promise<MajorSummary[]> {
     const list: MajorSummary[] = await response.json();
     if (Array.isArray(list)) {
       const validList = mergeStudentMajor(list.filter(isValidMajor));
+      // Ensure essential fallback majors (like CSE) are present in the list
+      for (const fb of FALLBACK_MAJORS) {
+        if (!validList.some((m) => m.id === fb.id || m.name === fb.name)) {
+          validList.push(fb);
+        }
+      }
       if (typeof window !== "undefined" && window.localStorage) {
         try {
           window.localStorage.setItem(
@@ -358,6 +393,13 @@ export function getActiveMajorId(): string {
       if (studentRaw) {
         const student = JSON.parse(studentRaw) as StudentSyncProfile;
         if (student?.majorId) return student.majorId;
+        if (student?.majorName) {
+          if (student.majorName.includes("ذكاء") || student.majorName.toLowerCase().includes("ai")) return "ai";
+          if (student.majorName.includes("برمجيات")) return "swe";
+          if (student.majorName.includes("علم الحاسوب")) return "cs";
+          if (student.majorName.includes("دبلوم")) return "diploma";
+          if (!student.majorName.includes("أنظمة الحاسوب")) return "custom-major";
+        }
       }
     } catch {}
     const saved = window.localStorage.getItem(STORAGE_ACTIVE_MAJOR_KEY);
@@ -365,7 +407,7 @@ export function getActiveMajorId(): string {
       return saved;
     }
   }
-  return "";
+  return "cse-2023";
 }
 
 export function getActiveMajorName(): string {
@@ -380,7 +422,7 @@ export function getActiveMajorName(): string {
     const saved = window.localStorage.getItem("ptuk_active_major_name");
     if (saved) return saved;
   }
-  return "";
+  return "الخطة الدراسية الجامعية";
 }
 
 export function setActiveMajorId(majorId: string, majorName?: string): void {

@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import {
   X,
   ArrowLeftRight,
@@ -78,6 +78,18 @@ export const SectionSwapModal: React.FC<SectionSwapModalProps> = ({
     });
   }, [evaluatedSections, searchQuery]);
 
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        onClose();
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [isOpen, onClose]);
+
   if (!isOpen) return null;
 
   return (
@@ -86,8 +98,12 @@ export const SectionSwapModal: React.FC<SectionSwapModalProps> = ({
       aria-modal="true"
       aria-labelledby="section-swap-title"
       className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-200"
+      onClick={onClose}
     >
-      <div className="bg-[var(--surface)] border border-[var(--line)] rounded-3xl shadow-2xl w-full max-w-xl max-h-[90vh] flex flex-col overflow-hidden">
+      <div
+        className="bg-[var(--surface)] border border-[var(--line)] rounded-3xl shadow-2xl w-full max-w-xl max-h-[90vh] flex flex-col overflow-hidden"
+        onClick={(e) => e.stopPropagation()}
+      >
         {/* Header */}
         <div className="flex items-center justify-between p-4 sm:p-5 border-b border-[var(--line)] bg-[var(--surface-sunken)]/40 shrink-0">
           <div className="flex items-center gap-3">

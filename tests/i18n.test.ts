@@ -25,15 +25,15 @@ test("i18n: useLanguageStore toggles language and updates active dictionary", ()
 
   store.setLanguage("ar");
   assert.equal(useLanguageStore.getState().language, "ar");
-  assert.equal(useLanguageStore.getState().t.nav.plan, "الخطة الدراسية");
+  assert.equal(useLanguageStore.getState().t.nav.plan, "الخطة");
 
   // Toggle to English
   store.toggleLanguage();
   assert.equal(useLanguageStore.getState().language, "en");
-  assert.equal(useLanguageStore.getState().t.nav.plan, "Degree Plan");
+  assert.equal(useLanguageStore.getState().t.nav.plan, "Plan");
 
   // Toggle back to Arabic
   store.toggleLanguage();
   assert.equal(useLanguageStore.getState().language, "ar");
-  assert.equal(useLanguageStore.getState().t.nav.plan, "الخطة الدراسية");
+  assert.equal(useLanguageStore.getState().t.nav.plan, "الخطة");
 });

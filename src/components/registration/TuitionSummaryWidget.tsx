@@ -1,5 +1,5 @@
-import React from "react";
-import { Calculator, X, Wallet } from "lucide-react";
+import React, { useEffect } from "react";
+import { Calculator, X } from "lucide-react";
 import type {
   TuitionConfig,
   TuitionCalculationResult,
@@ -14,7 +14,7 @@ export interface TuitionSummaryWidgetProps {
   studentBalance: number | string | null | undefined;
   tuitionConfig: TuitionConfig;
   setTuitionConfig: React.Dispatch<React.SetStateAction<TuitionConfig>>;
-  onOpenModal: () => void;
+  onOpenModal?: () => void;
   formatDisplayBalance: (val: any) => string;
 }
 
@@ -30,42 +30,32 @@ export const TuitionSummaryWidget: React.FC<TuitionSummaryWidgetProps> = ({
   onOpenModal,
   formatDisplayBalance,
 }) => {
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        onClose();
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [isOpen, onClose]);
   return (
     <>
-      {/* Floating Mini-Bar at bottom left */}
-      {totalCredits > 0 && (
-        <div
-          dir="rtl"
-          className="fixed bottom-4 left-4 z-40 hidden sm:flex items-center gap-3 px-3.5 py-2 rounded-2xl bg-[var(--surface)]/95 backdrop-blur-md border border-[var(--line-control)] shadow-lg text-xs animate-in fade-in"
-        >
-          <div className="flex items-center gap-1.5 text-[var(--text)] font-semibold">
-            <Wallet size={14} className="text-[var(--accent)]" />
-            <span>الساعات: {totalCredits}</span>
-          </div>
-          <span className="w-px h-3.5 bg-[var(--line)]" />
-          <div className="text-[var(--text-2)] font-mono">
-            {detailedTuition.totalJOD} دينار{" "}
-            <span className="text-[10px] text-[var(--text-3)]">
-              ({detailedTuition.totalILS} ₪)
-            </span>
-          </div>
-          <button
-            type="button"
-            onClick={onOpenModal}
-            className="text-[11px] font-bold text-[var(--accent)] hover:underline cursor-pointer"
-          >
-            تعديل الرسوم
-          </button>
-        </div>
-      )}
-
       {/* Tuition Financial Calculator Modal */}
       {isOpen && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 bg-black/60 backdrop-blur-sm animate-in fade-in duration-150"
           dir="rtl"
+          onClick={onClose}
         >
-          <div className="w-full max-w-lg bg-[var(--surface)] border border-[var(--line)] rounded-3xl text-[var(--text)] shadow-2xl p-5 space-y-4">
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-label="حاسبة الرسوم المتوقعة للفصل"
+            className="w-full max-w-lg bg-[var(--surface)] border border-[var(--line)] rounded-3xl text-[var(--text)] shadow-2xl p-5 space-y-4"
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="flex items-center justify-between border-b border-[var(--line)] pb-3">
               <div className="flex items-center gap-2">
                 <Calculator size={18} className="text-emerald-500" />

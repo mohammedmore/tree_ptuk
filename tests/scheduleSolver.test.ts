@@ -408,6 +408,20 @@ test("explainScheduleConflicts detects pairwise conflicts, empty sections, and f
   assert.ok(
     explanationFreeDay.autoFixes.some((f: any) => f.type === "clear_free_days"),
   );
+
+  // Test mixed section is NOT discarded
+  const cMixed: CatalogCourse = {
+    id: "CS103",
+    name: "خوارزميات",
+    sections: [
+      {
+        sec: "1 مختلط",
+        blocks: [{ days: ["أح"], start: 9, end: 10 }], // Overlaps with CS101 Sec 1
+      },
+    ],
+  };
+  const explanationMixed = explainScheduleConflicts([c1, cMixed], {});
+  assert.equal(explanationMixed.hasConflict, true, "Mixed section must be evaluated and detect conflict");
 });
 
 test("isOnlineComponent correctly identifies PTUK online rooms, evening lectures, and Saturday/Thursday recordings", () => {
@@ -415,6 +429,9 @@ test("isOnlineComponent correctly identifies PTUK online rooms, evening lectures
   assert.equal(isOnlineComponent({ room: "1000" }), true);
   assert.equal(isOnlineComponent({ room: "2050" }), true);
   assert.equal(isOnlineComponent({ room: "B301" }), false);
+  // Physical engineering rooms must NOT be classified as online
+  assert.equal(isOnlineComponent({ room: "1102" }), false);
+  assert.equal(isOnlineComponent({ room: "2105" }), false);
 
   // Class at or after 16:00 (evening e-learning) in hours or minutes
   assert.equal(isOnlineComponent({ start: 16 }), true);

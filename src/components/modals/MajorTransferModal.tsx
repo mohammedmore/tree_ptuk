@@ -42,7 +42,7 @@ export const MajorTransferModal: React.FC<MajorTransferModalProps> = ({
   onApplyTransfer,
 }) => {
   const [majors, setMajors] = useState<MajorSummary[]>(FALLBACK_MAJORS);
-  const [targetMajorId, setTargetMajorId] = useState<string>("swe");
+  const [targetMajorId, setTargetMajorId] = useState<string>("cse-2023");
   const [targetMajorCourses, setTargetMajorCourses] = useState<Course[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(false);
 
@@ -147,7 +147,8 @@ export const MajorTransferModal: React.FC<MajorTransferModalProps> = ({
     const isTargetFiveYear =
       Boolean(targetMajor?.college?.includes("هندسة")) &&
       !targetMajor?.name?.includes("الذكاء") &&
-      !targetMajor?.name?.includes("علم الحاسوب");
+      !targetMajor?.name?.includes("علم الحاسوب") &&
+      !targetMajor?.name?.includes("برمجيات");
     const fallbackTargetCredits = isTargetDiploma
       ? 72
       : isTargetFiveYear
@@ -294,10 +295,12 @@ export const MajorTransferModal: React.FC<MajorTransferModalProps> = ({
               >
                 {transferAnalysis.newGPA > 0
                   ? `${transferAnalysis.newGPA.toFixed(2)}%`
-                  : "0.00%"}
+                  : "—"}
               </span>
               <span className="text-[11px] text-[var(--text-2)] block">
-                بالمواد المعادلة
+                {transferAnalysis.newGPA > 0
+                  ? "بالمواد المعادلة"
+                  : "غير متوفر (بدون علامات)"}
               </span>
             </div>
           </div>

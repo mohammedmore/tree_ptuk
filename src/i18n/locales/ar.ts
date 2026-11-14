@@ -2,15 +2,15 @@ import { TranslationDictionary } from "../types";
 
 export const ar: TranslationDictionary = {
   nav: {
-    plan: "الخطة الدراسية",
-    courses: "دليل المقررات",
-    schedule: "الجدول الأسبوعي",
-    gpa: "حساب المعدل",
-    semesterPlanning: "التخطيط الفصلي",
-    registration: "بوابة التسجيل",
+    plan: "الخطة",
+    courses: "المواد",
+    schedule: "الجدول",
+    gpa: "المعدل",
+    semesterPlanning: "التخطيط",
+    registration: "التسجيل",
     calendar: "التقويم الأكاديمي",
-    login: "تسجيل الدخول",
-    tools: "أدوات إضافية",
+    login: "دخول",
+    tools: "أدوات",
   },
   common: {
     save: "حفظ",

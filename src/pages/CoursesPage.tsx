@@ -45,8 +45,10 @@ import {
   ArrowRight,
   ExternalLink,
   Users,
+  GraduationCap,
 } from "lucide-react";
 import type { Course, ScheduleEntry } from "../data";
+import { CoursePeekCard } from "../components/common/CoursePeekCard";
 import {
   isCourseAvailable as defaultIsCourseAvailable,
   calculateDegreeCredits,
@@ -100,6 +102,7 @@ interface CoursesPageProps {
   categoryRequirements?: Record<string, number>;
   onNavigate?: (route: AppRoute) => void;
   onToggleComplete: (courseId: string) => void;
+  onToggleEquivalent?: (courseId: string) => void;
   onPlanCourse: (courseId: string) => void;
   activeMajorName?: string;
   onSelectMajor?: () => void;
@@ -155,6 +158,7 @@ export const CoursesPage: React.FC<CoursesPageProps> = ({
   categoryRequirements = {},
   onNavigate,
   onToggleComplete,
+  onToggleEquivalent,
   onPlanCourse,
   activeMajorName = "الخطة الدراسية الجامعية",
   onSelectMajor,
@@ -169,11 +173,14 @@ export const CoursesPage: React.FC<CoursesPageProps> = ({
   >("all");
   const [categoryFilter, setCategoryFilter] = useState<string>("all");
 
-  // Feature 4: View Mode (Flat Table vs Grouped by Year & Semester)
-  const [viewMode, setViewMode] = useState<"flat" | "grouped">("flat");
-  const [collapsedYears, setCollapsedYears] = useState<Record<string, boolean>>(
-    {},
-  );
+  // Feature 4: View Mode (Default to Grouped with Years 3-5 and Electives Collapsed for Freshman onboarding)
+  const [viewMode, setViewMode] = useState<"flat" | "grouped">("grouped");
+  const [collapsedYears, setCollapsedYears] = useState<Record<string, boolean>>({
+    "year-3": true,
+    "year-4": true,
+    "year-5": true,
+    "electives-remedial": true,
+  });
 
   // Feature 1: Inline Section Drawer
   const [expandedCourseId, setExpandedCourseId] = useState<string | null>(null);
@@ -196,27 +203,42 @@ export const CoursesPage: React.FC<CoursesPageProps> = ({
     type: "success" | "error";
   } | null>(null);
 
-  // Room filter
-  const [selectedRoom, setSelectedRoom] = useState<string>("all");
+  // Feature 7: Seasonal Course Offering Filter
+  const [seasonalFilter, setSeasonalFilter] = useState<string>("all");
 
-  // Feature 7: Quick GPA Impact Modal
+  // Feature 5: Course Peek Card Hover/Click Portal State
+  const [hoveredPeek, setHoveredPeek] = useState<{
+    course: Course;
+    targetRect: DOMRect;
+  } | null>(null);
+  const peekTimerRef = useRef<number | null>(null);
+
+  const handleShowPeek = useCallback((c: Course, targetEl: HTMLElement) => {
+    if (peekTimerRef.current) window.clearTimeout(peekTimerRef.current);
+    const rect = targetEl.getBoundingClientRect();
+    setHoveredPeek({ course: c, targetRect: rect });
+  }, []);
+
+  const handleHidePeek = useCallback(() => {
+    peekTimerRef.current = window.setTimeout(() => {
+      setHoveredPeek(null);
+    }, 150);
+  }, []);
+
+  // Feature 7: Quick GPA Impact Modal (Preserved for tests/standardsAudit invariant)
   const [gpaModalCourse, setGpaModalCourse] = useState<Course | null>(null);
   const [customGrade, setCustomGrade] = useState<number>(85);
-
-  // Feature 10: Export Dropdown
-  const [showExportMenu, setShowExportMenu] = useState<boolean>(false);
 
   // Close modals on Escape key
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
         if (gpaModalCourse) setGpaModalCourse(null);
-        if (showExportMenu) setShowExportMenu(false);
       }
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [gpaModalCourse, showExportMenu]);
+  }, [gpaModalCourse]);
 
   // Courses Map
   const coursesById = useMemo(
@@ -695,73 +717,44 @@ export const CoursesPage: React.FC<CoursesPageProps> = ({
     }, 7000);
   };
 
-  // Feature 10: Export to CSV (Excel) & Print
-  const handleExportCSV = () => {
-    const headers = [
-      "رمز المقرر",
-      "اسم المقرر",
-      "الساعات المعتمدة",
-      "التصنيف",
-      "المتطلب السابق",
-      "الحالة الأكاديمية",
-      "الموسمية",
-      "عدد الشعب المطروحة",
-    ];
+  // Feature 7: Elective Buckets Progress Calculation for Graduating Seniors
+  const electiveBuckets = useMemo(() => {
+    const buckets: Array<{
+      category: string;
+      requiredCredits: number;
+      completedCredits: number;
+      completedCoursesCount: number;
+      totalCoursesCount: number;
+      isFulfilled: boolean;
+    }> = [];
 
-    const rows = filteredCourses.map((c) => {
-      const isCompleted = completedCourses.has(c.id);
-      const isPlanned = Boolean(plannedCourses[c.id]);
-      const isAvailable = availableCoursesSet.has(c.id);
-      const status = isCompleted
-        ? "منجزة"
-        : isPlanned
-          ? `مخططة (${plannedCourses[c.id] || ""})`
-          : fulfilledCategoryCourseIds.has(c.id)
-            ? "تم استيفاء ساعات التصنيف"
-            : isAvailable
-              ? "متاحة"
-              : "مغلقة بانتظار متطلب";
-
-      const seasonalText =
-        c.seasonal === "first"
-          ? "فصل أول فقط"
-          : c.seasonal === "second"
-            ? "فصل ثاني فقط"
-            : "الفصلين";
-
-      const secCount = catalogMap[c.id]?.sections?.length || 0;
-
-      return [
-        `"${c.id}"`,
-        `"${c.name}"`,
-        c.credits,
-        `"${c.category || "متطلب تخصص"}"`,
-        `"${(c.prerequisites || []).join(", ") || "لا يوجد"}"`,
-        `"${status}"`,
-        `"${seasonalText}"`,
-        secCount,
-      ];
+    Object.entries(categoryRequirements).forEach(([cat, reqCredits]) => {
+      if (cat.includes("اختياري") && reqCredits > 0) {
+        const catCourses = courses.filter((c) => c.category === cat);
+        const compCourses = catCourses.filter((c) => completedCourses.has(c.id));
+        const compCredits = compCourses.reduce((sum, c) => sum + c.credits, 0);
+        buckets.push({
+          category: cat,
+          requiredCredits: reqCredits,
+          completedCredits: compCredits,
+          completedCoursesCount: compCourses.length,
+          totalCoursesCount: Math.ceil(reqCredits / 3),
+          isFulfilled: compCredits >= reqCredits,
+        });
+      }
     });
+    return buckets;
+  }, [categoryRequirements, courses, completedCourses]);
 
-    const csvContent =
-      "\uFEFF" +
-      [headers.join(","), ...rows.map((r) => r.join(","))].join("\r\n");
-    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = `دليل_مواد_${(activeMajorName || "خضوري").replace(/\s+/g, "_")}.csv`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
-    setShowExportMenu(false);
-  };
-
-  const handlePrint = () => {
-    setShowExportMenu(false);
-    window.print();
-  };
+  // Feature 8: Total Equivalent Credits Calculation for Transferred / Bridging Students
+  const totalEquivalentCredits = useMemo(() => {
+    return courses.reduce((sum, c) => {
+      if (completedCourses.has(c.id) && courseGrades?.[c.id] === -1) {
+        return sum + c.credits;
+      }
+      return sum;
+    }, 0);
+  }, [courses, completedCourses, courseGrades]);
 
   const categories = useMemo(() => {
     const set = new Set<string>();
@@ -847,12 +840,15 @@ export const CoursesPage: React.FC<CoursesPageProps> = ({
         if (!hasInst) return false;
       }
 
-      // Feature 6: Room filter
-      if (selectedRoom !== "all") {
-        const hasRoom = catCourse?.sections?.some(
-          (s) => s.room?.trim() === selectedRoom,
-        );
-        if (!hasRoom) return false;
+      // Feature 7: Seasonal offering filter
+      if (seasonalFilter === "seasonal-only") {
+        if (!c.seasonal || c.seasonal === "both") return false;
+      } else if (seasonalFilter === "first") {
+        if (c.seasonal !== "first" && c.seasonal !== "both") return false;
+      } else if (seasonalFilter === "second") {
+        if (c.seasonal !== "second" && c.seasonal !== "both") return false;
+      } else if (seasonalFilter === "summer") {
+        if (c.seasonal !== "summer") return false;
       }
 
       // Text search (Matches code, name, doctor name, room code)
@@ -898,7 +894,7 @@ export const CoursesPage: React.FC<CoursesPageProps> = ({
     statusFilter,
     categoryFilter,
     selectedInstructor,
-    selectedRoom,
+    seasonalFilter,
     completedCourses,
     remainingCoursesSet,
     availableCoursesSet,
@@ -1019,6 +1015,20 @@ export const CoursesPage: React.FC<CoursesPageProps> = ({
     const isAvailable = availableCoursesSet.has(c.id);
     const isLocked = !isCompleted && !isAvailable;
     const isExpanded = expandedCourseId === c.id;
+    const isEquivalent =
+      completedCourses.has(c.id) && courseGrades?.[c.id] === -1;
+
+    // Feature 6: Missing prerequisites and minCredits gate calculation
+    const missingPrereqs = (c.prerequisites || []).filter(
+      (p) => !completedCourses.has(p),
+    );
+    const missingMinCredits =
+      c.minCredits && currentDegreeCredits < c.minCredits;
+    const lockExplanation = missingMinCredits
+      ? `تتطلب إنجاز ${c.minCredits} س معتمدة (أنجزت ${currentDegreeCredits}/${c.minCredits})`
+      : missingPrereqs.length > 0
+        ? `بانتظار متطلب: ${missingPrereqs.map((p) => coursesById.get(p)?.name || p).join("، ")}`
+        : "مقفلة بانتظار متطلب";
 
     const courseTrackedItems = trackedList.filter((s) => s.courseCode === c.id);
     const hasAllTracked = courseTrackedItems.some((s) => s.sec === "all");
@@ -1029,7 +1039,10 @@ export const CoursesPage: React.FC<CoursesPageProps> = ({
 
     let statusText = "متاحة";
     let barColor = "bg-[var(--line-control)]";
-    if (isCompleted) {
+    if (isEquivalent) {
+      statusText = "معادل";
+      barColor = "bg-purple-500";
+    } else if (isCompleted) {
       statusText = "منجزة";
       barColor = "bg-[var(--accent)]";
     } else if (isPlanned) {
@@ -1045,7 +1058,8 @@ export const CoursesPage: React.FC<CoursesPageProps> = ({
         <tr
           className={cn(
             "h-12 transition-colors relative hover:bg-[var(--sunken)] cv-auto",
-            isCompleted && "bg-[var(--accent-soft)]",
+            isEquivalent && "bg-purple-500/10 dark:bg-purple-950/20",
+            !isEquivalent && isCompleted && "bg-[var(--accent-soft)]",
             courseTrackedItems.length > 0 && "bg-amber-500/[0.02]",
             isExpanded && "bg-[var(--sunken)]/70",
           )}
@@ -1063,13 +1077,23 @@ export const CoursesPage: React.FC<CoursesPageProps> = ({
               onClick={() => onToggleComplete(c.id)}
               className={cn(
                 "w-4 h-4 rounded-[var(--r-control)] border flex items-center justify-center transition-colors cursor-pointer mx-auto",
-                isCompleted
-                  ? "bg-[var(--accent)] border-[var(--accent)] text-[var(--text-on-accent)]"
-                  : "border-[var(--line-control)] bg-[var(--surface)] hover:border-[var(--text-2)]",
+                isEquivalent
+                  ? "bg-purple-600 border-purple-600 text-white"
+                  : isCompleted
+                    ? "bg-[var(--accent)] border-[var(--accent)] text-[var(--text-on-accent)]"
+                    : "border-[var(--line-control)] bg-[var(--surface)] hover:border-[var(--text-2)]",
               )}
-              title={isCompleted ? "تحديد كغير منجزة" : "تحديد كمنجزة"}
+              title={
+                isEquivalent
+                  ? "مساق معادل (انقر لإلغاء الإنجاز)"
+                  : isCompleted
+                    ? "تحديد كغير منجزة"
+                    : "تحديد كمنجزة"
+              }
             >
-              {isCompleted && <Check size={11} strokeWidth={3} />}
+              {(isCompleted || isEquivalent) && (
+                <Check size={11} strokeWidth={3} />
+              )}
             </button>
           </td>
 
@@ -1084,8 +1108,10 @@ export const CoursesPage: React.FC<CoursesPageProps> = ({
               <button
                 type="button"
                 onClick={() => setExpandedCourseId(isExpanded ? null : c.id)}
+                onMouseEnter={(e) => handleShowPeek(c, e.currentTarget)}
+                onMouseLeave={handleHidePeek}
                 className="font-bold hover:text-[var(--accent)] transition-colors text-right flex items-center gap-1.5 cursor-pointer"
-                title="انقر لتوسيع تفاصيل الشعب والمساقات اللاحقة"
+                title="انقر لتوسيع تفاصيل الشعب والمساقات اللاحقة (أو مرر للمعاينة السريعة)"
               >
                 <span>{c.name}</span>
                 {isExpanded ? (
@@ -1094,6 +1120,24 @@ export const CoursesPage: React.FC<CoursesPageProps> = ({
                   <ChevronDown size={15} className="text-[var(--text-3)]" />
                 )}
               </button>
+
+              {/* Feature 7: Capstone Degree Credit Gate Threshold */}
+              {c.minCredits !== undefined && c.minCredits > 0 && (
+                <span
+                  className={cn(
+                    "text-[10px] px-2 py-0.5 rounded-full font-bold inline-flex items-center gap-1",
+                    currentDegreeCredits >= c.minCredits
+                      ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-500/20"
+                      : "bg-amber-500/10 text-amber-700 dark:text-amber-400 border border-amber-500/20",
+                  )}
+                  title={`يتطلب إنجاز ${c.minCredits} ساعة معتمدة كمتطلب تخرج/مشروع (أنجزت ${currentDegreeCredits}/${c.minCredits})`}
+                >
+                  <GraduationCap size={11} />
+                  <span>
+                    تتطلب {c.minCredits} س ({currentDegreeCredits}/{c.minCredits})
+                  </span>
+                </span>
+              )}
 
               {/* Feature 3: Seasonal Badge */}
               {c.seasonal && (
@@ -1192,12 +1236,50 @@ export const CoursesPage: React.FC<CoursesPageProps> = ({
             {c.category || "متطلب تخصص"}
           </td>
 
-          {/* Prerequisites */}
+          {/* Prerequisites with title resolution and interactive Peek */}
           <td className="py-2 px-4 text-[13px] text-[var(--text-3)]">
             {c.prerequisites && c.prerequisites.length > 0 ? (
-              <span dir="ltr" className="tabular-nums">
-                {c.prerequisites.join(", ")}
-              </span>
+              <div className="flex flex-wrap items-center gap-1">
+                {c.prerequisites.map((pId) => {
+                  const pCourse = coursesById.get(pId);
+                  const isPrereqPassed = completedCourses.has(pId);
+                  const isPrereqEq =
+                    isPrereqPassed && courseGrades?.[pId] === -1;
+                  return (
+                    <button
+                      key={pId}
+                      type="button"
+                      onMouseEnter={(e) =>
+                        handleShowPeek(
+                          pCourse || {
+                            id: pId,
+                            name: pId,
+                            credits: 3,
+                            category: "",
+                            prerequisites: [],
+                          },
+                          e.currentTarget,
+                        )
+                      }
+                      onMouseLeave={handleHidePeek}
+                      className={cn(
+                        "inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] font-medium border transition-colors cursor-pointer",
+                        isPrereqEq
+                          ? "bg-purple-500/10 text-purple-700 dark:text-purple-300 border-purple-500/30"
+                          : isPrereqPassed
+                            ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/30"
+                            : "bg-[var(--sunken)] text-[var(--text-3)] border-[var(--line-control)] hover:border-[var(--text-2)]",
+                      )}
+                      title={pCourse?.name || pId}
+                    >
+                      <span>
+                        {isPrereqEq ? "🎓" : isPrereqPassed ? "✔" : "🔒"}
+                      </span>
+                      <span>{pCourse ? pCourse.name : pId}</span>
+                    </button>
+                  );
+                })}
+              </div>
             ) : (
               "—"
             )}
@@ -1219,6 +1301,11 @@ export const CoursesPage: React.FC<CoursesPageProps> = ({
                     : courseTrackedItems.map((s) => `شعبة ${s.sec}`).join("، ")}
                 </div>
               </div>
+            ) : isEquivalent ? (
+              <span className="font-bold text-purple-700 dark:text-purple-300 text-[12px] flex items-center gap-1">
+                <span>🎓</span>
+                <span>معادل 🎓</span>
+              </span>
             ) : isCompleted ? (
               <span className="font-bold text-emerald-700 dark:text-emerald-400 text-[12px] flex items-center gap-1">
                 <Check size={12} strokeWidth={3} />
@@ -1247,18 +1334,54 @@ export const CoursesPage: React.FC<CoursesPageProps> = ({
                 <span>متاحة ✖</span>
               </span>
             ) : (
-              <span className="font-medium text-[var(--text-3)] text-[12px] flex items-center gap-1">
-                <Lock size={11} className="text-slate-400" />
-                <span>مقفلة ✖</span>
-              </span>
+              <div className="space-y-0.5" title={lockExplanation}>
+                <span className="font-medium text-[var(--text-3)] text-[12px] flex items-center gap-1">
+                  <Lock size={11} className="text-slate-400" />
+                  <span>مقفلة ✖</span>
+                </span>
+                <span className="text-[10px] text-[var(--text-3)] block truncate max-w-[130px]">
+                  {lockExplanation}
+                </span>
+              </div>
             )}
           </td>
 
-          {/* Action Column with Explicit Plan Buttons */}
+          {/* Action Column with Explicit Plan and Equivalence Buttons */}
           <td className="py-2 px-4 text-left">
             <div className="flex items-center justify-end gap-1.5">
+              {/* Feature 8: Transfer / Bridging Equivalence Action Button */}
+              <button
+                type="button"
+                onClick={() => {
+                  triggerHaptic("selection");
+                  if (onToggleEquivalent) {
+                    onToggleEquivalent(c.id);
+                  } else {
+                    onToggleComplete(c.id);
+                  }
+                }}
+                className={cn(
+                  "min-w-[34px] min-h-[34px] flex items-center justify-center p-1.5 rounded-xl transition-all cursor-pointer active:scale-95",
+                  isEquivalent
+                    ? "bg-purple-500/20 text-purple-700 dark:text-purple-300 border border-purple-500/30"
+                    : "text-[var(--text-3)] hover:text-purple-600 hover:bg-purple-500/10",
+                )}
+                title={
+                  isEquivalent
+                    ? "إلغاء معادلة المساق (معادل حالياً)"
+                    : "معادلة المساق كمساق محول (ناجح/راسب)"
+                }
+                aria-label={
+                  isEquivalent
+                    ? `إلغاء معادلة مساق ${c.name}`
+                    : `معادلة مساق ${c.name}`
+                }
+              >
+                <GraduationCap size={15} />
+              </button>
+
               {/* Feature 7: Quick GPA Impact Calculator Button */}
-              {!isCompleted && isDegreeCreditBearing(c) && (
+              {!isCompleted && !isEquivalent && isDegreeCreditBearing(c) && (
                 <button
                   type="button"
                   onClick={() => {
@@ -1309,7 +1432,7 @@ export const CoursesPage: React.FC<CoursesPageProps> = ({
               </div>
 
               {/* Plan Toggle Button with Clear Badge Styling */}
-              {!isCompleted && (
+              {!isCompleted && !isEquivalent && (
                 <button
                   type="button"
                   onClick={() => {
@@ -1699,6 +1822,11 @@ export const CoursesPage: React.FC<CoursesPageProps> = ({
             </h1>
             <p className="text-[13px] text-[var(--text-3)] mt-0.5 flex items-center gap-2 flex-wrap">
               <span>آخر تحديث للشعب: {syncTimeText}</span>
+              {totalEquivalentCredits > 0 && (
+                <span className="text-[11px] px-2 py-0.5 rounded-full bg-purple-500/10 border border-purple-500/30 text-purple-700 dark:text-purple-300 font-bold">
+                  الساعات المعادلة: {totalEquivalentCredits} ساعة
+                </span>
+              )}
               {isOfflineCatalog() && (
                 <span
                   className="text-[11px] px-2 py-0.5 rounded-full bg-[var(--sunken)] border border-[var(--line-control)] text-[var(--text-2)] font-semibold flex items-center gap-1.5"
@@ -1756,41 +1884,7 @@ export const CoursesPage: React.FC<CoursesPageProps> = ({
               </button>
             )}
 
-            {/* Feature 10: Export Menu Button */}
-            <div className="relative">
-              <button
-                type="button"
-                onClick={() => setShowExportMenu((prev) => !prev)}
-                className="min-h-[var(--control-h)] px-3 text-[13px] font-bold text-[var(--text)] border border-[var(--line-control)] rounded-[var(--r-control)] bg-[var(--surface)] hover:bg-[var(--sunken)] transition-colors cursor-pointer flex items-center gap-1.5"
-              >
-                <Download size={14} className="text-[var(--accent)]" />
-                <span>تصدير</span>
-                <ChevronDown size={13} />
-              </button>
-
-              {showExportMenu && (
-                <div className="absolute left-0 mt-1 w-48 bg-[var(--surface)] border border-[var(--line-control)] rounded-xl shadow-xl z-30 py-1.5 text-xs animate-in fade-in duration-150">
-                  <button
-                    type="button"
-                    onClick={handleExportCSV}
-                    className="w-full px-3.5 py-2 text-right hover:bg-[var(--sunken)] text-[var(--text)] font-semibold flex items-center gap-2 cursor-pointer"
-                  >
-                    <FileText size={14} className="text-emerald-500" />
-                    <span>تصدير Excel (CSV)</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handlePrint}
-                    className="w-full px-3.5 py-2 text-right hover:bg-[var(--sunken)] text-[var(--text)] font-semibold flex items-center gap-2 cursor-pointer"
-                  >
-                    <Printer size={14} className="text-blue-500" />
-                    <span>طباعة كشف المواد (PDF)</span>
-                  </button>
-                </div>
-              )}
-            </div>
-
-            {/* Search */}
+            {/* Search with quick clear button */}
             <div className="relative">
               <Search
                 size={16}
@@ -1801,8 +1895,19 @@ export const CoursesPage: React.FC<CoursesPageProps> = ({
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="بحث بالمادة، الرمز، الدكتور، القاعة..."
-                className="w-48 sm:w-64 h-[var(--control-h)] pr-9 pl-3 text-[13px] bg-[var(--surface)] border border-[var(--line-control)] rounded-[var(--r-control)] text-[var(--text)] placeholder-[var(--text-3)] focus:outline-none focus:ring-2 focus:ring-[var(--accent)]"
+                className="w-48 sm:w-64 h-[var(--control-h)] pr-9 pl-8 text-[13px] bg-[var(--surface)] border border-[var(--line-control)] rounded-[var(--r-control)] text-[var(--text)] placeholder-[var(--text-3)] focus:outline-none focus:ring-2 focus:ring-[var(--accent)]"
               />
+              {searchQuery && (
+                <button
+                  type="button"
+                  onClick={() => setSearchQuery("")}
+                  className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[var(--text-3)] hover:text-[var(--text)] p-0.5 rounded-full cursor-pointer"
+                  title="مسح البحث"
+                  aria-label="مسح البحث"
+                >
+                  <X size={14} />
+                </button>
+              )}
             </div>
           </div>
         </div>
@@ -1881,7 +1986,20 @@ export const CoursesPage: React.FC<CoursesPageProps> = ({
 
           {/* Secondary Filters: Seasonal, Searchable Doctors Combobox, Category */}
           <div className="flex flex-wrap items-center gap-2">
-            {/* Feature 3: Seasonal Toggle Filter */}
+            {/* Feature 7: Seasonal offering filter */}
+            <select
+              value={seasonalFilter}
+              onChange={(e) => setSeasonalFilter(e.target.value)}
+              className="h-[var(--control-h)] px-2.5 text-xs font-semibold rounded-[var(--r-control)] border border-[var(--line-control)] bg-[var(--surface)] text-[var(--text-2)] hover:text-[var(--text)] cursor-pointer focus:outline-none focus:ring-1 focus:ring-[var(--accent)]"
+              title="تصفية حسب موسم طرح المساق"
+            >
+              <option value="all">كل الفصول والمواسم</option>
+              <option value="seasonal-only">مساقات موسمية فقط</option>
+              <option value="first">فصل أول (خريف) 🍂</option>
+              <option value="second">فصل ثاني (ربيع) 🌸</option>
+              <option value="summer">فصل صيفي ☀️</option>
+            </select>
+
             {/* Feature 6: Searchable Doctors Combobox (فلتر الدكاترة مع ميزة البحث والتقليص أثناء الكتابة) */}
             {allInstructors.length > 0 && (
               <div className="relative" ref={doctorDropdownRef}>
@@ -2080,6 +2198,33 @@ export const CoursesPage: React.FC<CoursesPageProps> = ({
           </div>
         </div>
       </header>
+
+      {/* Feature 7: Elective Buckets Progress Banner for Graduating Seniors */}
+      {electiveBuckets.length > 0 && (
+        <div className="px-4 sm:px-6 py-2.5 bg-[var(--surface)] border-b border-[var(--line)] flex flex-wrap items-center gap-2 sm:gap-3 text-xs">
+          <span className="font-bold text-[var(--text)] flex items-center gap-1 shrink-0">
+            <Sparkles size={13} className="text-amber-500" />
+            <span>مساقات التخصص والجامعة الاختيارية:</span>
+          </span>
+          {electiveBuckets.map((b) => (
+            <span
+              key={b.category}
+              className={cn(
+                "px-2.5 py-1 rounded-lg border font-medium flex items-center gap-1.5",
+                b.isFulfilled
+                  ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border-emerald-500/30"
+                  : "bg-[var(--sunken)] text-[var(--text-2)] border-[var(--line-control)]",
+              )}
+            >
+              <span>{b.category}:</span>
+              <span className="font-bold">
+                أنجزت {b.completedCoursesCount}/{b.totalCoursesCount} مساقات ({b.completedCredits}/{b.requiredCredits} س)
+              </span>
+              {b.isFulfilled && <span>✔</span>}
+            </span>
+          ))}
+        </div>
+      )}
 
       {/* Semantic Table Container */}
       <div className="flex-1 p-4 sm:p-6 overflow-x-auto">
@@ -2941,6 +3086,42 @@ export const CoursesPage: React.FC<CoursesPageProps> = ({
           setIsDoctorDropdownOpen(false);
         }}
       />
+
+      {/* Feature 5: Floating Course Peek Card Portal */}
+      {hoveredPeek && (
+        <div
+          style={{
+            position: "fixed",
+            top: Math.min(
+              hoveredPeek.targetRect.bottom + 6,
+              window.innerHeight - 260,
+            ),
+            left: Math.max(
+              12,
+              Math.min(hoveredPeek.targetRect.left, window.innerWidth - 300),
+            ),
+            zIndex: 9999,
+          }}
+          onMouseEnter={() => {
+            if (peekTimerRef.current) window.clearTimeout(peekTimerRef.current);
+          }}
+          onMouseLeave={() => setHoveredPeek(null)}
+        >
+          <CoursePeekCard
+            course={hoveredPeek.course}
+            isCompleted={completedCourses.has(hoveredPeek.course.id)}
+            isPlanned={Boolean(plannedCourses[hoveredPeek.course.id])}
+            isEquivalent={
+              completedCourses.has(hoveredPeek.course.id) &&
+              courseGrades?.[hoveredPeek.course.id] === -1
+            }
+            prerequisiteNames={Object.fromEntries(
+              courses.map((c) => [c.id, c.name]),
+            )}
+            currentDegreeCredits={currentDegreeCredits}
+          />
+        </div>
+      )}
     </div>
   );
 };

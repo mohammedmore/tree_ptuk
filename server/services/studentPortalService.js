@@ -103,6 +103,115 @@ function isRemedialCourseCode(code, name, category) {
   return false;
 }
 
+const BACKEND_REGULAR_SEMESTERS = [
+  "السنة الأولى - الفصل الأول",
+  "السنة الأولى - الفصل الثاني",
+  "السنة الثانية - الفصل الأول",
+  "السنة الثانية - الفصل الثاني",
+  "السنة الثالثة - الفصل الأول",
+  "السنة الثالثة - الفصل الثاني",
+  "السنة الرابعة - الفصل الأول",
+  "السنة الرابعة - الفصل الثاني",
+  "السنة الخامسة - الفصل الأول",
+  "السنة الخامسة - الفصل الثاني",
+];
+
+export function applyTopologicalSemestersToCurriculum(courses, maxYears = 4) {
+  if (!Array.isArray(courses) || courses.length === 0) return;
+  const maxSemesters = Math.min(10, Math.max(4, maxYears * 2));
+  const allowedNames = BACKEND_REGULAR_SEMESTERS.slice(0, maxSemesters);
+
+  const courseMap = new Map();
+  courses.forEach((c) => courseMap.set(c.id, c));
+
+  const prereqGraph = new Map();
+  courses.forEach((c) => prereqGraph.set(c.id, []));
+  courses.forEach((c) => {
+    const prereqs = Array.isArray(c.prerequisites) ? c.prerequisites : [];
+    prereqs.forEach((p) => {
+      const pId = String(p).trim();
+      if (courseMap.has(pId)) {
+        prereqGraph.get(c.id).push(pId);
+      }
+    });
+  });
+
+  const memoDepth = new Map();
+  function getDepth(id, visited = new Set()) {
+    if (memoDepth.has(id)) return memoDepth.get(id);
+    if (visited.has(id)) return 0;
+    visited.add(id);
+    const prereqs = prereqGraph.get(id) || [];
+    if (prereqs.length === 0) {
+      memoDepth.set(id, 0);
+      return 0;
+    }
+    let maxP = 0;
+    for (const pId of prereqs) {
+      const d = getDepth(pId, new Set(visited));
+      if (d + 1 > maxP) maxP = d + 1;
+    }
+    memoDepth.set(id, maxP);
+    return maxP;
+  }
+
+  const columnMap = new Map();
+  courses.forEach((c) => {
+    let depth = getDepth(c.id);
+    let col = Math.min(maxSemesters - 1, depth);
+
+    const name = c.name || "";
+    const cat = c.category || "";
+
+    if (cat.includes("استدراكي") || name.includes("استدراكي")) {
+      col = 0;
+    } else if (
+      c.isGraduationProject ||
+      name.includes("مشروع تخرج (2)") ||
+      name.includes("مشروع 2") ||
+      name.includes("مشروع التخرج 2")
+    ) {
+      col = Math.max(col, maxSemesters - 1);
+    } else if (
+      name.includes("مشروع تخرج (1)") ||
+      name.includes("مشروع 1") ||
+      name.includes("مشروع التخرج 1")
+    ) {
+      col = Math.max(col, Math.max(0, maxSemesters - 2));
+    } else if (name.includes("تدريب ميداني") || name.includes("تدريب عملي")) {
+      col = Math.max(col, Math.max(0, maxSemesters - 3));
+    }
+
+    columnMap.set(c.id, col);
+  });
+
+  // Strict topological ordering enforcement (prerequisite strictly precedes dependent)
+  let changed = true;
+  let guard = 0;
+  while (changed && guard < 15) {
+    changed = false;
+    for (const c of courses) {
+      const cCol = columnMap.get(c.id) || 0;
+      const prereqs = prereqGraph.get(c.id) || [];
+      for (const pId of prereqs) {
+        const pCol = columnMap.get(pId) || 0;
+        if (cCol <= pCol) {
+          columnMap.set(c.id, Math.min(maxSemesters - 1, pCol + 1));
+          changed = true;
+        }
+      }
+    }
+    guard++;
+  }
+
+  courses.forEach((c) => {
+    const col = columnMap.get(c.id) || 0;
+    const semName = allowedNames[col] || allowedNames[0];
+    if (!c.semester) c.semester = semName;
+    if (!c.recommendedSemester) c.recommendedSemester = semName;
+  });
+}
+
 function extractCoursesFromDataTs() {
   try {
     const dataTsPath = join(__dirname, "..", "..", "src", "data.ts");
@@ -842,6 +951,8 @@ function buildCohortCurriculumAndProgress(studentId) {
     prerequisites: Array.isArray(c.prerequisites) ? c.prerequisites : [],
     coPrerequisites: Array.isArray(c.coPrerequisites) ? c.coPrerequisites : [],
     seasonal: c.seasonal || "both",
+    semester: c.semester || c.recommendedSemester,
+    recommendedSemester: c.recommendedSemester || c.semester,
   }));
 
   const cleanMajorKey = `${slugifyMajor(majorName)}_${cohortYear}`;
@@ -860,6 +971,19 @@ function buildCohortCurriculumAndProgress(studentId) {
     !majorName.includes("الذكاء") &&
     !majorName.includes("علم الحاسوب"),
   );
+
+  // Guarantee all curriculum courses have valid, topological, prerequisite-safe semesters
+  applyTopologicalSemestersToCurriculum(
+    cleanGeneralCourses,
+    isDiploma ? 2 : isFiveYear ? 5 : 4,
+  );
+  const courseSemMap = new Map(
+    cleanGeneralCourses.map((c) => [c.id, c.semester]),
+  );
+  coursesWithStatus.forEach((c) => {
+    if (!c.semester) c.semester = courseSemMap.get(c.id);
+    if (!c.recommendedSemester) c.recommendedSemester = courseSemMap.get(c.id);
+  });
   const degreeCredits = isDiploma ? 72 : isMaster ? 36 : isFiveYear ? 164 : 132;
   const resolvedDegree = isDiploma
     ? "دبلوم متوسط"
@@ -3378,6 +3502,19 @@ export async function authenticateAndSyncStudent(
       !majorName.includes("الذكاء") &&
       !majorName.includes("علم الحاسوب"),
     );
+
+    // Guarantee all general courses have topological, prerequisite-safe semesters
+    applyTopologicalSemestersToCurriculum(
+      cleanGeneralCourses,
+      isDiploma ? 2 : isFiveYear ? 5 : 4,
+    );
+    const courseSemMap = new Map(
+      cleanGeneralCourses.map((c) => [c.id, c.semester]),
+    );
+    coursesWithStatus.forEach((c) => {
+      if (!c.semester) c.semester = courseSemMap.get(c.id);
+      if (!c.recommendedSemester) c.recommendedSemester = courseSemMap.get(c.id);
+    });
     const defaultDegreeCredits = isDiploma
       ? 72
       : isMaster

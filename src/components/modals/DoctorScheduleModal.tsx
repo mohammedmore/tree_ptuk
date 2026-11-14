@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import {
   X,
   User,
@@ -10,6 +10,7 @@ import {
   Layers,
   List,
   LayoutGrid,
+  Sparkles,
 } from "lucide-react";
 import type { Course } from "../../data";
 import type {
@@ -244,11 +245,26 @@ export const DoctorScheduleModal: React.FC<DoctorScheduleModalProps> = ({
     return map;
   }, [uniqueCourses]);
 
+  useEffect(() => {
+    if (!isOpen || !doctorName) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        onClose();
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [isOpen, doctorName, onClose]);
+
   if (!isOpen || !doctorName) return null;
 
   return (
     <div
       dir="rtl"
+      role="dialog"
+      aria-modal="true"
+      aria-label={`جدول الدكتور: ${doctorName}`}
       className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 bg-black/60 backdrop-blur-xs animate-in fade-in duration-200"
       onClick={onClose}
     >
@@ -346,7 +362,7 @@ export const DoctorScheduleModal: React.FC<DoctorScheduleModalProps> = ({
               </button>
             </div>
 
-            {/* Quick Action: Filter this doctor in Courses Page */}
+            {/* Quick Action: Prefer this doctor in Smart Solver */}
             {onSelectDoctorFilter && (
               <button
                 type="button"
@@ -355,10 +371,10 @@ export const DoctorScheduleModal: React.FC<DoctorScheduleModalProps> = ({
                   onClose();
                 }}
                 className="px-2.5 py-1 rounded-lg border border-indigo-500/30 bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-700 dark:text-indigo-300 font-bold text-xs flex items-center gap-1 transition-colors cursor-pointer"
-                title="تصفية مواد هذا الدكتور في دليل المواد"
+                title="تفضيل هذا الدكتور في المولد الذكي"
               >
-                <Filter size={12} />
-                <span>تصفية مواده في الدليل</span>
+                <Sparkles size={12} />
+                <span>تفضيل هذا الدكتور في المولد الذكي</span>
               </button>
             )}
           </div>

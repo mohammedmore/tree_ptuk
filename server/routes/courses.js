@@ -29,7 +29,7 @@ router.get("/", validateQuery(coursesQuerySchema), async (req, res) => {
           .slice(0, 50) // Cap max codes per request
       : undefined;
 
-    const parsedLimit = limit || 500;
+    const parsedLimit = limit || 2000;
     const parsedOffset = offset || 0;
     const fieldList = fields
       ? String(fields)

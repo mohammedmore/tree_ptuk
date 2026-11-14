@@ -169,6 +169,16 @@ export function getOfficialTuitionRate(majorName = ""): MajorTuitionRate {
   if (norm.includes("ذكاء") || norm.includes("ai")) {
     return OFFICIAL_TUITION_RATES["الذكاء الاصطناعي"];
   }
+  if (
+    norm.includes("برمجيات") ||
+    norm.includes("علم الحاسوب") ||
+    norm.includes("أنظمة معلومات")
+  ) {
+    return {
+      hourlyRateJOD: 20,
+      faculty: "كلية تكنولوجيا المعلومات والذكاء الاصطناعي",
+    };
+  }
   if (norm.includes("هندسة") || norm.includes("هندس")) {
     return { hourlyRateJOD: 24, faculty: "كلية الهندسة والتكنولوجيا" };
   }

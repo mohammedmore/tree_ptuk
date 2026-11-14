@@ -189,8 +189,15 @@ export function getOfficialDegreeTotalCredits(
   if (degree.includes("دبلوم") || majorName.includes("دبلوم")) {
     return 72;
   }
-  if (majorName.includes("هندسة") && !majorName.includes("برمجيات")) {
+  if (
+    majorName.includes("هندسة") &&
+    !majorName.includes("برمجيات") &&
+    !majorName.includes("الذكاء")
+  ) {
     return 164;
+  }
+  if (degree.includes("بكالوريوس") || majorName.length > 0) {
+    return 132;
   }
 
   return fallbackTotal;

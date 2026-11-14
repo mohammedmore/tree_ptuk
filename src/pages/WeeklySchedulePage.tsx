@@ -51,6 +51,7 @@ import {
   type CatalogSection,
 } from "../services/scheduleSolver";
 import { buildScheduleEntryFromSection } from "../core/sectionSwap";
+import { useAcademicStore, useUIStore } from "../stores";
 
 interface WeeklySchedulePageProps {
   plannedCourses: Record<string, string>;
@@ -90,11 +91,24 @@ export const WeeklySchedulePage: React.FC<WeeklySchedulePageProps> = ({
   completedCourses,
 }) => {
   const [selectedSemester, setSelectedSemester] = useState<string>(() => {
+    try {
+      const stored = sessionStorage.getItem("ptuk_selected_semester");
+      if (stored && SEMESTERS.includes(stored)) return stored;
+    } catch {}
+    const storeSemester = useAcademicStore.getState().currentPlanningSemester;
+    if (storeSemester && SEMESTERS.includes(storeSemester)) return storeSemester;
     return (
       SEMESTERS.find((s) => Object.values(plannedCourses).includes(s)) ||
       SEMESTERS[0]
     );
   });
+
+  useEffect(() => {
+    try {
+      sessionStorage.setItem("ptuk_selected_semester", selectedSemester);
+    } catch {}
+    useAcademicStore.getState().setCurrentPlanningSemester?.(selectedSemester);
+  }, [selectedSemester]);
 
   // Feature 6: Schedule Drafts (A / B / C) State
   const [drafts, setDrafts] = useState<ScheduleDraft[]>(() =>
@@ -120,6 +134,18 @@ export const WeeklySchedulePage: React.FC<WeeklySchedulePageProps> = ({
     courseName: string;
     currentSection: string;
   } | null>(null);
+
+  useEffect(() => {
+    if (!swapCourseTarget) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        setSwapCourseTarget(null);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [swapCourseTarget]);
 
   // Consolidated Export Menu State (Item 84)
   const [isExportMenuOpen, setIsExportMenuOpen] = useState(false);
@@ -213,6 +239,18 @@ export const WeeklySchedulePage: React.FC<WeeklySchedulePageProps> = ({
     courseId: string;
     entry: ScheduleEntry;
   } | null>(null);
+
+  useEffect(() => {
+    if (!selectedEntryDetails) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        setSelectedEntryDetails(null);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [selectedEntryDetails]);
 
   const coursesById = useMemo(
     () => new Map(courses.map((c) => [c.id, c])),
@@ -791,10 +829,10 @@ export const WeeklySchedulePage: React.FC<WeeklySchedulePageProps> = ({
                         setEditingDraftId(d.id);
                         setEditDraftName(d.name);
                       }}
-                      className="w-6 h-6 flex items-center justify-center hover:bg-black/10 rounded cursor-pointer opacity-75 hover:opacity-100 active:scale-90"
+                      className="min-w-[44px] min-h-[44px] flex items-center justify-center p-2.5 hover:bg-black/10 dark:hover:bg-white/10 rounded-lg cursor-pointer opacity-75 hover:opacity-100 active:scale-90 transition-colors"
                       title="إعادة تسمية المسودة"
                     >
-                      <Edit2 size={11} />
+                      <Edit2 size={13} />
                     </button>
                     <button
                       type="button"
@@ -803,10 +841,10 @@ export const WeeklySchedulePage: React.FC<WeeklySchedulePageProps> = ({
                         triggerHaptic("selection");
                         handleDuplicateDraft(d.id);
                       }}
-                      className="w-6 h-6 flex items-center justify-center hover:bg-black/10 rounded cursor-pointer opacity-75 hover:opacity-100 active:scale-90"
+                      className="min-w-[44px] min-h-[44px] flex items-center justify-center p-2.5 hover:bg-black/10 dark:hover:bg-white/10 rounded-lg cursor-pointer opacity-75 hover:opacity-100 active:scale-90 transition-colors"
                       title="نسخ هذه المسودة"
                     >
-                      <Copy size={11} />
+                      <Copy size={13} />
                     </button>
                     {drafts.length > 1 && (
                       <button
@@ -816,10 +854,10 @@ export const WeeklySchedulePage: React.FC<WeeklySchedulePageProps> = ({
                           triggerHaptic("warning");
                           handleDeleteDraft(d.id);
                         }}
-                        className="w-6 h-6 flex items-center justify-center hover:bg-rose-500/20 text-rose-500 rounded cursor-pointer opacity-75 hover:opacity-100 active:scale-90"
+                        className="min-w-[44px] min-h-[44px] flex items-center justify-center p-2.5 hover:bg-rose-500/20 text-rose-500 rounded-lg cursor-pointer opacity-75 hover:opacity-100 active:scale-90 transition-colors"
                         title="حذف هذه المسودة"
                       >
-                        <Trash2 size={11} />
+                        <Trash2 size={13} />
                       </button>
                     )}
                   </div>
@@ -946,6 +984,11 @@ export const WeeklySchedulePage: React.FC<WeeklySchedulePageProps> = ({
                 return (
                   <div
                     key={item.key}
+                    role="button"
+                    tabIndex={0}
+                    data-course-id={item.courseId}
+                    data-section={item.entry.section}
+                    aria-label={`${item.courseName} شعبة ${item.entry.section || ""}`}
                     onClick={() =>
                       setSelectedEntryDetails({
                         courseId: item.courseId,
@@ -953,6 +996,16 @@ export const WeeklySchedulePage: React.FC<WeeklySchedulePageProps> = ({
                         entry: item.entry,
                       })
                     }
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        setSelectedEntryDetails({
+                          courseId: item.courseId,
+                          courseName: item.courseName,
+                          entry: item.entry,
+                        });
+                      }
+                    }}
                     className={cn(
                       "p-3.5 rounded-2xl border transition-all cursor-pointer flex items-start justify-between gap-3 shadow-2xs",
                       palette.bg,
@@ -1080,6 +1133,11 @@ export const WeeklySchedulePage: React.FC<WeeklySchedulePageProps> = ({
               return (
                 <div
                   key={item.key}
+                  role="button"
+                  tabIndex={0}
+                  data-course-id={item.courseId}
+                  data-section={item.entry.section}
+                  aria-label={`${item.courseName} شعبة ${item.entry.section || ""}`}
                   onClick={() =>
                     setSelectedEntryDetails({
                       courseName: item.courseName,
@@ -1087,6 +1145,16 @@ export const WeeklySchedulePage: React.FC<WeeklySchedulePageProps> = ({
                       entry: item.entry,
                     })
                   }
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      setSelectedEntryDetails({
+                        courseName: item.courseName,
+                        courseId: item.courseId,
+                        entry: item.entry,
+                      });
+                    }
+                  }}
                   style={{
                     position: "absolute",
                     top: `${topPx + 2}px`,
@@ -1298,6 +1366,11 @@ export const WeeklySchedulePage: React.FC<WeeklySchedulePageProps> = ({
             {unscheduledOrOnlineList.map((item) => (
               <div
                 key={item.courseId}
+                role="button"
+                tabIndex={0}
+                data-course-id={item.courseId}
+                data-section={item.entry.section}
+                aria-label={`${item.courseName} شعبة ${item.entry.section || ""}`}
                 onClick={() =>
                   setSelectedEntryDetails({
                     courseName: item.courseName,
@@ -1305,6 +1378,16 @@ export const WeeklySchedulePage: React.FC<WeeklySchedulePageProps> = ({
                     entry: item.entry,
                   })
                 }
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    setSelectedEntryDetails({
+                      courseName: item.courseName,
+                      courseId: item.courseId,
+                      entry: item.entry,
+                    });
+                  }
+                }}
                 className="p-3 rounded-[var(--r-control)] bg-[var(--sunken)]/50 border border-[var(--line-control)] hover:border-[var(--accent)] transition-all cursor-pointer flex flex-col justify-between space-y-2 group"
               >
                 <div>
@@ -1340,6 +1423,9 @@ export const WeeklySchedulePage: React.FC<WeeklySchedulePageProps> = ({
       {/* Section Details Bottom/Side Sheet */}
       {selectedEntryDetails && (
         <div
+          role="dialog"
+          aria-modal="true"
+          aria-label="تفاصيل المحاضرة والشعبة"
           className="fixed inset-0 bg-[var(--scrim)] z-[var(--z-menu)] flex flex-col justify-end sm:justify-center sm:items-center p-0 sm:p-4"
           onClick={() => setSelectedEntryDetails(null)}
         >
@@ -1382,11 +1468,11 @@ export const WeeklySchedulePage: React.FC<WeeklySchedulePageProps> = ({
                     selectedEntryDetails.entry.instructor !== "غير محدد" && (
                       <button
                         type="button"
-                        onClick={() =>
-                          setDoctorScheduleName(
-                            selectedEntryDetails.entry.instructor!,
-                          )
-                        }
+                        onClick={() => {
+                          const doc = selectedEntryDetails.entry.instructor!;
+                          setSelectedEntryDetails(null);
+                          setDoctorScheduleName(doc);
+                        }}
                         className="text-[11px] text-indigo-600 dark:text-indigo-400 hover:underline flex items-center gap-1 px-1.5 py-0.5 rounded bg-indigo-500/10 cursor-pointer transition-colors"
                         title="عرض جدول هذا الدكتور الأسبوعي"
                       >
@@ -1476,6 +1562,16 @@ export const WeeklySchedulePage: React.FC<WeeklySchedulePageProps> = ({
         doctorName={doctorScheduleName}
         catalogCourses={catalogCoursesMap}
         courses={courses}
+        onSelectDoctorFilter={(docName) => {
+          try {
+            sessionStorage.setItem("ptuk_preferred_doctor", docName);
+          } catch {}
+          if (onOpenScheduleSolver) {
+            onOpenScheduleSolver();
+          } else {
+            useUIStore.getState().setWeeklyScheduleModalOpen(true);
+          }
+        }}
       />
 
       {/* Feature: Section Swap Modal for Conflict Resolution */}

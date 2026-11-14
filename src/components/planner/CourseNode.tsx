@@ -155,6 +155,7 @@ const CourseNodeComponent = ({
       dir="rtl"
       role="button"
       tabIndex={0}
+      data-course-id={id}
       aria-label={`مساق ${label}، رمز ${id}، ${credits} ساعات معتمدة، الحالة: ${statusLabel}`}
       onKeyDown={(e) => {
         if (e.key === "Enter" || e.key === " ") {
@@ -264,8 +265,8 @@ const CourseNodeComponent = ({
               className="text-[9.5px] font-medium text-[var(--text-3)] bg-[var(--sunken)] border border-[var(--line-control)] px-1 rounded shrink-0 leading-tight flex items-center gap-0.5"
               title={
                 isLocked
-                  ? "مادة غير منجزة ومغلقة بمتطلب سابق (✖)"
-                  : "مادة غير منجزة ومتاحة للتسجيل (✖)"
+                  ? "مادة غير منجزة ومغلقة بمتطلب سابق"
+                  : "مادة غير منجزة ومتاحة للتسجيل"
               }
             >
               <XIcon size={8} strokeWidth={2.5} className="text-slate-400" />
@@ -385,7 +386,7 @@ const CourseNodeComponent = ({
               ? `إلغاء إنجاز ${label} (منجز ✔)`
               : isPlanned
                 ? `تحديد ${label} كمنجزة (مخطط ⭕)`
-                : `تحديد ${label} كمنجزة (غير منجز ✖)`
+                : `تحديد ${label} كمنجزة (متبقية)`
           }
           title={
             isCompleted
@@ -393,8 +394,8 @@ const CourseNodeComponent = ({
               : isPlanned
                 ? "مادة مجدولة ومخططة (⭕) - انقر للتحديد كمنجزة"
                 : isLocked
-                  ? "مادة غير منجزة ومغلقة (✖) - تشترط متطلبات سابقة"
-                  : "مادة غير منجزة (✖) - انقر للتحديد كمنجزة"
+                  ? "مادة غير منجزة ومغلقة - تشترط متطلبات سابقة"
+                  : "مادة غير منجزة - انقر للتحديد كمنجزة"
           }
           className={cn(
             "w-6 h-6 rounded flex items-center justify-center transition-colors cursor-pointer",

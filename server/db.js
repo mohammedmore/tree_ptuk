@@ -13,6 +13,8 @@ import {
   INITIAL_MAJORS,
   AI_CURRICULUM_COURSES,
   AI_CATEGORY_REQUIREMENTS,
+  CSE_CURRICULUM_COURSES,
+  CSE_CATEGORY_REQUIREMENTS,
 } from "./majorsData.js";
 import { createClient } from "@supabase/supabase-js";
 import { encryptPayload, decryptPayload } from "./services/securityVault.js";
@@ -268,6 +270,7 @@ function loadState() {
     for (const [id, m] of Object.entries(state.majors)) {
       if (
         !m.cohortYear ||
+        m.cohortYear === "m.m." ||
         ["cse", "swe", "cs", "ee"].includes(id.toLowerCase()) ||
         id.includes("هندسة-أنظمة-الحاسوب_") ||
         !Array.isArray(m.courses) ||
@@ -577,11 +580,12 @@ export async function upsertCatalogCourses(catalog) {
  * Get all available majors.
  */
 export function getMajors() {
-  return Object.values(state.majors)
+  const list = Object.values(state.majors)
     .filter(
       (m) =>
         m &&
         m.cohortYear &&
+        m.cohortYear !== "m.m." &&
         !["cse", "swe", "cs", "ee"].includes(m.id?.toLowerCase()),
     )
     .map((m) => ({
@@ -599,6 +603,24 @@ export function getMajors() {
       description: m.description,
       coursesCount: Array.isArray(m.courses) ? m.courses.length : 0,
     }));
+
+  if (!list.some((m) => m.id === "cse-2023" || m.name?.includes("أنظمة الحاسوب"))) {
+    list.unshift({
+      id: "cse-2023",
+      code: "CSE-2023",
+      name: "هندسة أنظمة الحاسوب",
+      cohortYear: "2023",
+      displayName: "هندسة أنظمة الحاسوب - دفعة 2023",
+      college: "كلية الهندسة والتكنولوجيا",
+      degree: "بكالوريوس هندسة",
+      totalCredits: 164,
+      categoryRequirements: CSE_CATEGORY_REQUIREMENTS,
+      description: "الخطة الاسترشادية لتخصص هندسة أنظمة الحاسوب (دفعة 2023)",
+      coursesCount: CSE_CURRICULUM_COURSES.length,
+    });
+  }
+
+  return list;
 }
 
 /**
@@ -628,6 +650,19 @@ export function getMajorById(majorId) {
         totalCredits: 132,
         categoryRequirements: AI_CATEGORY_REQUIREMENTS,
         courses: AI_CURRICULUM_COURSES,
+      };
+    }
+    if (id === "cse" || id.includes("أنظمة-الحاسوب") || id.startsWith("cse") || id === "cse-2023") {
+      return {
+        id: "cse-2023",
+        code: "CSE-2023",
+        name: "هندسة أنظمة الحاسوب",
+        cohortYear: "2023",
+        college: "كلية الهندسة والتكنولوجيا",
+        degree: "بكالوريوس هندسة",
+        totalCredits: 164,
+        categoryRequirements: CSE_CATEGORY_REQUIREMENTS,
+        courses: CSE_CURRICULUM_COURSES,
       };
     }
     return null;

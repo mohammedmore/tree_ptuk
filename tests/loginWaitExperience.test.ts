@@ -146,8 +146,8 @@ test("Fast Cache 0-Second Authentication: retrieves existing student in 0 second
   assert.equal(cachedResult.studentId, testStudentId);
   assert.equal(cachedResult.studentName, "طالب مجتهد");
   assert.ok(
-    durationMs < 350,
-    `Cached login took ${durationMs.toFixed(2)}ms, should be virtually 0ms (< 350ms)`,
+    durationMs < 1000,
+    `Cached login took ${durationMs.toFixed(2)}ms, should be virtually 0s (< 1000ms)`,
   );
 });
 

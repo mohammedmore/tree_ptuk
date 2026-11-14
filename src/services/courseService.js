@@ -204,7 +204,8 @@ function normalizeSearchText(value) {
 }
 
 async function loadCourses() {
-  const url = getApiUrl();
+  const base = getApiUrl();
+  const url = base.includes("?") ? `${base}&limit=2500` : `${base}?limit=2500`;
   try {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 6000);
@@ -276,11 +277,11 @@ export function fetchCourses(forceRefresh = false) {
  * @returns {Promise<import("./scheduleSolver").CatalogCourse[]>}
  */
 export async function searchCourses(query) {
-  const courses = await fetchCourses();
   const normalizedQuery = normalizeSearchText(query);
+  const courses = await fetchCourses();
   if (!normalizedQuery) return courses.slice(0, 15);
 
-  const matches = courses.flatMap((course) => {
+  const localMatches = courses.flatMap((course) => {
     const normalizedId = normalizeSearchText(course.id);
     const normalizedName = normalizeSearchText(course.name);
     const ranks = [
@@ -295,10 +296,37 @@ export async function searchCourses(query) {
     return Number.isFinite(rank) ? [{ course, rank }] : [];
   });
 
-  return matches
+  const sortedLocal = localMatches
     .sort((first, second) => first.rank - second.rank)
-    .slice(0, 15)
     .map(({ course }) => course);
+
+  if (sortedLocal.length >= 5 || typeof window === "undefined") {
+    return sortedLocal.slice(0, 20);
+  }
+
+  // If local catalog yielded few matches, query backend search endpoint directly
+  try {
+    const base = getApiUrl();
+    const searchUrl = `${base}${base.includes("?") ? "&" : "?"}search=${encodeURIComponent(query.trim())}&limit=25`;
+    const response = await fetch(searchUrl, {
+      headers: { Accept: "application/json" },
+    });
+    if (response.ok) {
+      const serverData = await response.json();
+      const serverCourses = parseCourses(serverData);
+      const seen = new Set(sortedLocal.map((c) => c.id));
+      const combined = [...sortedLocal];
+      for (const sc of serverCourses) {
+        if (!seen.has(sc.id)) {
+          seen.add(sc.id);
+          combined.push(sc);
+        }
+      }
+      return combined.slice(0, 20);
+    }
+  } catch {}
+
+  return sortedLocal.slice(0, 20);
 }
 
 /**

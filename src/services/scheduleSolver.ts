@@ -200,12 +200,13 @@ export function isOnlineComponent(sectionOrBlock?: {
   if (sectionOrBlock.isOnline === true) return true;
 
   const room = (sectionOrBlock.room ?? "").trim();
-  // PTUK Domain Rule: 4-digit or 5-digit numbers without building prefix (e.g. 1000, 2050, 5000, 10000, 11111) denote online/virtual rooms
-  if (
-    /^\d{4,5}$/.test(room) ||
+  // Virtual / online rooms at PTUK are designated virtual room codes (e.g. 5000, 10000, 1000, 2050, 11111).
+  // Physical classrooms (e.g. 4-digit rooms like 1102, 2105 in engineering) are NOT online.
+  const isVirtualRoom =
+    ["1000", "2050", "5000", "10000", "11111"].includes(room) ||
     room.includes("5000") ||
-    room.includes("10000")
-  ) {
+    room.includes("10000");
+  if (isVirtualRoom) {
     return true;
   }
 
@@ -1112,10 +1113,23 @@ export function explainScheduleConflicts(
 
     const available = rawSections.filter((section) => {
       const secKey = sectionKey(section);
-      const sectionName = normalizeArabic(section.sec);
-      if (sectionName.includes("مختلط")) return false;
       if (exclusions.has(secKey)) return false;
       if (pinned && secKey !== pinned) return false;
+      if (filters.genderPreference && filters.genderPreference !== "all") {
+        const secGender = section.gender || "";
+        if (
+          filters.genderPreference === "male" &&
+          (secGender.includes("طالبات") || secGender.includes("إناث"))
+        ) {
+          return false;
+        }
+        if (
+          filters.genderPreference === "female" &&
+          (secGender.includes("طلاب") || secGender.includes("ذكور"))
+        ) {
+          return false;
+        }
+      }
       if (
         offDays.size > 0 &&
         !isOnlineComponent(section) &&

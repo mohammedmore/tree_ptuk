@@ -226,7 +226,16 @@ export const LoginPage: React.FC<LoginPageProps> = ({
             onProceedToPlanner={handleProceedToPlanner}
           />
         ) : !showRetrieveInline ? (
-          <form
+          <>
+            {/* Privacy & Security Reassurance Banner */}
+            <div className="mb-3.5 p-3 rounded-[var(--r-control)] bg-[var(--sunken)] border border-[var(--line-control)] text-[12.5px] text-[var(--text-2)] flex items-start gap-2.5">
+              <span className="text-emerald-500 font-bold text-sm shrink-0 mt-0.5" aria-hidden="true">🔒</span>
+              <p className="m-0 leading-relaxed text-[12.5px]">
+                بيانات الدخول مشفرة وتُعالج بأمان ومباشرة مع بوابة الجامعة (Edugate) دون تخزين كلمة مرورك على أي خادم خارجي.
+              </p>
+            </div>
+
+            <form
             onSubmit={handleLogin}
             noValidate
             className="space-y-[var(--s-4)]"
@@ -336,6 +345,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({
               دخول وجلب السجل
             </button>
           </form>
+        </>
         ) : (
           /* In-Place Retrieve by Code */
           <form

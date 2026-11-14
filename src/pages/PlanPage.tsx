@@ -37,14 +37,20 @@ import type { Course, ScheduleEntry } from "../data";
 import {
   courseDependentsMap,
   categoryRequirements as defaultCategoryRequirements,
+  courses as defaultUniversityCourses,
 } from "../data";
 import {
   TOTAL_CREDITS,
   getYearFromId,
-  courseRecommendedSemesters,
+  getYearOfCourse,
   getRecommendedSemesterOfCourse,
-  ELECTIVE_SLOTS_DEFS,
+  isCseMajor,
 } from "../constants";
+import {
+  computeDynamicAdvisoryPlan,
+  getMajorElectiveSlots,
+  SEMESTER_INDEX_MAP,
+} from "../core/advisoryPlan";
 import {
   calculateDegreeCredits,
   calculateYearlyProgress,
@@ -95,6 +101,7 @@ interface PlanPageProps {
     React.SetStateAction<Record<string, string>>
   >;
   categoryRequirements?: Record<string, number>;
+  totalDegreeCredits?: number;
 }
 
 // Custom Node for Column Header inside React Flow canvas
@@ -185,8 +192,9 @@ function PlanFlowContent({
   setSelectedElectives,
   setPlannedCourses,
   categoryRequirements,
+  totalDegreeCredits: externalTotalDegreeCredits,
 }: PlanPageProps) {
-  const { fitView } = useReactFlow();
+  const { fitView, getViewport, setViewport } = useReactFlow();
 
   // Modals state
   const [isTransferModalOpen, setIsTransferModalOpen] = useState(false);
@@ -238,6 +246,7 @@ function PlanFlowContent({
 
   // Category breakdown drawer
   const [showCategoryBreakdown, setShowCategoryBreakdown] = useState(false);
+  const [isSyncBannerDismissed, setIsSyncBannerDismissed] = useState(false);
 
   const [isMobile, setIsMobile] = useState(() =>
     typeof window !== "undefined" ? window.innerWidth < 768 : false,
@@ -312,6 +321,11 @@ function PlanFlowContent({
     [courses],
   );
 
+  const defaultCoursesById = useMemo(
+    () => new Map(defaultUniversityCourses.map((c) => [c.id, c])),
+    [],
+  );
+
   // Unique categories
   const categories = useMemo(() => {
     const set = new Set<string>();
@@ -335,6 +349,13 @@ function PlanFlowContent({
   }, [categoryRequirements]);
 
   const totalDegreeCredits = useMemo(() => {
+    if (
+      externalTotalDegreeCredits &&
+      externalTotalDegreeCredits >= 60 &&
+      externalTotalDegreeCredits <= 260
+    ) {
+      return externalTotalDegreeCredits;
+    }
     const student = getCachedStudentProfile();
     if (
       student?.totalCredits &&
@@ -353,8 +374,9 @@ function PlanFlowContent({
 
     // Degree credits must represent valid degree requirement (60 - 260 hours, supporting diplomas & bachelors)
     if (sum >= 60 && sum <= 260) return sum;
-    return TOTAL_CREDITS;
-  }, [effectiveCategoryRequirements]);
+    const isCse = isCseMajor(activeMajorId);
+    return isCse ? TOTAL_CREDITS : 132;
+  }, [externalTotalDegreeCredits, effectiveCategoryRequirements, activeMajorId]);
 
   // Calculate available courses
   const availableCoursesSet = useMemo(() => {
@@ -375,6 +397,19 @@ function PlanFlowContent({
   const availableCoursesList = useMemo(() => {
     return courses.filter((c) => availableCoursesSet.has(c.id));
   }, [courses, availableCoursesSet]);
+
+  // Active plan courses: show all courses belonging to this major plan without filtering out electives
+  const planCourses = useMemo(() => {
+    return courses;
+  }, [courses]);
+
+  // Dynamic topological and credit-balanced advisory plan
+  const advisoryPlan = useMemo(() => {
+    return computeDynamicAdvisoryPlan(planCourses, {
+      totalCredits: totalDegreeCredits,
+      majorId: activeMajorId,
+    });
+  }, [planCourses, totalDegreeCredits, activeMajorId]);
   const progressPercent = useMemo(() => {
     if (totalDegreeCredits <= 0) return 0;
     return Math.min(
@@ -474,7 +509,14 @@ function PlanFlowContent({
       if (statusFilter === "available" && (isCompleted || !isAvailable)) return;
       if (statusFilter === "remaining" && isCompleted) return;
 
-      if (yearFilter !== "all" && getYearFromId(c.id) !== yearFilter) return;
+      if (yearFilter !== "all") {
+        const cYear = getYearOfCourse(
+          c,
+          advisoryPlan.courseSemesterMap,
+          advisoryPlan.maxYears,
+        );
+        if (cYear !== yearFilter) return;
+      }
       if (categoryFilter !== "all" && c.category !== categoryFilter) return;
 
       if (seasonFilter !== "all") {
@@ -513,62 +555,15 @@ function PlanFlowContent({
     seasonFilter,
     completedCourses,
     availableCoursesSet,
+    advisoryPlan,
   ]);
 
-  // Semester mapping helper for catalog mode
-  const SEMESTER_INDEX_MAP: Record<string, number> = useMemo(
-    () => ({
-      "السنة الأولى - الفصل الأول": 0,
-      "السنة الأولى - الفصل الثاني": 1,
-      "السنة الأولى - الصيفي": 1,
-      "السنة الثانية - الفصل الأول": 2,
-      "السنة الثانية - الفصل الثاني": 3,
-      "السنة الثانية - الصيفي": 3,
-      "السنة الثالثة - الفصل الأول": 4,
-      "السنة الثالثة - الفصل الثاني": 5,
-      "السنة الثالثة - الصيفي": 5,
-      "السنة الرابعة - الفصل الأول": 6,
-      "السنة الرابعة - الفصل الثاني": 7,
-      "السنة الرابعة - الصيفي": 7,
-      "السنة الخامسة - الفصل الأول": 8,
-      "السنة الخامسة - الفصل الثاني": 9,
-      "السنة الخامسة - الصيفي": 9,
-    }),
-    [],
-  );
-
   const courseSemesterMap = useMemo(() => {
-    const map: Record<string, number> = {};
     if (layoutMode === "catalog") {
-      courses.forEach((c) => {
-        const sem = getRecommendedSemesterOfCourse(c);
-        if (sem && typeof SEMESTER_INDEX_MAP[sem] === "number") {
-          map[c.id] = SEMESTER_INDEX_MAP[sem];
-        } else {
-          const y = parseInt(getYearFromId(c.id)) || 1;
-          const hasPrereqInSameYear =
-            Array.isArray(c.prerequisites) &&
-            c.prerequisites.some((p) => parseInt(getYearFromId(p)) === y);
-          const isSem2 =
-            hasPrereqInSameYear ||
-            Boolean(
-              c.name &&
-              (c.name.includes("(2)") ||
-                c.name.includes(" 2") ||
-                c.name.includes("ثاني") ||
-                c.name.includes("مختبر")),
-            );
-          map[c.id] = Math.min(9, Math.max(0, (y - 1) * 2 + (isSem2 ? 1 : 0)));
-        }
-      });
+      return advisoryPlan.courseColumnMap;
     }
-    return map;
-  }, [layoutMode, courses, SEMESTER_INDEX_MAP]);
-
-  // Active plan courses: show all courses belonging to this major plan without filtering out electives
-  const planCourses = useMemo(() => {
-    return courses;
-  }, [courses]);
+    return {};
+  }, [layoutMode, advisoryPlan]);
 
   // Compute Multiple Critical Paths in the Curriculum DAG
   const criticalPathResult: CriticalPathResult = useMemo(() => {
@@ -656,31 +651,48 @@ function PlanFlowContent({
   const initialFitDone = useRef(false);
   const prevLayoutModeRef = useRef(layoutMode);
   const prevMajorRef = useRef(activeMajorName);
+  const prevViewModeRef = useRef(viewMode);
 
   useEffect(() => {
     if (baseLayout.nodes.length === 0) return;
 
     const fitToStart = (duration = 0) => {
+      const isSmall =
+        typeof window !== "undefined" && window.innerWidth < 1024;
+      const isMedium =
+        typeof window !== "undefined" && window.innerWidth < 1440;
+      const maxCol = isSmall ? 1 : isMedium ? 2 : 3;
       const startNodes = baseLayout.nodes.filter((n) => {
         const col = (n.data?.column as number) ?? 0;
-        return col <= 3;
+        return col <= maxCol;
       });
       if (startNodes.length > 0) {
         fitView({
           nodes: startNodes,
-          padding: 0.15,
-          minZoom: 0.75,
+          padding: 0.18,
+          minZoom: 0.5,
           maxZoom: 1.0,
           duration,
         });
       } else {
         fitView({
-          padding: 0.12,
-          minZoom: 0.72,
-          maxZoom: 1.05,
+          padding: 0.15,
+          minZoom: 0.45,
+          maxZoom: 1.0,
           duration,
         });
       }
+
+      // Ensure the top row of courses is never pushed above the viewport by vertical centering
+      requestAnimationFrame(() => {
+        const vp = getViewport();
+        if (vp.y < 20) {
+          setViewport(
+            { x: vp.x, y: 24, zoom: vp.zoom },
+            { duration: duration > 0 ? 150 : 0 },
+          );
+        }
+      });
     };
 
     if (!initialFitDone.current) {
@@ -691,18 +703,22 @@ function PlanFlowContent({
       return;
     }
 
-    // Refit when layout mode or major changes
+    // Refit when layout mode, major, or viewMode changes
     if (
       prevLayoutModeRef.current !== layoutMode ||
-      prevMajorRef.current !== activeMajorName
+      prevMajorRef.current !== activeMajorName ||
+      prevViewModeRef.current !== viewMode
     ) {
       prevLayoutModeRef.current = layoutMode;
       prevMajorRef.current = activeMajorName;
-      requestAnimationFrame(() => {
-        fitToStart(250);
-      });
+      prevViewModeRef.current = viewMode;
+      if (viewMode === "map") {
+        requestAnimationFrame(() => {
+          fitToStart(200);
+        });
+      }
     }
-  }, [baseLayout, fitView, layoutMode, activeMajorName]);
+  }, [baseLayout, fitView, layoutMode, activeMajorName, viewMode]);
 
   const handleTogglePin = useCallback((courseId: string) => {
     setPinnedCourseId((prev) => {
@@ -813,6 +829,11 @@ function PlanFlowContent({
   // Stable node callback handlers (Item 11)
   const handleSelectCourseDetails = useCallback((id: string) => {
     setSelectedCourseId(id);
+  }, []);
+
+  const handleNodeClick = useCallback((_: React.MouseEvent, node: Node) => {
+    if (node.type === "columnHeader" || node.id.startsWith("header-")) return;
+    setSelectedCourseId(node.id);
   }, []);
 
   const plannerActions = useMemo<PlannerNodeActions>(
@@ -1027,62 +1048,101 @@ function PlanFlowContent({
 
   // Group courses by canonical academic semester for mobile view
   const mobileSemestersData = useMemo(() => {
-    const SEMESTER_LABELS = [
-      "السنة الأولى - الفصل الأول",
-      "السنة الأولى - الفصل الثاني",
-      "السنة الثانية - الفصل الأول",
-      "السنة الثانية - الفصل الثاني",
-      "السنة الثالثة - الفصل الأول",
-      "السنة الثالثة - الفصل الثاني",
-      "السنة الرابعة - الفصل الأول",
-      "السنة الرابعة - الفصل الثاني",
-      "السنة الخامسة - الفصل الأول",
-      "السنة الخامسة - الفصل الثاني",
-    ];
+    const { electiveDefs, semesterSlots } = getMajorElectiveSlots(
+      activeMajorId,
+      totalDegreeCredits,
+    );
 
     const coursesMap: Record<number, Course[]> = {};
-    for (let i = 0; i < SEMESTER_LABELS.length; i++) {
+    for (let i = 0; i < advisoryPlan.maxRegularSemesters; i++) {
       coursesMap[i] = [];
     }
 
-    planCourses.forEach((c) => {
-      const sem = getRecommendedSemesterOfCourse(c);
-      let colIdx =
-        typeof SEMESTER_INDEX_MAP[sem] === "number"
-          ? SEMESTER_INDEX_MAP[sem]
-          : -1;
-      if (colIdx < 0) {
-        const y = parseInt(getYearFromId(c.id)) || 1;
-        const hasPrereqInSameYear =
-          Array.isArray(c.prerequisites) &&
-          c.prerequisites.some((p) => parseInt(getYearFromId(p)) === y);
-        const isSem2 =
-          hasPrereqInSameYear ||
-          Boolean(
-            c.name &&
-            (c.name.includes("(2)") ||
-              c.name.includes(" 2") ||
-              c.name.includes("ثاني") ||
-              c.name.includes("مختبر")),
-          );
-        colIdx = Math.min(9, Math.max(0, (y - 1) * 2 + (isSem2 ? 1 : 0)));
+    const activeElectiveIds = new Set<string>();
+    if (selectedElectives) {
+      Object.values(selectedElectives).forEach((id) => activeElectiveIds.add(id));
+    }
+    Object.values(electiveDefs).forEach((slot) => {
+      if (!selectedElectives?.[slot.id]) {
+        activeElectiveIds.add(slot.defaultCourseId);
       }
+    });
+
+    planCourses.forEach((c) => {
+      const isElective =
+        c.category?.includes("اختياري") || (c as any).type?.includes("اختياري");
+
+      // Filter unselected/unplanned broad elective pool courses from semester columns
+      if (
+        isElective &&
+        !completedCourses.has(c.id) &&
+        !plannedCourses[c.id] &&
+        !activeElectiveIds.has(c.id)
+      ) {
+        return;
+      }
+
+      let colIdx = advisoryPlan.courseColumnMap[c.id];
+      if (typeof colIdx !== "number" || colIdx < 0) {
+        let sem = getRecommendedSemesterOfCourse(
+          c,
+          activeMajorId,
+          advisoryPlan.maxYears,
+        );
+        if (isElective && (!sem || typeof SEMESTER_INDEX_MAP[sem] !== "number")) {
+          for (const [semName, slotIds] of Object.entries(semesterSlots)) {
+            if (
+              slotIds.some((sId) => {
+                const def = electiveDefs[sId];
+                return (
+                  def &&
+                  (selectedElectives?.[sId] === c.id ||
+                    (!selectedElectives?.[sId] && def.defaultCourseId === c.id))
+                );
+              })
+            ) {
+              sem = semName;
+              break;
+            }
+          }
+        }
+        colIdx =
+          typeof SEMESTER_INDEX_MAP[sem] === "number"
+            ? SEMESTER_INDEX_MAP[sem]
+            : 0;
+      }
+
+      colIdx = Math.min(
+        advisoryPlan.maxRegularSemesters - 1,
+        Math.max(0, colIdx),
+      );
+      if (!coursesMap[colIdx]) coursesMap[colIdx] = [];
       coursesMap[colIdx].push(c);
     });
 
-    const headers = SEMESTER_LABELS.map((title, idx) => {
-      const cList = coursesMap[idx] || [];
-      const totalCr = cList.reduce((sum, c) => sum + (c.credits || 0), 0);
-      return {
-        column: idx,
-        title,
-        totalCredits: totalCr,
-        courseCount: cList.length,
-      };
-    }).filter((h) => h.courseCount > 0);
+    const headers = advisoryPlan.allowedSemesterNames
+      .map((title, idx) => {
+        const cList = coursesMap[idx] || [];
+        const totalCr = cList.reduce((sum, c) => sum + (c.credits || 0), 0);
+        return {
+          column: idx,
+          title,
+          totalCredits: totalCr,
+          courseCount: cList.length,
+        };
+      })
+      .filter((h) => h.courseCount > 0);
 
     return { coursesByColumn: coursesMap, columnHeaders: headers };
-  }, [planCourses, SEMESTER_INDEX_MAP]);
+  }, [
+    planCourses,
+    completedCourses,
+    plannedCourses,
+    selectedElectives,
+    advisoryPlan,
+    activeMajorId,
+    totalDegreeCredits,
+  ]);
 
   // Group courses by column for graph view
   const coursesByColumn = useMemo(() => {
@@ -1104,9 +1164,20 @@ function PlanFlowContent({
     return record;
   }, [baseLayout.nodes, baseLayout.totalColumns, coursesById]);
 
-  const selectedCourse = selectedCourseId
-    ? coursesById.get(selectedCourseId) || null
-    : null;
+  const selectedCourse = useMemo(() => {
+    if (!selectedCourseId) return null;
+    return (
+      coursesById.get(selectedCourseId) ||
+      defaultCoursesById.get(selectedCourseId) ||
+      null
+    );
+  }, [selectedCourseId, coursesById, defaultCoursesById]);
+
+  const allCoursesMapCombined = useMemo(() => {
+    const map = new Map<string, Course>(defaultCoursesById);
+    courses.forEach((c) => map.set(c.id, c));
+    return map;
+  }, [courses, defaultCoursesById]);
   const unlockedCourses = useMemo(() => {
     if (!selectedCourseId) return [];
     return courseDependentsMap.get(selectedCourseId) || [];
@@ -1253,7 +1324,7 @@ function PlanFlowContent({
                 className="min-h-[var(--control-h)] px-2.5 sm:px-3 text-[12px] sm:text-[13px] text-[var(--text-2)] hover:text-[var(--text)] border border-[var(--line-control)] rounded-[var(--r-control)] bg-[var(--surface)] hover:bg-[var(--sunken)] transition-colors cursor-pointer flex items-center gap-1 max-w-[130px] sm:max-w-none"
               >
                 <span className="truncate">
-                  التخصص: {activeMajorName || "تخصص الطالب"}
+                  التخصص: {activeMajorName || (isCseMajor(activeMajorId) ? "هندسة أنظمة الحاسوب" : "تخصص الطالب")}
                 </span>
                 <ChevronDown
                   size={13}
@@ -1645,26 +1716,30 @@ function PlanFlowContent({
                     type="button"
                     onClick={() => setLayoutMode("catalog")}
                     className={cn(
-                      "px-2.5 h-full transition-colors cursor-pointer flex items-center",
+                      "px-2.5 h-full transition-colors cursor-pointer flex items-center gap-1.5",
                       layoutMode === "catalog"
                         ? "bg-[var(--accent)] text-[var(--text-on-accent)] font-medium"
                         : "text-[var(--text-2)] hover:text-[var(--text)] hover:bg-[var(--sunken)]",
                     )}
-                    title="توزيع المواد حسب فصول الخطة الاسترشادية الرسمية"
+                    title={
+                      advisoryPlan.isAutoGenerated
+                        ? "خطة استرشادية ديناميكية موزعة آلياً وفق قيود شجرة المتطلبات والأحمال الفصيلة"
+                        : "توزيع المواد حسب فصول الخطة الاسترشادية الرسمية"
+                    }
                   >
-                    الخطة الاسترشادية
+                    <span>الخطة الاسترشادية</span>
+                    {advisoryPlan.isAutoGenerated && (
+                      <span className="text-[10px] px-1 py-0.5 rounded bg-amber-500/20 text-amber-600 dark:text-amber-400 font-normal">
+                        مولّدة
+                      </span>
+                    )}
                   </button>
                 </div>
               </div>
 
               {/* Year selector */}
               {(() => {
-                const maxDegreeYear =
-                  totalDegreeCredits <= 80
-                    ? 2
-                    : totalDegreeCredits <= 140
-                      ? 4
-                      : 5;
+                const maxDegreeYear = advisoryPlan.maxYears;
                 return (
                   <select
                     value={yearFilter}
@@ -1820,7 +1895,7 @@ function PlanFlowContent({
         </header>
 
         {/* Onboarding PTUK Sync Banner (High conversion CTA for new students) */}
-        {completedCourses.size === 0 && (
+        {completedCourses.size === 0 && !isSyncBannerDismissed && (
           <aside
             aria-label="مزامنة الحساب"
             className="bg-[var(--accent-soft)] border-b border-[var(--accent)]/30 px-4 sm:px-6 py-2.5 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 text-[12.5px] text-[var(--text)] shrink-0 animate-in fade-in duration-200"
@@ -1840,14 +1915,25 @@ function PlanFlowContent({
                 </p>
               </div>
             </div>
-            <button
-              type="button"
-              onClick={handleSyncFromPortal}
-              className="px-3.5 py-1.5 bg-[var(--accent)] text-[var(--text-on-accent)] font-semibold rounded-[var(--r-control)] hover:opacity-90 transition-opacity cursor-pointer text-[12px] whitespace-nowrap self-start sm:self-auto flex items-center gap-1.5 shadow-sm"
-            >
-              <RefreshCw size={13} />
-              <span>مزامنة بورتال خضوري الآن</span>
-            </button>
+            <div className="flex items-center gap-2 self-start sm:self-auto">
+              <button
+                type="button"
+                onClick={handleSyncFromPortal}
+                className="px-3.5 py-1.5 bg-[var(--accent)] text-[var(--text-on-accent)] font-semibold rounded-[var(--r-control)] hover:opacity-90 transition-opacity cursor-pointer text-[12px] whitespace-nowrap flex items-center gap-1.5 shadow-sm"
+              >
+                <RefreshCw size={13} />
+                <span>مزامنة بورتال خضوري الآن</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setIsSyncBannerDismissed(true)}
+                aria-label="إغلاق التنبيه"
+                title="إغلاق التنبيه"
+                className="p-1 rounded-[var(--r-control)] text-[var(--text-3)] hover:text-[var(--text)] hover:bg-[var(--sunken)] transition-colors cursor-pointer"
+              >
+                <X size={15} />
+              </button>
+            </div>
           </aside>
         )}
 
@@ -1929,6 +2015,7 @@ function PlanFlowContent({
                 setIsPlannerOpen={() => onNavigateToSemesterPlanning()}
                 categoryRequirements={effectiveCategoryRequirements}
                 totalDegreeCredits={totalDegreeCredits}
+                activeMajorId={activeMajorId}
               />
             </div>
           ) : (
@@ -1951,6 +2038,7 @@ function PlanFlowContent({
                 </div>
               )}
               <ReactFlow
+                fitView
                 nodes={canvasNodes}
                 edges={canvasEdges}
                 nodeTypes={nodeTypes}
@@ -1964,7 +2052,8 @@ function PlanFlowContent({
                   [Math.max(3500, baseLayout.totalColumns * 320 + 400), 2500],
                 ]}
                 preventScrolling={true}
-                fitViewOptions={{ minZoom: 0.72, maxZoom: 1.05, padding: 0.12 }}
+                fitViewOptions={{ minZoom: 0.5, maxZoom: 1.05, padding: 0.15 }}
+                onNodeClick={handleNodeClick}
                 onNodeMouseEnter={handleNodeMouseEnter}
                 onNodeMouseLeave={handleNodeMouseLeave}
                 onPaneClick={() => {
@@ -2006,7 +2095,7 @@ function PlanFlowContent({
             onToggleComplete={onToggleComplete}
             onPlanCourse={onPlanCourse}
             onSelectCourse={(id) => setSelectedCourseId(id)}
-            allCoursesMap={coursesById}
+            allCoursesMap={allCoursesMapCombined}
             unlockedCourses={unlockedCourses}
             matchingCriticalPaths={matchingCriticalPaths}
           />
@@ -2016,7 +2105,7 @@ function PlanFlowContent({
         <MajorTransferModal
           isOpen={isTransferModalOpen}
           onClose={() => setIsTransferModalOpen(false)}
-          currentMajorId={activeMajorId || "cse-2023"}
+          currentMajorId={activeMajorId || (activeMajorName?.includes("أنظمة") ? "cse-2023" : "general")}
           currentMajorName={activeMajorName || "تخصص الطالب"}
           completedCourses={completedCourses}
           courseGrades={courseGrades}

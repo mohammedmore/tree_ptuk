@@ -15,6 +15,12 @@ import {
   EyeOff,
   X,
   Check,
+  ChevronDown,
+  ChevronUp,
+  HelpCircle,
+  ShieldAlert,
+  Info,
+  Pencil,
 } from "lucide-react";
 import { cn, normalizeArabicText } from "../utils";
 import { usePrivacyMask } from "../hooks/usePrivacyMask";
@@ -56,6 +62,9 @@ export const GPAPage: React.FC<GPAPageProps> = ({
 }) => {
   const [whatIfGrades, setWhatIfGrades] = useState<Record<string, number>>({});
   const [targetGPAInput, setTargetGPAInput] = useState("80");
+  const [probationPlannedCredits, setProbationPlannedCredits] = useState<number>(14);
+  const [isEditingOfficialRecord, setIsEditingOfficialRecord] = useState(false);
+  const [showGradingGuide, setShowGradingGuide] = useState(false);
   const { isPrivacyMasked, togglePrivacyMask } = usePrivacyMask();
   const [isAddPickerOpen, setIsAddPickerOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
@@ -405,6 +414,113 @@ export const GPAPage: React.FC<GPAPageProps> = ({
     );
   }, [courses, courseGrades, completedCourses, failedCourseIds]);
 
+  // Distinction Tracking for Graduation Honors (Feature 22 - المتفوق)
+  const distinctionInfo = useMemo(() => {
+    const hasAnyFailedCourse =
+      failedCourseIds.size > 0 ||
+      existingCourses.some((c) => {
+        const g = courseGrades[c.id];
+        return typeof g === "number" && g > 0 && g < 50;
+      });
+
+    const isFirstClass = cumulativeGPA >= 90 && !hasAnyFailedCourse;
+    const isSecondClass =
+      cumulativeGPA >= 85 && cumulativeGPA < 90 && !hasAnyFailedCourse;
+    const isHonorGPAWithoutHonorsStatus =
+      cumulativeGPA >= 85 && hasAnyFailedCourse;
+
+    // Safety margin: min semester GPA in next 15 credits to maintain >= 85%
+    let minSemesterGPAFor85: number | null = null;
+    if (cumulativeGPA >= 85 && gradedCredits > 0) {
+      const targetPts = 85.0 * (gradedCredits + 15);
+      const curPts = cumulativeGPA * gradedCredits;
+      minSemesterGPAFor85 = Math.max(
+        0,
+        Math.min(100, Math.round(((targetPts - curPts) / 15) * 10) / 10),
+      );
+    }
+
+    return {
+      hasAnyFailedCourse,
+      isFirstClass,
+      isSecondClass,
+      isHonorGPAWithoutHonorsStatus,
+      minSemesterGPAFor85,
+    };
+  }, [
+    cumulativeGPA,
+    gradedCredits,
+    failedCourseIds,
+    existingCourses,
+    courseGrades,
+  ]);
+
+  // Academic Probation Recovery Solver (Feature 21 - تحت الإنذار: حاسبة النجاة من الإنذار)
+  const probationRecoveryAnalysis = useMemo(() => {
+    const isUnderWarning = cumulativeGPA < 60 || standingInfo.isWarning;
+    const N = probationPlannedCredits; // 12, 13, or 14 hours
+    const effectiveGradedCredits = Math.max(gradedCredits, 1);
+    const currentTotalPoints = existingCourses.reduce((sum, c) => {
+      if (isRemedialCourse(c)) return sum;
+      const g = courseGrades[c.id];
+      if (typeof g === "number" && g > 0) return sum + g * c.credits;
+      if (failedCourseIds.has(c.id)) {
+        return sum + (typeof g === "number" && g >= 0 ? g : 40) * c.credits;
+      }
+      return sum;
+    }, 0);
+
+    const targetCumulativeGPA = 60.0;
+    const newTotalCredits = effectiveGradedCredits + N;
+    const targetCumulativePoints = targetCumulativeGPA * newTotalCredits;
+    const pointsNeeded = targetCumulativePoints - currentTotalPoints;
+    const requiredSemesterGPA = pointsNeeded / N;
+    const roundedRequiredGPA = Math.round(requiredSemesterGPA * 10) / 10;
+
+    const isPossible = requiredSemesterGPA <= 100;
+    let difficulty:
+      | "easy"
+      | "realistic"
+      | "challenging"
+      | "critical"
+      | "impossible" = "realistic";
+    let difficultyLabel = "واقعي وقابل للتحقيق";
+
+    if (!isPossible) {
+      difficulty = "impossible";
+      difficultyLabel = "غير ممكن بمواد جديدة فقط";
+    } else if (requiredSemesterGPA <= 65) {
+      difficulty = "easy";
+      difficultyLabel = "سهل التحقيق";
+    } else if (requiredSemesterGPA <= 75) {
+      difficulty = "realistic";
+      difficultyLabel = "واقعي وقابل للتحقيق";
+    } else if (requiredSemesterGPA <= 85) {
+      difficulty = "challenging";
+      difficultyLabel = "يتطلب جهداً وتركيزاً مرتفعاً";
+    } else {
+      difficulty = "critical";
+      difficultyLabel = "حرج جداً (يتطلب تفوقاً)";
+    }
+
+    return {
+      isUnderWarning,
+      plannedCredits: N,
+      requiredSemesterGPA: roundedRequiredGPA,
+      isPossible,
+      difficulty,
+      difficultyLabel,
+    };
+  }, [
+    cumulativeGPA,
+    standingInfo.isWarning,
+    probationPlannedCredits,
+    existingCourses,
+    courseGrades,
+    failedCourseIds,
+    gradedCredits,
+  ]);
+
   return (
     <main
       dir="rtl"
@@ -433,23 +549,121 @@ export const GPAPage: React.FC<GPAPageProps> = ({
           )}
         </div>
 
-        <button
-          type="button"
-          onClick={togglePrivacyMask}
-          className={cn(
-            "px-3 py-1.5 rounded-[var(--r-control)] border text-xs font-semibold flex items-center gap-1.5 cursor-pointer transition-all self-start sm:self-auto",
-            isPrivacyMasked
-              ? "bg-amber-500/10 border-amber-500/40 text-amber-600 dark:text-amber-400"
-              : "border-[var(--line-control)] bg-[var(--surface)] text-[var(--text-2)] hover:bg-[var(--sunken)]",
-          )}
-          title="وضع الخصوصية: إخفاء وتمويه المعدل والدرجات عند التواجد في الأماكن العامة"
-        >
-          {isPrivacyMasked ? <EyeOff size={14} /> : <Eye size={14} />}
-          <span>
-            {isPrivacyMasked ? "إلغاء تمويه الدرجات" : "وضع الخصوصية (تمويه)"}
-          </span>
-        </button>
+        <div className="flex items-center gap-2 flex-wrap">
+          <button
+            type="button"
+            onClick={() => setShowGradingGuide((prev) => !prev)}
+            className={cn(
+              "px-3 py-1.5 rounded-[var(--r-control)] border text-xs font-semibold flex items-center gap-1.5 cursor-pointer transition-all",
+              showGradingGuide
+                ? "bg-[var(--accent)]/15 border-[var(--accent)] text-[var(--accent)]"
+                : "border-[var(--line-control)] bg-[var(--surface)] text-[var(--text-2)] hover:bg-[var(--sunken)]",
+            )}
+            title="عرض دليل احتساب المعدلات ونظام الدرجات المئوي لجامعة خضوري"
+          >
+            <HelpCircle size={14} />
+            <span>دليل نظام الدرجات (خضوري)</span>
+            {showGradingGuide ? (
+              <ChevronUp size={13} />
+            ) : (
+              <ChevronDown size={13} />
+            )}
+          </button>
+
+          <button
+            type="button"
+            onClick={togglePrivacyMask}
+            className={cn(
+              "px-3 py-1.5 rounded-[var(--r-control)] border text-xs font-semibold flex items-center gap-1.5 cursor-pointer transition-all self-start sm:self-auto",
+              isPrivacyMasked
+                ? "bg-amber-500/10 border-amber-500/40 text-amber-600 dark:text-amber-400"
+                : "border-[var(--line-control)] bg-[var(--surface)] text-[var(--text-2)] hover:bg-[var(--sunken)]",
+            )}
+            title="وضع الخصوصية: إخفاء وتمويه المعدل والدرجات عند التواجد في الأماكن العامة"
+          >
+            {isPrivacyMasked ? <EyeOff size={14} /> : <Eye size={14} />}
+            <span>
+              {isPrivacyMasked ? "إلغاء تمويه الدرجات" : "وضع الخصوصية (تمويه)"}
+            </span>
+          </button>
+        </div>
       </div>
+
+      {/* PTUK Grading Scale Guide (Feature 23 - المستجد) */}
+      {showGradingGuide && (
+        <section
+          aria-label="دليل نظام الدرجات والمعدلات في جامعة خضوري"
+          className="p-4 sm:p-5 rounded-[var(--r-surface)] bg-[var(--surface)] border border-[var(--accent)]/30 shadow-sm space-y-3 animate-in fade-in duration-150"
+        >
+          <div className="flex items-center justify-between pb-2 border-b border-[var(--line)]">
+            <div className="flex items-center gap-2">
+              <div className="w-8 h-8 rounded-lg bg-[var(--accent)]/10 text-[var(--accent)] flex items-center justify-center">
+                <BookOpen size={16} />
+              </div>
+              <h2 className="text-sm sm:text-base font-bold text-[var(--text)] m-0">
+                دليل نظام الدرجات والمعدلات - جامعة فلسطين التقنية (خضوري)
+              </h2>
+            </div>
+            <button
+              type="button"
+              onClick={() => setShowGradingGuide(false)}
+              className="p-1 rounded-lg text-[var(--text-3)] hover:text-[var(--text)] hover:bg-[var(--sunken)] transition-colors cursor-pointer"
+            >
+              <X size={16} />
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 text-xs">
+            <div className="p-3 rounded-xl bg-[var(--sunken)]/60 border border-[var(--line)] space-y-1">
+              <span className="font-bold text-[var(--text)] block text-[13px]">
+                🎯 سلم الدرجات والنجاح
+              </span>
+              <p className="text-[var(--text-2)] leading-relaxed m-0">
+                • العلامات من <strong>0 إلى 100%</strong>.<br />
+                • علامة النجاح في أي مساق: <strong>50%</strong>.<br />• العلامة
+                الأقل من 50 تُعد رسوباً وتدخل في المعدل حتى إعادتها.
+              </p>
+            </div>
+
+            <div className="p-3 rounded-xl bg-[var(--sunken)]/60 border border-[var(--line)] space-y-1">
+              <span className="font-bold text-[var(--text)] block text-[13px]">
+                ⚠️ عتبة الأمان والإنذار
+              </span>
+              <p className="text-[var(--text-2)] leading-relaxed m-0">
+                • الحد الأدنى للمعدل التراكمي للسلامة والتخرج:{" "}
+                <strong>60.00%</strong>.<br />• هبوط التراكمي دون 60% يضع الطالب
+                تحت <strong>الإنذار الأكاديمي</strong> ويقيد الساعات بـ 14 ساعة
+                كحد أقصى.
+              </p>
+            </div>
+
+            <div className="p-3 rounded-xl bg-[var(--sunken)]/60 border border-[var(--line)] space-y-1">
+              <span className="font-bold text-[var(--text)] block text-[13px]">
+                🔄 إعادة المساقات والاستدراك
+              </span>
+              <p className="text-[var(--text-2)] leading-relaxed m-0">
+                • إعادة مساق يستبدل العلامة السابقة في بسط المعدل مباشرة دون
+                مضاعفة الساعات.<br />• المواد الاستدراكية (إنجليزي/حاسوب):{" "}
+                <strong>ناجح/راسب (Pass/Fail)</strong> بساعات صفرية لا تؤثر على
+                المعدل.
+              </p>
+            </div>
+
+            <div className="p-3 rounded-xl bg-[var(--sunken)]/60 border border-[var(--line)] space-y-1">
+              <span className="font-bold text-[var(--text)] block text-[13px]">
+                🏆 المنح ومراتب الشرف
+              </span>
+              <p className="text-[var(--text-2)] leading-relaxed m-0">
+                • منحة التفوق: <strong>85% (نصف منحة)</strong> و{" "}
+                <strong>90% (منحة كاملة)</strong> بشرط تسجيل 15 ساعة فصلياً.
+                <br />• مراتب الشرف عند التخرج: <strong>الأولى (&gt;= 90%)</strong>{" "}
+                و <strong>الثانية (&gt;= 85%)</strong> بشرط عدم الرسوب في أي
+                مساق.
+              </p>
+            </div>
+          </div>
+        </section>
+      )}
 
       {/* Academic Standing & Senior Readiness Banner */}
       <div
@@ -496,6 +710,27 @@ export const GPAPage: React.FC<GPAPageProps> = ({
                   {standingInfo.scholarshipLabel}
                 </span>
               )}
+              {/* Graduation Honors Distinction Tracking (Feature 22 - المتفوق) */}
+              {distinctionInfo.isFirstClass && (
+                <span className="px-2.5 py-0.5 text-[11px] font-bold bg-amber-500/20 text-amber-700 dark:text-amber-300 border border-amber-500/40 rounded-full flex items-center gap-1 shadow-2xs">
+                  <Award size={12} className="text-amber-500" />
+                  <span>مرتبة الشرف الأولى 🏆 (تراكمي 90%+ وسجل ناصع)</span>
+                </span>
+              )}
+              {distinctionInfo.isSecondClass && (
+                <span className="px-2.5 py-0.5 text-[11px] font-bold bg-indigo-500/15 text-indigo-700 dark:text-indigo-300 border border-indigo-500/30 rounded-full flex items-center gap-1 shadow-2xs">
+                  <Award size={12} className="text-indigo-500" />
+                  <span>مرتبة الشرف الثانية 🎖️ (تراكمي 85%+ وسجل ناصع)</span>
+                </span>
+              )}
+              {distinctionInfo.isHonorGPAWithoutHonorsStatus && (
+                <span
+                  className="px-2 py-0.5 text-[11px] font-medium bg-amber-500/10 text-amber-800 dark:text-amber-200 border border-amber-500/25 rounded-full"
+                  title="وفقاً للمادة 32 من تعليمات الجامعة، لا تمنح مرتبة الشرف لمن رسب في أي مساق خلال دراسته"
+                >
+                  معدل امتياز (لا تنطبق مرتبة الشرف لسابقة رسوب)
+                </span>
+              )}
             </div>
             <p className="text-[12px] opacity-80 mt-0.5 mb-0">
               {standingInfo.isWarning
@@ -503,6 +738,12 @@ export const GPAPage: React.FC<GPAPageProps> = ({
                 : standingInfo.isWarningZone
                   ? "تنبيه حذر: معدلك التراكمي قريب من حد الإنذار (60%). استغل أدوات التوقع أدناه لتحسينه."
                   : "سجلك الأكاديمي ضمن النطاق الآمن. استمر في التميز الدراسي!"}
+              {distinctionInfo.minSemesterGPAFor85 !== null && (
+                <span className="inline-block mr-2 font-semibold text-emerald-600 dark:text-emerald-400">
+                  • هامش الأمان: أقل معدل فصلي في 15 ساعة للحفاظ على تفوقك فوق
+                  85% هو {distinctionInfo.minSemesterGPAFor85}%
+                </span>
+              )}
             </p>
           </div>
         </div>
@@ -539,6 +780,132 @@ export const GPAPage: React.FC<GPAPageProps> = ({
       {/* Smart Tools: Target GPA Calculator + Retake Optimizer */}
       {/* ────────────────────────────────────────────────────────────────────────── */}
       <div className="grid grid-cols-1 md:grid-cols-2 items-start gap-4">
+        {/* حاسبة النجاة من الإنذار الفصلي (Feature 21 - تحت الإنذار) */}
+        {probationRecoveryAnalysis.isUnderWarning && (
+          <div className="col-span-1 md:col-span-2 p-4 rounded-[var(--r-control)] bg-rose-500/5 border border-rose-500/30 shadow-sm space-y-3">
+            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-rose-500/20 pb-2.5">
+              <div className="flex items-center gap-2">
+                <div className="p-1.5 rounded-md bg-rose-500/15 text-rose-600 dark:text-rose-400">
+                  <ShieldAlert size={18} />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-[var(--text)] m-0">
+                    حاسبة النجاة من الإنذار الأكاديمي (الخطة الفصلية المباشرة)
+                  </h3>
+                  <p className="text-[11px] text-[var(--text-3)] m-0">
+                    حساب واقعي للمعدل الفصلي المطلوب في ساعاتك المسجلة القادمة
+                    لعبور 60.00% وإلغاء الإنذار
+                  </p>
+                </div>
+              </div>
+
+              {/* Toggle for 12, 13, 14 Credit Hours */}
+              <div className="flex items-center gap-1.5 bg-[var(--sunken)] p-1 rounded-xl border border-[var(--line-control)] text-xs">
+                <span className="text-[11px] text-[var(--text-3)] px-1 font-medium">
+                  الساعات المسجلة:
+                </span>
+                {[12, 13, 14].map((hours) => (
+                  <button
+                    key={hours}
+                    type="button"
+                    onClick={() => setProbationPlannedCredits(hours)}
+                    className={cn(
+                      "px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer",
+                      probationPlannedCredits === hours
+                        ? "bg-rose-500 text-white shadow-2xs"
+                        : "text-[var(--text-2)] hover:text-[var(--text)] hover:bg-[var(--line-control)]",
+                    )}
+                  >
+                    {hours} س
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+              <div className="p-3 rounded-xl bg-[var(--surface)] border border-[var(--line)] space-y-1">
+                <span className="text-[var(--text-3)] block text-[11px]">
+                  المعدل الفصلي المطلوب في ({probationPlannedCredits} ساعة):
+                </span>
+                <span
+                  className={cn(
+                    "text-xl font-bold tabular-nums block",
+                    !probationRecoveryAnalysis.isPossible
+                      ? "text-rose-600 dark:text-rose-400"
+                      : probationRecoveryAnalysis.requiredSemesterGPA > 75
+                        ? "text-amber-600 dark:text-amber-400"
+                        : "text-emerald-600 dark:text-emerald-400",
+                  )}
+                  dir="ltr"
+                >
+                  {probationRecoveryAnalysis.requiredSemesterGPA}%
+                </span>
+                <span className="text-[10px] text-[var(--text-3)]">
+                  للخروج إلى 60.00% تراكمي
+                </span>
+              </div>
+
+              <div className="p-3 rounded-xl bg-[var(--surface)] border border-[var(--line)] space-y-1">
+                <span className="text-[var(--text-3)] block text-[11px]">
+                  درجة الصعوبة الأكاديمية:
+                </span>
+                <span
+                  className={cn(
+                    "inline-block px-2 py-0.5 rounded-md font-bold text-xs mt-1 border",
+                    !probationRecoveryAnalysis.isPossible
+                      ? "bg-rose-500/15 text-rose-600 border-rose-500/30"
+                      : probationRecoveryAnalysis.difficulty === "easy"
+                        ? "bg-emerald-500/15 text-emerald-600 border-emerald-500/30"
+                        : "bg-amber-500/15 text-amber-600 border-amber-500/30",
+                  )}
+                >
+                  {probationRecoveryAnalysis.difficultyLabel}
+                </span>
+                <p className="text-[10px] text-[var(--text-3)] pt-1 m-0">
+                  {probationRecoveryAnalysis.isPossible
+                    ? "متاح التحقيق خلال هذا الفصل بانتظام."
+                    : "يلزم استبدال المواد الراسبة بدلاً من مواد جديدة فقط."}
+                </p>
+              </div>
+
+              <div className="p-3 rounded-xl bg-[var(--surface)] border border-[var(--line)] space-y-1">
+                <span className="text-[var(--text-3)] block text-[11px]">
+                  خطة النجاة والإنقاذ السريع:
+                </span>
+                <p className="text-[11px] text-[var(--text-2)] leading-relaxed m-0">
+                  {probationRecoveryAnalysis.isPossible ? (
+                    <>
+                      تحقيق{" "}
+                      <strong>
+                        {probationRecoveryAnalysis.requiredSemesterGPA}%
+                      </strong>{" "}
+                      في مواد الفصل الجديد يرفع معدلك فوق 60%.
+                    </>
+                  ) : (
+                    <strong className="text-rose-600 dark:text-rose-400">
+                      إعادة المساقات الراسبة ترفع المعدل أسرع بكثير دون زيادة
+                      ساعات المقام!
+                    </strong>
+                  )}
+                </p>
+                {retakeRecommendations.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const top = retakeRecommendations[0];
+                      if (top) handleAddWhatIfCourse(top.course.id, 75);
+                    }}
+                    className="text-[11px] font-bold text-rose-600 dark:text-rose-400 hover:underline pt-1 block cursor-pointer"
+                  >
+                    + تجربة إعادة أفضل مادة (
+                    {retakeRecommendations[0]?.course.name})
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* 1. محاكي المعدل المستهدف */}
         <div className="self-start h-fit p-3 rounded-[var(--r-control)] bg-[var(--surface)] border border-[var(--line)] shadow-sm space-y-2">
           <div className="space-y-1">
@@ -641,7 +1008,9 @@ export const GPAPage: React.FC<GPAPageProps> = ({
             </div>
             <p className="text-[12px] text-[var(--text-2)] m-0">
               المساقات الأكاديمية التي تمنح معدلك التراكمي أكبر قفزة ممكنة عند
-              إعادتها:
+              إعادتها (إعادة مادة 3 س بدرجة 75 بدلاً من 45 يرفع معدلك التراكمي
+              بمقدار +{((30 * 3) / Math.max(gradedCredits, 1)).toFixed(1)}% دون
+              زيادة ساعات المقام):
             </p>
           </div>
 
@@ -1038,9 +1407,23 @@ export const GPAPage: React.FC<GPAPageProps> = ({
                         className="hover:bg-[var(--accent)]/5 transition-colors"
                       >
                         <td className="p-2 sm:p-3">
-                          <span className="font-semibold text-[var(--text)] block text-[12px] sm:text-[13px] leading-tight">
-                            {c.name}
-                          </span>
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className="font-semibold text-[var(--text)] block text-[12px] sm:text-[13px] leading-tight">
+                              {c.name}
+                            </span>
+                            {existingCourses.some((ex) => ex.id === c.id) ? (
+                              <span className="px-1.5 py-0.5 text-[9px] sm:text-[10px] font-bold bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-500/25 rounded">
+                                إعادة مساق (السابقة:{" "}
+                                {courseGrades[c.id] ??
+                                  (failedCourseIds.has(c.id) ? "راسب" : "-")}
+                                )
+                              </span>
+                            ) : (
+                              <span className="px-1.5 py-0.5 text-[9px] sm:text-[10px] font-bold bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20 rounded">
+                                مساق جديد
+                              </span>
+                            )}
+                          </div>
                           <span className="text-[10px] sm:text-[12px] text-[var(--text-3)] tabular-nums block font-mono">
                             {c.id}
                           </span>
@@ -1144,6 +1527,26 @@ export const GPAPage: React.FC<GPAPageProps> = ({
                 <span>{resetFeedback}</span>
               </span>
             )}
+            {/* زر تعديل يدوي للسجل */}
+            <button
+              type="button"
+              onClick={() => setIsEditingOfficialRecord((prev) => !prev)}
+              className={cn(
+                "h-[var(--control-h)] px-3 text-[12px] sm:text-[13px] border rounded-[var(--r-control)] font-medium flex items-center gap-1.5 cursor-pointer shadow-2xs transition-colors shrink-0",
+                isEditingOfficialRecord
+                  ? "bg-amber-500/15 border-amber-500 text-amber-700 dark:text-amber-300"
+                  : "bg-[var(--surface)] hover:bg-[var(--sunken)] border-[var(--line-control)] text-[var(--text-2)] hover:text-[var(--text)]",
+              )}
+              title="تعديل درجات السجل يدوياً لحسابات خاصة أو قفل السجل للقراءة الرسمية"
+            >
+              <Pencil size={13} />
+              <span>
+                {isEditingOfficialRecord
+                  ? "قفل السجل الرسمي"
+                  : "تعديل يدوي للسجل"}
+              </span>
+            </button>
+
             <button
               type="button"
               onClick={handleRestoreOriginalGrades}
@@ -1160,6 +1563,18 @@ export const GPAPage: React.FC<GPAPageProps> = ({
             </button>
           </div>
         </div>
+
+        {/* تنبيه وضع التعديل اليدوي للسجل */}
+        {isEditingOfficialRecord && (
+          <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/30 text-xs text-amber-800 dark:text-amber-200 flex items-center gap-2">
+            <Info size={16} className="text-amber-500 shrink-0" />
+            <span>
+              وضع التعديل اليدوي مفعل: تعديل العلامات هنا يغير السجل المحلي فقط.
+              لمحاكاة درجاتك المستقبلية دون تعديل سجلك الفعلي، استخدم جدول
+              "المعدل المتوقع" أعلاه.
+            </span>
+          </div>
+        )}
 
         {/* Academic Record Table */}
         <div className="border border-[var(--line)] rounded-[var(--r-control)] overflow-hidden bg-[var(--surface)] shadow-sm">
@@ -1242,7 +1657,7 @@ export const GPAPage: React.FC<GPAPageProps> = ({
                             <span className="inline-block px-2 py-1 text-[11px] sm:text-[12px] font-bold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 rounded-[var(--r-control)]">
                               ناجح
                             </span>
-                          ) : (
+                          ) : isEditingOfficialRecord ? (
                             <input
                               type="number"
                               min={0}
@@ -1268,6 +1683,38 @@ export const GPAPage: React.FC<GPAPageProps> = ({
                               )}
                               aria-label={`درجة مادة ${c.name}`}
                             />
+                          ) : (
+                            <div className="flex items-center justify-center gap-1.5 flex-wrap">
+                              <span
+                                className={cn(
+                                  "inline-block min-w-[36px] px-2 py-0.5 rounded-lg text-xs sm:text-sm font-bold tabular-nums border privacy-sensitive",
+                                  isFailed
+                                    ? "bg-rose-500/10 border-rose-500/30 text-rose-600 dark:text-rose-400"
+                                    : typeof currentGrade === "number" &&
+                                        currentGrade >= 85
+                                      ? "bg-amber-500/10 border-amber-500/30 text-amber-600 dark:text-amber-400"
+                                      : "bg-[var(--sunken)] border-[var(--line-control)] text-[var(--text)]",
+                                )}
+                              >
+                                {typeof currentGrade === "number"
+                                  ? currentGrade
+                                  : "-"}
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const target = Math.min(
+                                    95,
+                                    Math.max(75, (currentGrade || 40) + 20),
+                                  );
+                                  handleAddWhatIfCourse(c.id, target);
+                                }}
+                                className="px-2 py-1 rounded-lg text-[10px] sm:text-[11px] font-semibold bg-[var(--accent)]/10 text-[var(--accent)] hover:bg-[var(--accent)] hover:text-white transition-all cursor-pointer shrink-0"
+                                title="إضافة المادة للتوقع لمحاكاة أثر إعادتها على المعدل التراكمي دون تعديل السجل"
+                              >
+                                محاكاة الإعادة
+                              </button>
+                            </div>
                           )}
                         </td>
                         <td className="p-2 sm:p-3 text-end tabular-nums text-[11px] sm:text-[13px] text-[var(--text-3)]">

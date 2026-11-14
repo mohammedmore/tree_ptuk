@@ -7,7 +7,6 @@ import {
   ArrowDown,
   CheckCheck,
   Radio,
-  ArrowLeftRight,
   Trash2,
 } from "lucide-react";
 import type { Course, ScheduleEntry } from "../../data";
@@ -38,7 +37,7 @@ export interface PlanItemsTableProps {
   onOpenAddModal: () => void;
   onImportWeeklySchedule: () => void;
   onAddWatchedSection: (courseId: string, section: string) => void;
-  onOpenSafeSwap: (courseId: string) => void;
+  onOpenSafeSwap?: (courseId: string) => void;
 }
 
 export const PlanItemsTable: React.FC<PlanItemsTableProps> = ({
@@ -73,25 +72,26 @@ export const PlanItemsTable: React.FC<PlanItemsTableProps> = ({
           </p>
         </div>
         <div className="flex flex-wrap items-center justify-center gap-3 pt-2">
-          <button
-            type="button"
-            onClick={onOpenAddModal}
-            className="px-4 py-2 rounded-2xl text-xs font-bold bg-[var(--accent)] text-white shadow-sm hover:opacity-90 transition-all cursor-pointer flex items-center gap-1.5"
-          >
-            <Plus size={14} />
-            <span>إضافة مادة</span>
-          </button>
           {activeTab === "A" &&
-            Object.keys(currentWeeklySchedule).length > 0 && (
-              <button
-                type="button"
-                onClick={onImportWeeklySchedule}
-                className="px-4 py-2 rounded-2xl text-xs font-semibold bg-indigo-500/10 text-indigo-700 dark:text-indigo-300 border border-indigo-500/30 hover:bg-indigo-500/20 transition-all cursor-pointer flex items-center gap-1.5"
-              >
-                <Calendar size={14} />
-                <span>استيراد جدولك الأسبوعي الحالي</span>
-              </button>
-            )}
+          Object.keys(currentWeeklySchedule).length > 0 ? (
+            <button
+              type="button"
+              onClick={onImportWeeklySchedule}
+              className="px-4 py-2.5 rounded-2xl text-xs font-bold bg-[var(--accent)] text-white shadow-sm hover:opacity-90 transition-all cursor-pointer flex items-center gap-1.5"
+            >
+              <Calendar size={14} />
+              <span>استيراد جدول الفصل الحالي</span>
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={onOpenAddModal}
+              className="px-4 py-2.5 rounded-2xl text-xs font-bold bg-[var(--accent)] text-white shadow-sm hover:opacity-90 transition-all cursor-pointer flex items-center gap-1.5"
+            >
+              <Plus size={14} />
+              <span>إضافة مساق إلى الخطة</span>
+            </button>
+          )}
         </div>
       </div>
     );
@@ -212,24 +212,6 @@ export const PlanItemsTable: React.FC<PlanItemsTableProps> = ({
                           style={{ width: `${secSat.percent}%` }}
                         />
                       </div>
-                      {secSat.status === "full" &&
-                        !seatWatchList.some(
-                          (w) =>
-                            w.courseId === item.courseId &&
-                            String(w.section) === String(item.section),
-                        ) && (
-                          <button
-                            type="button"
-                            onClick={() =>
-                              onAddWatchedSection(item.courseId, item.section)
-                            }
-                            className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-500/30 hover:bg-amber-500 hover:text-white transition-all cursor-pointer flex items-center gap-1"
-                            title="الشعبة مغلقة - اضغط لمراقبتها وتنبيهك عند شغر مقعد فوراً"
-                          >
-                            <Radio size={10} />
-                            <span>مراقبة المقعد</span>
-                          </button>
-                        )}
                     </div>
                   )}
                 </div>
@@ -331,19 +313,6 @@ export const PlanItemsTable: React.FC<PlanItemsTableProps> = ({
                         })}
                     </select>
                   </div>
-                )}
-
-                {/* Safe Swap Action */}
-                {availableSections.length > 1 && (
-                  <button
-                    type="button"
-                    onClick={() => onOpenSafeSwap(item.courseId)}
-                    className="px-2.5 py-1.5 rounded-xl text-xs font-semibold bg-[var(--surface)] hover:bg-[var(--sunken)] text-[var(--text-2)] hover:text-[var(--text)] border border-[var(--line-control)] transition-all cursor-pointer flex items-center gap-1"
-                    title="التبديل الآمن إلى شعبة بديلة أخرى دون تعارض"
-                  >
-                    <ArrowLeftRight size={13} className="text-indigo-500" />
-                    <span>تبديل</span>
-                  </button>
                 )}
 
                 {/* Add to Seat Watcher */}

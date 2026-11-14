@@ -1,6 +1,19 @@
 export const courseCommonNames: Record<string, string> = {
   "15010101": "كالكولس 1",
   "15010102": "كالكولس 2",
+  "15010201": "كالكولس 3",
+  "15010301": "معادلات تفاضلية",
+  "15020101": "فيزياء 1",
+  "15020102": "فيزياء 2",
+  "15020105": "مختبر فيزياء 1",
+  "15020106": "مختبر فيزياء 2",
+  "15200106": "إنجليزي 1",
+  "15200112": "إنجليزي 2",
+  "15200099": "استدراكي إنجليزي",
+  "13010006": "مهارات حاسوب",
+  "14010101": "عربي",
+  "14010102": "فلسطينية",
+  "14010103": "إسلامية",
   "12140101": "C++",
   "12140102": "جافا",
   "12140203": "داتا ستركشر",
@@ -28,19 +41,61 @@ export const courseCommonNames: Record<string, string> = {
 
 export const TOTAL_CREDITS = 164; // Added this constant
 
-export const getYearFromId = (id: string): string => {
+export const isCseMajor = (majorId?: string): boolean => {
+  if (!majorId) return false;
+  const clean = majorId.toLowerCase().trim();
+  return (
+    clean === "cse" ||
+    clean === "cse-2023" ||
+    clean.startsWith("cse_") ||
+    clean.includes("أنظمة-الحاسوب") ||
+    clean.includes("أنظمة الحاسوب")
+  );
+};
+
+export const getYearFromId = (id: string, maxYears?: number): string => {
   if (id.length >= 6) {
     const levelChar = id.charAt(5);
     const level = parseInt(levelChar);
-    if (!isNaN(level) && level >= 1 && level <= 5) return level.toString();
+    if (!isNaN(level) && level >= 1 && level <= 5) {
+      if (typeof maxYears === "number" && level > maxYears) {
+        return maxYears.toString();
+      }
+      return level.toString();
+    }
   }
   if (id.startsWith("1520") || id.startsWith("1301")) return "1";
   if (id.startsWith("121401")) return "1";
   if (id.startsWith("121402")) return "2";
-  if (id.startsWith("121403")) return "3";
-  if (id.startsWith("121404")) return "4";
-  if (id.startsWith("121405")) return "5";
+  if (id.startsWith("121403")) return typeof maxYears === "number" ? Math.min(maxYears, 3).toString() : "3";
+  if (id.startsWith("121404")) return typeof maxYears === "number" ? Math.min(maxYears, 4).toString() : "4";
+  if (id.startsWith("121405")) return typeof maxYears === "number" ? Math.min(maxYears, 5).toString() : "5";
   return "1";
+};
+
+export const getYearOfCourse = (
+  courseOrId: { id?: string; semester?: string } | string,
+  courseSemesterMap?: Record<string, string>,
+  maxYears?: number,
+): string => {
+  const course = typeof courseOrId === "object" ? courseOrId : null;
+  const id = typeof courseOrId === "string" ? courseOrId : course?.id || "";
+
+  // 1. Explicit semester label from course or plan map
+  const sem =
+    (course && course.semester) ||
+    (courseSemesterMap && courseSemesterMap[id]) ||
+    "";
+  if (sem) {
+    if (sem.includes("الأولى")) return "1";
+    if (sem.includes("الثانية")) return "2";
+    if (sem.includes("الثالثة")) return typeof maxYears === "number" ? Math.min(maxYears, 3).toString() : "3";
+    if (sem.includes("الرابعة")) return typeof maxYears === "number" ? Math.min(maxYears, 4).toString() : "4";
+    if (sem.includes("الخامسة")) return typeof maxYears === "number" ? Math.min(maxYears, 5).toString() : "5";
+  }
+
+  // 2. ID-based fallback
+  return getYearFromId(id, maxYears);
 };
 
 export const SEMESTERS = [
@@ -135,14 +190,18 @@ export const courseRecommendedSemesters: Record<string, string> = {
   "15200107": "السنة الخامسة - الفصل الثاني",
 };
 
-export const getRecommendedSemesterOfCourse = (course: {
-  id: string;
-  category: string;
-  semester?: string;
-  recommendedSemester?: string;
-  prerequisites?: string[];
-  name?: string;
-}): string => {
+export const getRecommendedSemesterOfCourse = (
+  course: {
+    id: string;
+    category: string;
+    semester?: string;
+    recommendedSemester?: string;
+    prerequisites?: string[];
+    name?: string;
+  },
+  activeMajorId?: string,
+  maxYears = 5,
+): string => {
   // 1. If explicit semester is already specified on course, normalize and validate
   const rawSem = course.semester || course.recommendedSemester;
   if (rawSem) {
@@ -190,21 +249,23 @@ export const getRecommendedSemesterOfCourse = (course: {
     if (SEMESTERS.includes(resolved)) return resolved;
   }
 
-  // 2. If present in pre-configured CSE map, use it
-  if (courseRecommendedSemesters[course.id]) {
+  // 2. If present in pre-configured CSE map, only use it if major is CSE or no major specified
+  const isCse = !activeMajorId || isCseMajor(activeMajorId);
+  if (isCse && courseRecommendedSemesters[course.id]) {
     return courseRecommendedSemesters[course.id];
   }
 
-  // 3. Determine academic year
-  const yearStr = getYearFromId(course.id);
+  // 3. Determine academic year, bounded strictly by degree maximum years
+  const rawYear = parseInt(getYearFromId(course.id), 10) || 1;
+  const clampedYear = Math.min(maxYears, Math.max(1, rawYear));
   const yearWord =
     {
-      "1": "السنة الأولى",
-      "2": "السنة الثانية",
-      "3": "السنة الثالثة",
-      "4": "السنة الرابعة",
-      "5": "السنة الخامسة",
-    }[yearStr] || "السنة الأولى";
+      1: "السنة الأولى",
+      2: "السنة الثانية",
+      3: "السنة الثالثة",
+      4: "السنة الرابعة",
+      5: "السنة الخامسة",
+    }[clampedYear] || "السنة الأولى";
 
   // 4. University electives - distribute evenly
   if (course.category === "متطلب جامعة اختياري") {
@@ -224,12 +285,11 @@ export const getRecommendedSemesterOfCourse = (course: {
 
   // 6. Mandatory courses: balance between Semester 1 and Semester 2
   const name = course.name || "";
-  const yNum = parseInt(yearStr, 10) || 1;
   const hasPrereqsInSameYear =
     Array.isArray(course.prerequisites) &&
     course.prerequisites.some((p) => {
       const pYear = parseInt(getYearFromId(p), 10) || 1;
-      return pYear === yNum;
+      return pYear === clampedYear;
     });
   const isSecondPart =
     name.includes("(2)") ||
@@ -239,6 +299,11 @@ export const getRecommendedSemesterOfCourse = (course: {
     name.includes("مختبر") ||
     name.includes("عملي");
   const lastDigit = parseInt(course.id.slice(-1), 10) || 0;
+
+  // Remedial / basic courses always go to Semester 1
+  if (course.category?.includes("استدراكي") || name.includes("استدراكي")) {
+    return `${yearWord} - الفصل الأول`;
+  }
 
   // Part 2 courses or courses with prerequisites in same year go to Semester 2
   const isSemester2 =

@@ -242,6 +242,7 @@ export const PlanMobileView: React.FC<PlanMobileViewProps> = ({
                   return (
                     <div
                       key={c.id}
+                      data-course-id={c.id}
                       role="button"
                       tabIndex={0}
                       onKeyDown={(e) => {
@@ -301,8 +302,8 @@ export const PlanMobileView: React.FC<PlanMobileViewProps> = ({
                             </span>
                           ) : (
                             <span className="text-[10px] px-1.5 py-0.5 rounded-md font-medium text-[var(--text-3)] bg-[var(--sunken)] border border-[var(--line-control)] flex items-center gap-0.5">
-                              <X size={8} strokeWidth={2.5} />
-                              متبقية ✖
+                              <Circle size={7} strokeWidth={2.5} />
+                              متبقية
                             </span>
                           )}
                         </div>

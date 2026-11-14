@@ -11,7 +11,7 @@ import {
 } from "lucide-react";
 import { cn } from "../../utils";
 import type { Course, ScheduleEntry } from "../../data";
-import { SEMESTERS, TOTAL_CREDITS } from "../../constants";
+import { SEMESTERS, TOTAL_CREDITS, isCseMajor } from "../../constants";
 import {
   isRemedialCourse,
   calculateGPA,
@@ -38,6 +38,7 @@ interface ExportModalProps {
   darkMode: boolean;
   categoryRequirements?: Record<string, number>;
   totalDegreeCredits?: number;
+  activeMajorId?: string;
 }
 
 const ExportModal: React.FC<ExportModalProps> = ({
@@ -57,6 +58,7 @@ const ExportModal: React.FC<ExportModalProps> = ({
   darkMode,
   categoryRequirements,
   totalDegreeCredits,
+  activeMajorId,
 }) => {
   const [isExportLoading, setIsExportLoading] = React.useState(false);
   const [importError, setImportError] = React.useState<string | null>(null);
@@ -84,8 +86,9 @@ const ExportModal: React.FC<ExportModalProps> = ({
       );
       if (sum >= 60 && sum <= 260) return sum;
     }
-    return TOTAL_CREDITS;
-  }, [totalDegreeCredits, categoryRequirements]);
+    const isCse = isCseMajor(activeMajorId);
+    return isCse ? TOTAL_CREDITS : 132;
+  }, [totalDegreeCredits, categoryRequirements, activeMajorId]);
   const courseIds = React.useMemo(
     () => new Set(courses.map((course) => course.id)),
     [courses],

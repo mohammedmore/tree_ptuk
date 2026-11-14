@@ -1,6 +1,8 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import type { ScheduleEntry, Course } from "../data";
 import { readAppStorageValue, serializeAppStorageValue } from "../appStorage";
+import { isCseMajor } from "../constants";
+import { getActiveMajorId } from "../services/majorService";
 
 interface UseAcademicPlanOptions {
   reportStorageIssue?: (msg: string) => void;
@@ -60,18 +62,21 @@ export function useAcademicPlan(options: UseAcademicPlanOptions = {}) {
   const [selectedElectives, setSelectedElectives] = useState<
     Record<string, string>
   >(() => {
+    const isCse = isCseMajor(getActiveMajorId());
     return readAppStorageValue<Record<string, string>>(
       "selected_electives_map",
-      {
-        univ_1: "13020001",
-        univ_2: "13020009",
-        univ_3: "13020026",
-        spec_1: "12140416",
-        spec_2: "12140549",
-        spec_3: "12140505",
-        spec_4: "12140510",
-        spec_5: "12140526",
-      },
+      isCse
+        ? {
+            univ_1: "13020001",
+            univ_2: "13020009",
+            univ_3: "13020026",
+            spec_1: "12140416",
+            spec_2: "12140549",
+            spec_3: "12140505",
+            spec_4: "12140510",
+            spec_5: "12140526",
+          }
+        : {},
       reportStorageIssue,
     );
   });

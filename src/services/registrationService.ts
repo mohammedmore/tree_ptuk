@@ -86,6 +86,7 @@ export async function prewarmRegistration(
   const url = `${getBaseApiUrl()}/api/registration/prewarm`;
 
   try {
+    const effectiveId = studentId || (demoMode ? "demo-student" : "");
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 6000);
 
@@ -95,7 +96,7 @@ export async function prewarmRegistration(
         "Content-Type": "application/json",
         Accept: "application/json",
       },
-      body: JSON.stringify({ studentId, password, demoMode }),
+      body: JSON.stringify({ studentId: effectiveId, password, demoMode }),
       signal: controller.signal,
     });
     clearTimeout(timeout);

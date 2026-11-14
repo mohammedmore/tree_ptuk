@@ -122,15 +122,20 @@ export function computeCriticalPath(
     name?: string;
     isGraduationProject?: boolean;
     minCredits?: number;
-  }) =>
-    Boolean(
+  }) => {
+    const name = (c.name || "").toLowerCase();
+    return Boolean(
       c.isGraduationProject ||
-      c.name?.includes("مشروع تخرج") ||
-      c.name?.includes("مشروع التخرج") ||
-      (c.minCredits && c.minCredits >= 100) ||
+      name.includes("مشروع تخرج") ||
+      name.includes("مشروع التخرج") ||
+      name.includes("بحث تخرج") ||
+      name.includes("بحث التخرج") ||
+      name.includes("حلقة بحث") ||
+      (c.minCredits && c.minCredits >= 90) ||
       c.id === "12140524" ||
       c.id === "19041492",
     );
+  };
 
   const capstoneCourses = courses.filter(isCapstone);
   let maxCapstoneLen = 0;
@@ -581,7 +586,11 @@ export function computeGraphLayout(options: LayoutOptions): LayoutResult {
     });
 
     const title =
-      c < SEMESTER_LABELS.length ? SEMESTER_LABELS[c] : `المستوى ${c + 1}`;
+      layoutMode === "prerequisite"
+        ? `المستوى ${c + 1}`
+        : c < SEMESTER_LABELS.length
+          ? SEMESTER_LABELS[c]
+          : `المستوى ${c + 1}`;
 
     columnHeaders.push({
       column: c,

@@ -41,7 +41,10 @@ export const studentParamSchema = z.object({
 });
 
 export const registrationPrewarmSchema = z.object({
-  studentId: studentIdRule,
+  studentId: studentIdRule
+    .optional()
+    .or(z.literal(""))
+    .transform((val) => val || "demo-student"),
   password: z
     .string()
     .max(128, "كلمة المرور يجب ألا تتجاوز 128 حرفاً")
@@ -158,7 +161,7 @@ export const syncPtukSchema = z.object({
 export const coursesQuerySchema = z.object({
   codes: z.string().max(500).optional(),
   search: z.string().max(200, "استعلام بحث طويل جداً.").optional(),
-  limit: z.coerce.number().int().min(1).max(1000).optional().default(500),
+  limit: z.coerce.number().int().min(1).max(3000).optional().default(2000),
   offset: z.coerce.number().int().min(0).optional().default(0),
   compact: z.enum(["true", "false", "1", "0"]).optional(),
   fields: z.string().max(200).optional(),
@@ -178,8 +181,8 @@ export const majorParamSchema = z.object({
     .string()
     .trim()
     .min(2, "معرف التخصص غير صالح.")
-    .max(50, "معرف التخصص غير صالح.")
-    .regex(/^[a-zA-Z0-9_\-]{2,50}$/, "معرف التخصص غير صالح."),
+    .max(60, "معرف التخصص غير صالح.")
+    .regex(/^[a-zA-Z0-9_\-\u0600-\u06FF]{2,60}$/, "معرف التخصص غير صالح."),
 });
 
 export const majorBodySchema = z.object({

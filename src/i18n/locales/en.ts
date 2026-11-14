@@ -2,12 +2,12 @@ import { TranslationDictionary } from "../types";
 
 export const en: TranslationDictionary = {
   nav: {
-    plan: "Degree Plan",
-    courses: "Course Catalog",
-    schedule: "Weekly Schedule",
-    gpa: "GPA Calculator",
-    semesterPlanning: "Semester Planning",
-    registration: "Course Registration",
+    plan: "Plan",
+    courses: "Courses",
+    schedule: "Schedule",
+    gpa: "GPA",
+    semesterPlanning: "Planning",
+    registration: "Register",
     calendar: "Academic Calendar",
     login: "Student Login",
     tools: "Tools",

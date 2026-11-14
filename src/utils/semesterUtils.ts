@@ -143,6 +143,7 @@ export function resolveAcademicSemester(
   title: string,
   cohortYear?: string | number | null,
   fallbackIndex?: number,
+  maxYears = 5,
 ): string {
   if (!title) {
     if (
@@ -180,7 +181,7 @@ export function resolveAcademicSemester(
       ? "الفصل الثاني"
       : "الفصل الأول";
 
-  // Determine academic year level (1 to 5)
+  // Determine academic year level (1 to maxYears)
   const yearMatch = clean.match(/\b(20\d{2})\b/);
   let yearNum = 1;
 
@@ -189,10 +190,10 @@ export function resolveAcademicSemester(
 
   if (yearMatch && numCohort && !isNaN(numCohort)) {
     const calendarStartYear = parseInt(yearMatch[1], 10);
-    yearNum = Math.max(1, Math.min(5, calendarStartYear - numCohort + 1));
+    yearNum = Math.max(1, Math.min(maxYears, calendarStartYear - numCohort + 1));
   } else if (fallbackIndex !== undefined && fallbackIndex >= 0) {
     // If fallbackIndex is provided: regular semester progression
-    yearNum = Math.max(1, Math.min(5, Math.floor(fallbackIndex / 2) + 1));
+    yearNum = Math.max(1, Math.min(maxYears, Math.floor(fallbackIndex / 2) + 1));
   }
 
   const yearWords: Record<number, string> = {
@@ -224,8 +225,14 @@ export function determineUpcomingSemester(
   } | null,
   completedCourses?: Set<string>,
   courses?: Course[],
+  options?: {
+    maxYears?: number;
+    activeMajorId?: string;
+  },
 ): string {
   const cohort = extractCohortYear(student);
+  const maxYears = options?.maxYears || 5;
+  const availableSemesters = REGULAR_SEMESTERS.slice(0, maxYears * 2);
 
   // 1. Check if student has registered / in-progress courses in their transcript or profile.
   // Rule: "دائما اذا مسجل مواد يعني الفصل الحالي يعني لازم يخطط للفصل الي بعده"
@@ -270,6 +277,7 @@ export function determineUpcomingSemester(
         latestSem?.title || student.currentSemester || "",
         cohort,
         regularCountBeforeLatest,
+        maxYears,
       );
 
       return getNextPlanningSemester(currentEnrolledSem);
@@ -284,10 +292,10 @@ export function determineUpcomingSemester(
         !s.title.toLowerCase().includes("summer"),
     ).length;
 
-    if (completedRegularCount < REGULAR_SEMESTERS.length) {
-      return REGULAR_SEMESTERS[completedRegularCount];
+    if (completedRegularCount < availableSemesters.length) {
+      return availableSemesters[completedRegularCount];
     }
-    return REGULAR_SEMESTERS[REGULAR_SEMESTERS.length - 1];
+    return availableSemesters[availableSemesters.length - 1];
   }
 
   // 3. Fallback when student has currentSemester string from portal profile
@@ -299,7 +307,12 @@ export function determineUpcomingSemester(
       student.currentSemester.toLowerCase().includes("summer");
 
     if (!isSummerPortal) {
-      const resolved = resolveAcademicSemester(student.currentSemester, cohort);
+      const resolved = resolveAcademicSemester(
+        student.currentSemester,
+        cohort,
+        undefined,
+        maxYears,
+      );
       if (SEMESTERS.includes(resolved)) {
         if (
           Array.isArray(student.registeredCourses) &&
@@ -322,8 +335,12 @@ export function determineUpcomingSemester(
     let maxRegularIndex = -1;
     for (const c of courses) {
       if (completedCourses.has(c.id)) {
-        const rec = getRecommendedSemesterOfCourse(c);
-        const idx = REGULAR_SEMESTERS.indexOf(rec as any);
+        const rec = getRecommendedSemesterOfCourse(
+          c,
+          options?.activeMajorId,
+          maxYears,
+        );
+        const idx = availableSemesters.indexOf(rec as any);
         if (idx > maxRegularIndex) {
           maxRegularIndex = idx;
         }
@@ -332,13 +349,13 @@ export function determineUpcomingSemester(
 
     if (
       maxRegularIndex >= 0 &&
-      maxRegularIndex + 1 < REGULAR_SEMESTERS.length
+      maxRegularIndex + 1 < availableSemesters.length
     ) {
-      return REGULAR_SEMESTERS[maxRegularIndex + 1];
+      return availableSemesters[maxRegularIndex + 1];
     }
   }
 
-  return REGULAR_SEMESTERS[0];
+  return availableSemesters[0] || REGULAR_SEMESTERS[0];
 }
 
 /**
@@ -376,6 +393,10 @@ export function autoPopulateUpcomingSemester(
   passedSet: Set<string>,
   existingPlanned: Record<string, string>,
   registeredIds?: string[],
+  options?: {
+    maxYears?: number;
+    activeMajorId?: string;
+  },
 ): Record<string, string> {
   const next = { ...existingPlanned };
   const isSummer = targetSemester.includes("صيفي");
@@ -407,17 +428,62 @@ export function autoPopulateUpcomingSemester(
   const recommendedForSemester = courses.filter((c) => {
     if (passedSet.has(c.id) || registeredSet.has(c.id) || next[c.id])
       return false;
-    const rec = getRecommendedSemesterOfCourse(c);
+    const rec = getRecommendedSemesterOfCourse(
+      c,
+      options?.activeMajorId,
+      options?.maxYears,
+    );
     return rec === targetSemester;
   });
 
+  // Count how many electives are already planned in this semester
+  let plannedElectivesCount = Object.entries(next)
+    .filter(([, s]) => s === targetSemester)
+    .filter(([id]) => {
+      const cat = coursesById.get(id)?.category;
+      return cat === "متطلب جامعة اختياري" || cat === "متطلب تخصص اختياري";
+    }).length;
+
+  // Build dependency unlock map to prioritize bottleneck prerequisite courses
+  const unlockCount = new Map<string, number>();
+  for (const c of courses) {
+    for (const p of c.prerequisites || []) {
+      unlockCount.set(p, (unlockCount.get(p) || 0) + 1);
+    }
+  }
+
+  const getAcademicPriority = (cat: string) => {
+    if (cat === "متطلب استدراكي إجباري") return 0;
+    if (cat === "متطلب تخصص إجباري" || cat === "متطلب كلية إجباري") return 1;
+    if (cat === "متطلب جامعة إجباري") return 2;
+    if (cat === "متطلب تخصص اختياري") return 3;
+    return 4; // متطلب جامعة اختياري
+  };
+
+  recommendedForSemester.sort((a, b) => {
+    const pA = getAcademicPriority(a.category);
+    const pB = getAcademicPriority(b.category);
+    if (pA !== pB) return pA - pB;
+    const uA = unlockCount.get(a.id) || 0;
+    const uB = unlockCount.get(b.id) || 0;
+    return uB - uA;
+  });
+
   for (const course of recommendedForSemester) {
+    const isElective =
+      course.category === "متطلب جامعة اختياري" ||
+      course.category === "متطلب تخصص اختياري";
+    if (isElective && plannedElectivesCount >= 1 && !isSummer) {
+      continue;
+    }
+
     const prereqsMet = (course.prerequisites || []).every((p) =>
       satisfiedPrereqs.has(p),
     );
     if (prereqsMet && currentHours + course.credits <= creditLimit) {
       next[course.id] = targetSemester;
       currentHours += course.credits;
+      if (isElective) plannedElectivesCount++;
     }
   }
 

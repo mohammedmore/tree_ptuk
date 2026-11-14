@@ -38,12 +38,14 @@ import {
 import { BaseModal } from "../common/BaseModal";
 import { ErrorBoundary } from "../common/ErrorBoundary";
 import type { Course, ScheduleEntry } from "../../data";
-import { cn } from "../../utils";
+import { cn, normalizeArabicText, wordsMatch } from "../../utils";
 import {
   SEMESTERS,
   getRecommendedSemesterOfCourse,
   getYearFromId,
+  getYearOfCourse,
 } from "../../constants";
+import { resolveMajorDegreeYears } from "../../core/advisoryPlan";
 import { isCourseAvailable } from "../../core/courseProgress";
 import {
   fetchSyncStatus,
@@ -59,12 +61,10 @@ import {
   clearCoursesCache,
 } from "../../services/courseService";
 import {
-  generateAllSchedules,
   normalizeDayKey,
   dayKeyToName,
-  explainScheduleConflicts,
-  getStats,
   calculateScheduleQuality,
+  getBlockStats,
 } from "../../services/scheduleSolver";
 import {
   generateSchedulesAsync,
@@ -80,10 +80,6 @@ import type {
   ScheduleStats,
 } from "../../services/scheduleSolver";
 import {
-  exportScheduleToICal,
-  downloadScheduleImage,
-} from "../../services/icalExport";
-import {
   trackMultipleSections,
   isSectionClosed,
   getSectionCapacityDetails,
@@ -94,6 +90,9 @@ import {
   getSemesterDrafts,
   createSemesterDraft,
 } from "../../core/scheduleDrafts";
+import { hasStudentAcademicWarning } from "../../core/academicPolicy";
+import { useAcademicStore } from "../../stores";
+import { readAppStorageValue } from "../../appStorage";
 
 interface WeeklyScheduleModalProps {
   isOpen: boolean;
@@ -105,10 +104,13 @@ interface WeeklyScheduleModalProps {
     React.SetStateAction<Record<string, Record<string, ScheduleEntry>>>
   >;
   completedCourses?: Set<string>;
+  activeMajorId?: string;
+  totalDegreeCredits?: number;
+  selectedSemester?: string;
+  preferredDoctor?: string | null;
 }
 
 const DAYS = ["السبت", "الأحد", "الاثنين", "الثلاثاء", "الأربعاء", "الخميس"];
-const EDIT_DAYS = ["الأحد", "الاثنين", "الثلاثاء", "الأربعاء", "الخميس"];
 const DAY_KEYS = ["سب", "أح", "اث", "ثلا", "ار", "خمـ"];
 const DAY_NAME_BY_KEY = new Map(
   DAY_KEYS.map((key, index) => [key, DAYS[index]]),
@@ -264,14 +266,39 @@ export const WeeklyScheduleModal: React.FC<WeeklyScheduleModalProps> = ({
   weeklySchedule,
   setWeeklySchedule,
   completedCourses,
+  activeMajorId,
+  totalDegreeCredits,
+  selectedSemester: propSelectedSemester,
+  preferredDoctor: propPreferredDoctor,
 }) => {
-  const [selectedSemester, setSelectedSemester] = useState<string>(
-    () =>
+  const currentStudent = useAcademicStore((s) => s.currentStudent);
+  const [selectedSemester, setSelectedSemester] = useState<string>(() => {
+    if (propSelectedSemester && SEMESTERS.includes(propSelectedSemester)) {
+      return propSelectedSemester;
+    }
+    try {
+      const stored = sessionStorage.getItem("ptuk_selected_semester");
+      if (stored && SEMESTERS.includes(stored)) return stored;
+    } catch {}
+    const storeSemester = useAcademicStore.getState().currentPlanningSemester;
+    if (storeSemester && SEMESTERS.includes(storeSemester)) return storeSemester;
+    return (
       SEMESTERS.find((semester) =>
         Object.values(plannedCourses).includes(semester),
-      ) || SEMESTERS[0],
-  );
-  const [activeTab, setActiveTab] = useState<"edit" | "visual">("visual");
+      ) || SEMESTERS[0]
+    );
+  });
+  const [preferredDoctor, setPreferredDoctor] = useState<string | null>(() => {
+    if (propPreferredDoctor) return propPreferredDoctor;
+    try {
+      return sessionStorage.getItem("ptuk_preferred_doctor") || null;
+    } catch {
+      return null;
+    }
+  });
+  const [earliestClassTime, setEarliestClassTime] = useState<string>("");
+  const [latestClassTime, setLatestClassTime] = useState<string>("");
+
   const [selectedCourseCodes, setSelectedCourseCodes] = useState<string[]>(() =>
     Object.entries(plannedCourses)
       .filter(([, semester]) => semester === selectedSemester)
@@ -292,14 +319,12 @@ export const WeeklyScheduleModal: React.FC<WeeklyScheduleModalProps> = ({
   const [courseLoadAttempt, setCourseLoadAttempt] = useState(0);
   const [selectionLoadAttempt, setSelectionLoadAttempt] = useState(0);
   const [activeScheduleIndex, setActiveScheduleIndex] = useState(0);
-  const [hasGeneratedSchedules, setHasGeneratedSchedules] = useState(true);
   const [isFiltersOpen, setIsFiltersOpen] = useState(false);
   const [isComparing, setIsComparing] = useState(false);
   const [compareScheduleIndexA, setCompareScheduleIndexA] = useState(0);
   const [compareScheduleIndexB, setCompareScheduleIndexB] = useState(1);
   const [adoptedFeedback, setAdoptedFeedback] = useState(false);
   const [trackedFeedback, setTrackedFeedback] = useState<string | null>(null);
-  const [isExportingPng, setIsExportingPng] = useState(false);
   const [scheduleFilters, setScheduleFilters] =
     useState<CatalogScheduleFilters>({
       freeDays: [],
@@ -314,8 +339,6 @@ export const WeeklyScheduleModal: React.FC<WeeklyScheduleModalProps> = ({
   const [isAddCourseOpen, setIsAddCourseOpen] = useState<boolean>(
     () => selectedCourseCodes.length === 0,
   );
-  const [isHideSelectedCourses, setIsHideSelectedCourses] =
-    useState<boolean>(false);
   const [scheduleViewMode, setScheduleViewMode] = useState<"daily" | "weekly">(
     () => {
       if (typeof window !== "undefined" && window.innerWidth < 768) {
@@ -432,16 +455,61 @@ export const WeeklyScheduleModal: React.FC<WeeklyScheduleModalProps> = ({
     selectedYearName,
   ]);
 
+  const retakeCourseIds = useMemo(() => {
+    const ids = new Set<string>();
+    if (currentStudent?.failedCourseIds) {
+      currentStudent.failedCourseIds.forEach((id) => ids.add(id));
+    }
+    const storedFailed = readAppStorageValue<string[]>(
+      "failed_course_ids",
+      [],
+      () => {},
+    );
+    if (Array.isArray(storedFailed)) {
+      storedFailed.forEach((id) => ids.add(id));
+    }
+    const grades = useAcademicStore.getState().courseGrades;
+    if (grades) {
+      Object.entries(grades).forEach(([id, grade]) => {
+        if (typeof grade === "number" && grade > 0 && grade < 60) {
+          ids.add(id);
+        }
+      });
+    }
+    return ids;
+  }, [currentStudent]);
+
   const groupedEligibleCourses = useMemo(() => {
     if (eligibleMajorCourses.length === 0) return [];
 
+    const retakeCourses = eligibleMajorCourses.filter((course) =>
+      retakeCourseIds.has(course.id),
+    );
+    const retakeGroup =
+      retakeCourses.length > 0
+        ? [
+            {
+              id: "retake-priority",
+              title: "مساقات الإعادة للتحسين (أولوية رفع المعدل)",
+              courses: retakeCourses,
+            },
+          ]
+        : [];
+
     if (eligibleGroupBy === "year") {
-      const yearOrder = [
+      const allYearNames = [
         "السنة الأولى",
         "السنة الثانية",
         "السنة الثالثة",
         "السنة الرابعة",
         "السنة الخامسة",
+      ];
+      const maxYears = resolveMajorDegreeYears(
+        totalDegreeCredits,
+        activeMajorId,
+      ).maxYears;
+      const yearOrder = [
+        ...allYearNames.slice(0, maxYears),
         "مساقات عامة / أخرى",
       ];
       const groupsMap = new Map<string, typeof eligibleMajorCourses>();
@@ -450,27 +518,18 @@ export const WeeklyScheduleModal: React.FC<WeeklyScheduleModalProps> = ({
         let yName = "مساقات عامة / أخرى";
         const rec = course.recommendedSemester || "";
         if (rec.startsWith("السنة ")) {
-          yName = rec.split(" - ")[0].trim();
+          const parsed = rec.split(" - ")[0].trim();
+          if (yearOrder.includes(parsed)) {
+            yName = parsed;
+          } else {
+            yName = allYearNames[maxYears - 1] || "مساقات عامة / أخرى";
+          }
         } else {
-          const digit = getYearFromId(course.id);
-          switch (digit) {
-            case "1":
-              yName = "السنة الأولى";
-              break;
-            case "2":
-              yName = "السنة الثانية";
-              break;
-            case "3":
-              yName = "السنة الثالثة";
-              break;
-            case "4":
-              yName = "السنة الرابعة";
-              break;
-            case "5":
-              yName = "السنة الخامسة";
-              break;
-            default:
-              yName = "مساقات عامة / أخرى";
+          const yNum = parseInt(getYearOfCourse(course, undefined, maxYears), 10);
+          if (!isNaN(yNum) && yNum >= 1 && yNum <= maxYears) {
+            yName = allYearNames[yNum - 1];
+          } else {
+            yName = "مساقات عامة / أخرى";
           }
         }
 
@@ -479,13 +538,15 @@ export const WeeklyScheduleModal: React.FC<WeeklyScheduleModalProps> = ({
         groupsMap.set(yName, existing);
       }
 
-      return yearOrder
+      const yearGroups = yearOrder
         .filter((y) => groupsMap.has(y) && groupsMap.get(y)!.length > 0)
         .map((y) => ({
           id: y,
           title: y,
           courses: groupsMap.get(y)!,
         }));
+
+      return [...retakeGroup, ...yearGroups];
     } else {
       // Group by category
       const categoryOrder = [
@@ -514,13 +575,15 @@ export const WeeklyScheduleModal: React.FC<WeeklyScheduleModalProps> = ({
         return a.localeCompare(b, "ar");
       });
 
-      return sortedCategories.map((cat) => ({
+      const catGroups = sortedCategories.map((cat) => ({
         id: cat,
         title: cat,
         courses: groupsMap.get(cat)!,
       }));
+
+      return [...retakeGroup, ...catGroups];
     }
-  }, [eligibleMajorCourses, eligibleGroupBy]);
+  }, [eligibleMajorCourses, eligibleGroupBy, retakeCourseIds, totalDegreeCredits, activeMajorId]);
 
   const handleAddAllEligible = () => {
     const codes = eligibleMajorCourses.map((c) => c.id);
@@ -535,21 +598,6 @@ export const WeeklyScheduleModal: React.FC<WeeklyScheduleModalProps> = ({
     triggerHaptic("selection");
     setActiveScheduleIndex(0);
   };
-  const manualCourses = useMemo(
-    () =>
-      selectedCourseCodes.map((id) => {
-        const catalogCourse =
-          selectedCourses.find((course) => course.id === id) ??
-          availableCourses.find((course) => course.id === id);
-        const plannedCourse = coursesById.get(id);
-        return {
-          id,
-          name: catalogCourse?.name ?? plannedCourse?.name ?? id,
-          credits: plannedCourse?.credits ?? 0,
-        };
-      }),
-    [selectedCourseCodes, selectedCourses, availableCourses, coursesById],
-  );
 
   useEffect(() => {
     if (!isOpen) return;
@@ -597,7 +645,7 @@ export const WeeklyScheduleModal: React.FC<WeeklyScheduleModalProps> = ({
   }, [searchQuery]);
 
   useEffect(() => {
-    if (!isOpen || activeTab !== "visual" || !debouncedQuery.trim()) {
+    if (!isOpen || !debouncedQuery.trim()) {
       setIsSearching(false);
       setSearchError(null);
       return;
@@ -626,7 +674,7 @@ export const WeeklyScheduleModal: React.FC<WeeklyScheduleModalProps> = ({
     return () => {
       cancelled = true;
     };
-  }, [isOpen, activeTab, debouncedQuery]);
+  }, [isOpen, debouncedQuery]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -667,6 +715,94 @@ export const WeeklyScheduleModal: React.FC<WeeklyScheduleModalProps> = ({
       (code, index) => selectedCourses[index]?.id === code,
     );
 
+  const selectedTotalCredits = useMemo(() => {
+    return selectedCourseCodes.reduce((sum, id) => {
+      const c = coursesById.get(id);
+      return sum + (c?.credits ?? 3);
+    }, 0);
+  }, [selectedCourseCodes, coursesById]);
+
+  const isProbation = useMemo(() => {
+    return (
+      hasStudentAcademicWarning(currentStudent) ||
+      (typeof currentStudent?.gpa === "number" &&
+        currentStudent.gpa > 0 &&
+        currentStudent.gpa < 60)
+    );
+  }, [currentStudent]);
+
+  const effectiveFilters = useMemo<CatalogScheduleFilters>(() => {
+    const filters: CatalogScheduleFilters = {
+      ...scheduleFilters,
+      excludedSections: { ...(scheduleFilters.excludedSections ?? {}) },
+      pinnedSections: { ...(scheduleFilters.pinnedSections ?? {}) },
+    };
+
+    // 1. Commuter travel time constraints
+    if (earliestClassTime || latestClassTime) {
+      const minHour = earliestClassTime
+        ? parseFloat(earliestClassTime.split(":")[0]) +
+          parseFloat(earliestClassTime.split(":")[1] || "0") / 60
+        : 0;
+      const maxHour = latestClassTime
+        ? parseFloat(latestClassTime.split(":")[0]) +
+          parseFloat(latestClassTime.split(":")[1] || "0") / 60
+        : 24;
+
+      selectedCourses.forEach((course) => {
+        const courseCode = String(course.code ?? course.id);
+        const currentExcluded = new Set(
+          filters.excludedSections?.[courseCode] ?? [],
+        );
+        course.sections?.forEach((sec) => {
+          const violates = sec.blocks?.some((b) => {
+            if (!b.days || b.days.length === 0) return false;
+            return (
+              (minHour > 0 && b.start < minHour) ||
+              (maxHour < 24 && b.end > maxHour)
+            );
+          });
+          if (violates) {
+            currentExcluded.add(String(sec.sec));
+          }
+        });
+        if (currentExcluded.size > 0) {
+          if (!filters.excludedSections) filters.excludedSections = {};
+          filters.excludedSections[courseCode] = Array.from(currentExcluded);
+        }
+      });
+    }
+
+    // 2. Doctor preference
+    if (preferredDoctor && preferredDoctor.trim()) {
+      const docQuery = preferredDoctor.trim();
+      selectedCourses.forEach((course) => {
+        const courseCode = String(course.code ?? course.id);
+        if (!filters.pinnedSections?.[courseCode]) {
+          const matchingSec = course.sections?.find(
+            (sec) =>
+              wordsMatch(sec.instructor || "", docQuery) ||
+              normalizeArabicText(sec.instructor || "").includes(
+                normalizeArabicText(docQuery),
+              ),
+          );
+          if (matchingSec) {
+            if (!filters.pinnedSections) filters.pinnedSections = {};
+            filters.pinnedSections[courseCode] = String(matchingSec.sec);
+          }
+        }
+      });
+    }
+
+    return filters;
+  }, [
+    scheduleFilters,
+    earliestClassTime,
+    latestClassTime,
+    preferredDoctor,
+    selectedCourses,
+  ]);
+
   const activeFilterCount = useMemo(() => {
     let count = 0;
     if (scheduleFilters.freeDays && scheduleFilters.freeDays.length > 0) {
@@ -681,8 +817,11 @@ export const WeeklyScheduleModal: React.FC<WeeklyScheduleModalProps> = ({
     ) {
       count += Object.keys(scheduleFilters.excludedSections).length;
     }
+    if (earliestClassTime) count += 1;
+    if (latestClassTime) count += 1;
+    if (preferredDoctor) count += 1;
     return count;
-  }, [scheduleFilters]);
+  }, [scheduleFilters, earliestClassTime, latestClassTime, preferredDoctor]);
 
   // Feature 2 & 3: Background Web Worker schedule generation & conflict explanation
   const [generatedSchedules, setGeneratedSchedules] = useState<
@@ -704,7 +843,7 @@ export const WeeklyScheduleModal: React.FC<WeeklyScheduleModalProps> = ({
 
     setIsSolvingWorker(true);
 
-    generateSchedulesAsync(selectedCourses, scheduleFilters)
+    generateSchedulesAsync(selectedCourses, effectiveFilters)
       .then(async (schedules) => {
         if (isCancelled) return;
         setGeneratedSchedules(schedules);
@@ -712,7 +851,7 @@ export const WeeklyScheduleModal: React.FC<WeeklyScheduleModalProps> = ({
         if (schedules.length === 0) {
           const explanation = await explainConflictsAsync(
             selectedCourses,
-            scheduleFilters,
+            effectiveFilters,
           );
           if (!isCancelled) {
             setConflictExplanation(explanation);
@@ -736,7 +875,7 @@ export const WeeklyScheduleModal: React.FC<WeeklyScheduleModalProps> = ({
     return () => {
       isCancelled = true;
     };
-  }, [selectionReady, selectedCourseCodes, selectedCourses, scheduleFilters]);
+  }, [selectionReady, selectedCourseCodes, selectedCourses, effectiveFilters]);
 
   // Enable instant Arrow Left/Right schedule navigation without scrolling
   useEffect(() => {
@@ -772,6 +911,10 @@ export const WeeklyScheduleModal: React.FC<WeeklyScheduleModalProps> = ({
   }, [isOpen, generatedSchedules.length]);
 
   const activeSchedule = generatedSchedules[activeScheduleIndex] ?? [];
+  const activeScheduleStats = useMemo(() => {
+    if (!activeSchedule.length) return null;
+    return getBlockStats(activeSchedule);
+  }, [activeSchedule]);
   const scheduleQuality = useMemo(() => {
     if (!activeSchedule.length) return null;
     return calculateScheduleQuality(activeSchedule);
@@ -930,6 +1073,10 @@ export const WeeklyScheduleModal: React.FC<WeeklyScheduleModalProps> = ({
 
   const changeSemester = (semester: string) => {
     setSelectedSemester(semester);
+    try {
+      sessionStorage.setItem("ptuk_selected_semester", semester);
+    } catch {}
+    useAcademicStore.getState().setCurrentPlanningSemester?.(semester);
     setActiveScheduleIndex(0);
     const plannedCodes = Object.entries(plannedCourses)
       .filter(([, plannedSemester]) => plannedSemester === semester)
@@ -998,102 +1145,6 @@ export const WeeklyScheduleModal: React.FC<WeeklyScheduleModalProps> = ({
       return { ...current, excludedSections };
     });
     setActiveScheduleIndex(0);
-  };
-
-  const getSuggestedManualEntry = (courseId: string): ScheduleEntry | null => {
-    const selectedRealSection =
-      activeSchedule.find((item) => item.courseCode === courseId)?.section ??
-      (() => {
-        const course = selectedCourses.find((item) => item.id === courseId);
-        const pinned = scheduleFilters.pinnedSections?.[courseId];
-        return (
-          course?.sections?.find(
-            (section) =>
-              section.sec === pinned && !String(section.sec).includes("مختلط"),
-          ) ??
-          course?.sections?.find(
-            (section) => !String(section.sec).includes("مختلط"),
-          )
-        );
-      })();
-    const block = selectedRealSection?.blocks?.[0];
-    if (!selectedRealSection || !block) return null;
-    const days = (block.days || [])
-      .map((dayKey: string) =>
-        DAY_NAME_BY_KEY.get(normalizeDayKey(dayKey) ?? dayKey),
-      )
-      .filter((day: string | undefined): day is string => Boolean(day));
-    return {
-      startTime: formatScheduleTime(block.start),
-      endTime: formatScheduleTime(block.end),
-      section: selectedRealSection.sec,
-      instructor: selectedRealSection.instructor ?? "",
-      room: selectedRealSection.room ?? "",
-      days,
-    };
-  };
-
-  const handleUpdateEntry = <K extends keyof ScheduleEntry>(
-    courseId: string,
-    field: K,
-    value: ScheduleEntry[K],
-  ) => {
-    setWeeklySchedule((prev) => {
-      const semesterSchedule = prev[selectedSemester] ?? {};
-      const existing = semesterSchedule[courseId] ??
-        getSuggestedManualEntry(courseId) ?? {
-          startTime: "",
-          endTime: "",
-          section: "",
-          instructor: "",
-          room: "",
-          days: [],
-        };
-      return {
-        ...prev,
-        [selectedSemester]: {
-          ...semesterSchedule,
-          [courseId]: { ...existing, [field]: value },
-        },
-      };
-    });
-  };
-
-  const toggleDay = (courseId: string, day: string) => {
-    const entry = weeklySchedule[selectedSemester]?.[courseId] ??
-      getSuggestedManualEntry(courseId) ?? {
-        startTime: "",
-        endTime: "",
-        days: [],
-      };
-    const days = entry.days ?? (entry.day ? [entry.day] : []);
-    const newDays = days.includes(day)
-      ? days.filter((d) => d !== day)
-      : [...days, day];
-    handleUpdateEntry(courseId, "days", newDays);
-  };
-
-  const timeToMinutes = (time: string | undefined): number | null => {
-    const match = /^([0-1]?\d|2[0-3]):([0-5]\d)$/.exec(time ?? "");
-    if (!match) return null;
-    return Number(match[1]) * 60 + Number(match[2]);
-  };
-
-  const getPosition = (
-    startTime: string | undefined,
-    endTime: string | undefined,
-  ) => {
-    const rawStart = timeToMinutes(startTime);
-    const rawEnd = timeToMinutes(endTime);
-    if (rawStart === null || rawEnd === null || rawEnd <= rawStart) return null;
-
-    const start = Math.max(rawStart, GRID_START_MINUTES);
-    const end = Math.min(rawEnd, GRID_END_MINUTES);
-    if (end <= start) return null;
-    return {
-      top: `${((start - GRID_START_MINUTES) / (GRID_END_MINUTES - GRID_START_MINUTES)) * 100}%`,
-      height: `${((end - start) / (GRID_END_MINUTES - GRID_START_MINUTES)) * 100}%`,
-    };
   };
 
   const renderMiniScheduleGrid = (
@@ -1327,6 +1378,10 @@ export const WeeklyScheduleModal: React.FC<WeeklyScheduleModalProps> = ({
             {targetDayKeys.map((dayKey) => {
               const dayName = DAY_NAME_BY_KEY.get(dayKey) ?? dayKey;
               const lectures = getLecturesForDay(dayKey);
+              const dayTotalGap = lectures.slice(1).reduce((sum, lec, idx) => {
+                const prevLec = lectures[idx];
+                return sum + Math.max(0, lec.start - prevLec.end);
+              }, 0);
 
               return (
                 <div
@@ -1341,11 +1396,18 @@ export const WeeklyScheduleModal: React.FC<WeeklyScheduleModalProps> = ({
                         {dayName}
                       </h3>
                     </div>
-                    <span className="text-xs font-bold text-[var(--text-3)] font-mono">
-                      {lectures.length > 0
-                        ? `${lectures.length} ${lectures.length === 1 ? "محاضرة" : "محاضرات"}`
-                        : "عطلة"}
-                    </span>
+                    <div className="flex items-center gap-1.5 text-xs font-bold font-mono">
+                      <span className="text-[var(--text-3)]">
+                        {lectures.length > 0
+                          ? `${lectures.length} ${lectures.length === 1 ? "محاضرة" : "محاضرات"}`
+                          : "عطلة"}
+                      </span>
+                      {dayTotalGap > 0 && (
+                        <span className="text-[var(--text)] font-bold px-1.5 py-0.5 rounded bg-[var(--sunken)] border border-[var(--line)] text-[10px]">
+                          فراغ: {dayTotalGap}س
+                        </span>
+                      )}
+                    </div>
                   </div>
 
                   {lectures.length === 0 ? (
@@ -1526,226 +1588,7 @@ export const WeeklyScheduleModal: React.FC<WeeklyScheduleModalProps> = ({
             </div>
           </div>
 
-          {manualCourses.length === 0 && activeTab === "edit" ? (
-            <div className="flex-1 flex flex-col items-center justify-center py-20 bg-[var(--sunken)] rounded-3xl border-2 border-dashed border-[var(--line)]">
-              <Calendar
-                size={64}
-                className="text-[var(--text-3)] mb-4 opacity-50"
-              />
-              <h3 className="text-xl font-bold text-[var(--text)]">
-                لا توجد مواد مخططة لهذا الفصل
-              </h3>
-              <p className="text-sm text-[var(--text-2)] mt-2 font-medium">
-                أضف بعض المواد في "عرض الخطة" لتتمكن من جدولتها
-              </p>
-            </div>
-          ) : activeTab === "edit" ? (
-            /* Data Entry View */
-            <div className="flex-1 overflow-y-auto pr-2 space-y-4 custom-scrollbar">
-              {manualCourses.map((course) => {
-                const entry = weeklySchedule[selectedSemester]?.[course.id] ??
-                  getSuggestedManualEntry(course.id) ?? {
-                    courseId: course.id,
-                    startTime: "",
-                    endTime: "",
-                    section: "",
-                    instructor: "",
-                    room: "",
-                    days: [],
-                  };
-
-                return (
-                  <div
-                    key={course.id}
-                    className="group bg-[var(--surface)] border border-[var(--line)] hover:border-[var(--accent)] rounded-2xl p-5 transition-all shadow-xs"
-                  >
-                    {!weeklySchedule[selectedSemester]?.[course.id] &&
-                      !getSuggestedManualEntry(course.id) && (
-                        <p className="mb-3 rounded-xl bg-[var(--warn-soft)] px-3 py-2 text-xs font-bold text-[var(--warn)] border border-[var(--warn)]/30">
-                          لا تتوفر بيانات شعبة لهذا المساق؛ أدخل الأوقات والأيام
-                          يدوياً.
-                        </p>
-                      )}
-                    <div className="flex flex-col md:flex-row gap-6">
-                      <div className="md:w-1/3">
-                        <div className="mb-4">
-                          <span className="text-[10px] font-bold text-[var(--accent)] uppercase tracking-wider bg-[var(--accent-soft)] px-2 py-0.5 rounded-md mb-2 inline-block">
-                            {course.id}
-                          </span>
-                          <h3 className="text-lg font-bold text-[var(--text)] leading-tight">
-                            {course.name}
-                          </h3>
-                          <p className="text-xs text-[var(--text-3)] mt-1">
-                            {course.credits} ساعات معتمدة
-                          </p>
-                        </div>
-
-                        <div className="space-y-2">
-                          <label className="text-xs font-semibold text-[var(--text-2)]">
-                            أيام المحاضرات:
-                          </label>
-                          <div className="flex flex-wrap gap-1.5">
-                            {EDIT_DAYS.map((day) => (
-                              <button
-                                type="button"
-                                aria-label={`محاضرة ${course.name} يوم ${day}`}
-                                aria-pressed={
-                                  entry.days?.includes(day) ?? false
-                                }
-                                key={day}
-                                onClick={() => toggleDay(course.id, day)}
-                                className={cn(
-                                  "min-h-9 px-2.5 rounded-lg text-xs font-medium whitespace-nowrap transition-colors border cursor-pointer",
-                                  entry.days?.includes(day)
-                                    ? "bg-[var(--accent)] border-[var(--accent)] text-[var(--text-on-accent)] font-bold shadow-xs"
-                                    : "bg-[var(--sunken)] text-[var(--text-2)] border-[var(--line-control)] hover:border-[var(--accent)]",
-                                )}
-                              >
-                                {day}
-                              </button>
-                            ))}
-                          </div>
-                        </div>
-                      </div>
-
-                      <div className="flex-1 grid grid-cols-1 sm:grid-cols-2 gap-3">
-                        <div className="space-y-3">
-                          <div className="space-y-1">
-                            <label className="text-[11px] font-medium text-[var(--text-3)] px-0.5">
-                              وقت البدء
-                            </label>
-                            <div className="relative">
-                              <Clock
-                                size={14}
-                                className="absolute right-3 top-1/2 -translate-y-1/2 text-[var(--text-3)]"
-                              />
-                              <input
-                                aria-label={`وقت بدء ${course.name}`}
-                                required
-                                type="time"
-                                value={entry.startTime ?? ""}
-                                onChange={(e) => {
-                                  if (e.target.value)
-                                    handleUpdateEntry(
-                                      course.id,
-                                      "startTime",
-                                      e.target.value,
-                                    );
-                                }}
-                                className="w-full pr-9 pl-3 py-1.5 bg-[var(--surface)] border border-[var(--line-control)] rounded-lg text-xs font-medium text-[var(--text)] outline-none focus:border-[var(--accent)]"
-                              />
-                            </div>
-                          </div>
-                          <div className="space-y-1">
-                            <label className="text-[11px] font-medium text-[var(--text-3)] px-0.5">
-                              وقت الانتهاء
-                            </label>
-                            <div className="relative">
-                              <Clock
-                                size={14}
-                                className="absolute right-3 top-1/2 -translate-y-1/2 text-[var(--text-3)]"
-                              />
-                              <input
-                                aria-label={`وقت انتهاء ${course.name}`}
-                                required
-                                type="time"
-                                value={entry.endTime ?? ""}
-                                onChange={(e) => {
-                                  if (e.target.value)
-                                    handleUpdateEntry(
-                                      course.id,
-                                      "endTime",
-                                      e.target.value,
-                                    );
-                                }}
-                                className="w-full pr-9 pl-3 py-1.5 bg-[var(--surface)] border border-[var(--line-control)] rounded-lg text-xs font-medium text-[var(--text)] outline-none focus:border-[var(--accent)]"
-                              />
-                            </div>
-                          </div>
-                        </div>
-
-                        <div className="space-y-4">
-                          <div className="space-y-1.5">
-                            <label className="text-xs font-semibold text-[var(--text-3)] px-1">
-                              الدكتور / القاعة
-                            </label>
-                            <div className="grid grid-cols-2 gap-2">
-                              <div className="relative">
-                                <User
-                                  size={14}
-                                  className="absolute right-3 top-1/2 -translate-y-1/2 text-[var(--text-3)]"
-                                />
-                                <input
-                                  aria-label={`مدرس ${course.name}`}
-                                  type="text"
-                                  placeholder="الدكتور"
-                                  value={entry.instructor ?? ""}
-                                  onChange={(e) =>
-                                    handleUpdateEntry(
-                                      course.id,
-                                      "instructor",
-                                      e.target.value,
-                                    )
-                                  }
-                                  className="w-full pr-9 pl-3 py-2.5 bg-[var(--surface)] border border-[var(--line-control)] rounded-xl text-xs font-medium text-[var(--text)] focus:border-[var(--accent)] outline-none transition-all"
-                                />
-                              </div>
-                              <div className="relative">
-                                <MapPin
-                                  size={14}
-                                  className="absolute right-3 top-1/2 -translate-y-1/2 text-[var(--text-3)]"
-                                />
-                                <input
-                                  aria-label={`قاعة ${course.name}`}
-                                  type="text"
-                                  placeholder="القاعة"
-                                  value={entry.room ?? ""}
-                                  onChange={(e) =>
-                                    handleUpdateEntry(
-                                      course.id,
-                                      "room",
-                                      e.target.value,
-                                    )
-                                  }
-                                  className="w-full pr-9 pl-3 py-2.5 bg-[var(--surface)] border border-[var(--line-control)] rounded-xl text-xs font-medium text-[var(--text)] focus:border-[var(--accent)] outline-none transition-all"
-                                />
-                              </div>
-                            </div>
-                          </div>
-                          <div className="space-y-1.5">
-                            <label className="text-xs font-semibold text-[var(--text-3)] px-1">
-                              رقم الشعبة
-                            </label>
-                            <div className="relative">
-                              <Hash
-                                size={16}
-                                className="absolute right-3 top-1/2 -translate-y-1/2 text-[var(--text-3)]"
-                              />
-                              <input
-                                aria-label={`رقم شعبة ${course.name}`}
-                                type="text"
-                                placeholder="مثلاً: 101"
-                                value={entry.section ?? ""}
-                                onChange={(e) =>
-                                  handleUpdateEntry(
-                                    course.id,
-                                    "section",
-                                    e.target.value,
-                                  )
-                                }
-                                className="w-full pr-10 pl-3 py-2.5 bg-[var(--surface)] border border-[var(--line-control)] rounded-xl text-xs font-medium text-[var(--text)] focus:border-[var(--accent)] outline-none transition-all"
-                              />
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          ) : (
-            <section className="flex-1 min-h-0 flex flex-col gap-3 overflow-y-auto">
+          <section className="flex-1 min-h-0 flex flex-col gap-3 overflow-y-auto">
               <section
                 aria-label="اختيار المساقات"
                 className="shrink-0 rounded-2xl border border-[var(--line)] bg-[var(--sunken)] p-3"
@@ -1793,15 +1636,44 @@ export const WeeklyScheduleModal: React.FC<WeeklyScheduleModalProps> = ({
                       <BookOpen size={16} />
                     </div>
                     <div>
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 flex-wrap">
                         <h3 className="text-xs sm:text-sm font-bold text-[var(--text)]">
                           المساقات المختارة لتوليد الجدول (
                           {selectedCourseCodes.length})
                         </h3>
                         {selectedCourseCodes.length > 0 && (
-                          <span className="text-[10px] px-2 py-0.5 rounded-full bg-[var(--accent-soft)] text-[var(--accent)] font-mono font-bold">
-                            {selectedCourseCodes.length} مواد
-                          </span>
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className="text-[10px] px-2 py-0.5 rounded-full bg-[var(--accent-soft)] text-[var(--accent)] font-mono font-bold">
+                              {selectedCourseCodes.length} مواد
+                            </span>
+                            <span className="text-[10px] px-2 py-0.5 rounded-full bg-[var(--sunken)] text-[var(--text)] font-bold border border-[var(--line)]">
+                              إجمالي الساعات المختارة: {selectedTotalCredits} ساعة
+                            </span>
+                            {/* Academic status badges: probation limit vs honor overload vs normal */}
+                            {isProbation && selectedTotalCredits > 14 ? (
+                              <span className="text-[10px] px-2 py-0.5 rounded-full bg-red-500/15 text-red-600 dark:text-red-400 font-bold border border-red-500/30 flex items-center gap-1">
+                                <AlertTriangle size={11} />
+                                <span>تحت الإنذار (تجاوز 14 س)</span>
+                              </span>
+                            ) : selectedTotalCredits >= 19 && selectedTotalCredits <= 21 ? (
+                              <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-700 dark:text-amber-300 font-bold border border-amber-500/30 flex items-center gap-1">
+                                <Sparkles size={11} />
+                                <span>حمولة تفوق/تخرج (19-21 س)</span>
+                              </span>
+                            ) : selectedTotalCredits > 21 ? (
+                              <span className="text-[10px] px-2 py-0.5 rounded-full bg-red-500/15 text-red-600 dark:text-red-400 font-bold border border-red-500/30">
+                                تجاوز الحد الأقصى (&gt; 21 س)
+                              </span>
+                            ) : selectedTotalCredits >= 12 && selectedTotalCredits <= 18 ? (
+                              <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 font-bold border border-emerald-500/30">
+                                حمولة اعتيادية (12-18 س)
+                              </span>
+                            ) : selectedTotalCredits > 0 ? (
+                              <span className="text-[10px] px-2 py-0.5 rounded-full bg-[var(--sunken)] text-[var(--text-3)] font-bold border border-[var(--line)]">
+                                أقل من الحد الأدنى (&lt; 12 س)
+                              </span>
+                            ) : null}
+                          </div>
                         )}
                       </div>
                       <p className="text-[11px] text-[var(--text-3)]">
@@ -1895,8 +1767,26 @@ export const WeeklyScheduleModal: React.FC<WeeklyScheduleModalProps> = ({
                   </div>
                 ) : (
                   <div className="mt-2.5 p-3 rounded-xl border border-dashed border-[var(--line-control)] bg-[var(--surface)] text-center text-xs text-[var(--text-3)] font-bold">
-                    لم تختر أي مساقات بعد. انقر على زر «+ إضافة مساق» أعلاه
-                    للبدء.
+                    لم تختر أي مساقات بعد. ابحث عن مساق أدناه أو اختر من المواد
+                    المفتوحة لتخصصك للبدء.
+                  </div>
+                )}
+
+                {/* Academic Probation Warning Banner (Feature 15) */}
+                {isProbation && selectedTotalCredits > 14 && (
+                  <div
+                    role="alert"
+                    className="mt-2.5 flex items-start gap-2.5 rounded-xl border border-red-500/40 bg-red-500/10 p-3 text-xs text-red-700 dark:text-red-300 font-bold shadow-xs animate-in fade-in duration-200"
+                  >
+                    <AlertTriangle className="h-4 w-4 shrink-0 text-red-600 dark:text-red-400 mt-0.5" />
+                    <div className="space-y-0.5">
+                      <p className="font-black text-red-800 dark:text-red-200">
+                        تنبيه: الحد الأقصى للتسجيل تحت الإنذار الأكاديمي هو 14 ساعة معتمدة لمنع إلغاء الجدول
+                      </p>
+                      <p className="text-[11px] font-normal text-red-700/90 dark:text-red-300/90 leading-relaxed">
+                        بموجب تعليمات جامعة فلسطين التقنية - خضوري، لا يُسمح للطلبة تحت الإنذار الأكاديمي أو بمعدل تراكمي أقل من 60% بتسجيل أكثر من 14 ساعة معتمدة. يرجى إلغاء بعض المواد لتجنب إلغاء التسجيل من عمادة القبول والتسجيل.
+                      </p>
+                    </div>
                   </div>
                 )}
 
@@ -2210,15 +2100,32 @@ export const WeeklyScheduleModal: React.FC<WeeklyScheduleModalProps> = ({
                               return (
                                 <div
                                   key={group.id}
-                                  className="p-3 rounded-2xl bg-[var(--surface)] border border-[var(--line)] space-y-2.5"
+                                  className={cn(
+                                    "p-3 rounded-2xl border space-y-2.5 transition-all",
+                                    group.id === "retake-priority"
+                                      ? "bg-amber-500/5 dark:bg-amber-950/20 border-amber-500/40 shadow-xs"
+                                      : "bg-[var(--surface)] border-[var(--line)]",
+                                  )}
                                 >
                                   {/* Group Header */}
                                   <div className="flex items-center justify-between gap-2 pb-2 border-b border-[var(--line)]">
                                     <div className="flex items-center gap-2 min-w-0">
-                                      <span className="w-2 h-2 rounded-full bg-[var(--accent)] shrink-0" />
+                                      <span
+                                        className={cn(
+                                          "w-2 h-2 rounded-full shrink-0",
+                                          group.id === "retake-priority"
+                                            ? "bg-amber-500 animate-pulse"
+                                            : "bg-[var(--accent)]",
+                                        )}
+                                      />
                                       <h5 className="font-bold text-xs sm:text-[13px] text-[var(--text)] truncate">
                                         {group.title}
                                       </h5>
+                                      {group.id === "retake-priority" && (
+                                        <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-700 dark:text-amber-300 font-bold shrink-0">
+                                          أولوية رفع المعدل
+                                        </span>
+                                      )}
                                       <span className="text-[10px] px-2 py-0.5 rounded-full bg-[var(--sunken)] text-[var(--text-2)] font-mono font-bold shrink-0">
                                         {group.courses.length} مواد
                                       </span>
@@ -2262,11 +2169,21 @@ export const WeeklyScheduleModal: React.FC<WeeklyScheduleModalProps> = ({
                                       return (
                                         <div
                                           key={course.id}
+                                          role="button"
+                                          tabIndex={0}
+                                          data-course-id={course.id}
+                                          aria-label={`${course.name} (${course.id})، ${isSelected ? "مضافة حالياً، انقر للإزالة" : "غير مضافة، انقر للإضافة"}`}
                                           onClick={() =>
                                             toggleGeneratedCourse(course.id)
                                           }
+                                          onKeyDown={(e) => {
+                                            if (e.key === "Enter" || e.key === " ") {
+                                              e.preventDefault();
+                                              toggleGeneratedCourse(course.id);
+                                            }
+                                          }}
                                           className={cn(
-                                            "p-3 rounded-xl border transition-all cursor-pointer flex flex-col justify-between gap-2 text-right select-none",
+                                            "p-3 rounded-xl border transition-all cursor-pointer flex flex-col justify-between gap-2 text-right select-none outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]",
                                             isSelected
                                               ? "border-[var(--accent)] bg-[var(--accent-soft)]/40 shadow-xs ring-1 ring-[var(--accent)]"
                                               : "border-[var(--line)] bg-[var(--surface)] hover:bg-[var(--sunken)]",
@@ -2332,21 +2249,6 @@ export const WeeklyScheduleModal: React.FC<WeeklyScheduleModalProps> = ({
                       </div>
                     )}
 
-                    {/* Bottom Action inside Drawer: Return to Schedule */}
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setIsAddCourseOpen(false);
-                        triggerHaptic("selection");
-                      }}
-                      className="w-full py-2.5 rounded-xl bg-[var(--accent)] text-[var(--text-on-accent)] font-bold text-xs flex items-center justify-center gap-1.5 shadow-xs hover:opacity-95 transition-opacity cursor-pointer mt-3"
-                    >
-                      <Check size={14} />
-                      <span>
-                        الانتقال لعرض الجدول الدراسي الأسبوعي (
-                        {selectedCourseCodes.length} مساقات مختارة)
-                      </span>
-                    </button>
                   </div>
                 )}
                 {selectedCourseCodes.length > 0 &&
@@ -2379,8 +2281,7 @@ export const WeeklyScheduleModal: React.FC<WeeklyScheduleModalProps> = ({
                     </button>
                   </div>
                 )}
-                {!isHideSelectedCourses &&
-                  semesterCourses.some(
+                {semesterCourses.some(
                     (course) =>
                       !availableCourses.some(
                         (catalogCourse) =>
@@ -2397,38 +2298,114 @@ export const WeeklyScheduleModal: React.FC<WeeklyScheduleModalProps> = ({
                   <div className="mt-4 flex flex-col gap-3 border-t border-[var(--line)] pt-4">
                     {/* Filter Toggle Button (Organizing Features 4, 5, 7) */}
                     <div className="flex flex-wrap items-center justify-between gap-2">
-                      <button
-                        type="button"
-                        id="toggle-schedule-filters-btn"
-                        onClick={() => setIsFiltersOpen((prev) => !prev)}
-                        className={cn(
-                          "inline-flex min-h-10 cursor-pointer items-center gap-2 rounded-xl border px-3.5 text-xs font-bold transition-all shadow-2xs",
-                          isFiltersOpen || activeFilterCount > 0
-                            ? "border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--accent)]"
-                            : "border-[var(--line)] bg-[var(--surface)] text-[var(--text)] hover:bg-[var(--sunken)]",
-                        )}
-                      >
-                        <Filter
-                          size={15}
-                          className={
-                            activeFilterCount > 0 ? "text-[var(--accent)]" : ""
-                          }
-                        />
-                        <span>
-                          تخصيص وتصفية الجداول (أيام العطلة، تفضيل الوقت، وتثبيت
-                          الشعب)
-                        </span>
-                        {activeFilterCount > 0 && (
-                          <span className="rounded-full bg-[var(--accent)] px-1.5 py-0.5 text-[10px] font-mono text-[var(--text-on-accent)]">
-                            {activeFilterCount}
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <button
+                          type="button"
+                          id="toggle-schedule-filters-btn"
+                          onClick={() => setIsFiltersOpen((prev) => !prev)}
+                          className={cn(
+                            "inline-flex min-h-10 cursor-pointer items-center gap-2 rounded-xl border px-3.5 text-xs font-bold transition-all shadow-2xs",
+                            isFiltersOpen || activeFilterCount > 0
+                              ? "border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--accent)]"
+                              : "border-[var(--line)] bg-[var(--surface)] text-[var(--text)] hover:bg-[var(--sunken)]",
+                          )}
+                        >
+                          <Filter
+                            size={15}
+                            className={
+                              activeFilterCount > 0 ? "text-[var(--accent)]" : ""
+                            }
+                          />
+                          <span>
+                            تخصيص وتصفية الجداول (أيام العطلة، تفضيل الوقت، وتثبيت
+                            الشعب)
                           </span>
+                          {activeFilterCount > 0 && (
+                            <span className="rounded-full bg-[var(--accent)] px-1.5 py-0.5 text-[10px] font-mono text-[var(--text-on-accent)]">
+                              {activeFilterCount}
+                            </span>
+                          )}
+                          {isFiltersOpen ? (
+                            <ChevronUp size={15} />
+                          ) : (
+                            <ChevronDown size={15} />
+                          )}
+                        </button>
+
+                        {/* Commuter 1-Click Preset (Feature 13) */}
+                        <button
+                          type="button"
+                          id="commuter-preset-btn"
+                          onClick={() => {
+                            const isCommuter =
+                              scheduleFilters.timePreference === "min_days" &&
+                              scheduleFilters.maxGap === 1 &&
+                              earliestClassTime === "09:00" &&
+                              latestClassTime === "15:30";
+
+                            if (isCommuter) {
+                              setScheduleFilters((prev) => ({
+                                ...prev,
+                                timePreference: "",
+                                maxGap: null,
+                              }));
+                              setEarliestClassTime("");
+                              setLatestClassTime("");
+                            } else {
+                              setScheduleFilters((prev) => ({
+                                ...prev,
+                                timePreference: "min_days",
+                                maxGap: 1,
+                              }));
+                              setEarliestClassTime("09:00");
+                              setLatestClassTime("15:30");
+                            }
+                            setActiveScheduleIndex(0);
+                            triggerHaptic("selection");
+                          }}
+                          className={cn(
+                            "inline-flex min-h-10 cursor-pointer items-center gap-1.5 rounded-xl border px-3 text-xs font-bold transition-all shadow-2xs",
+                            scheduleFilters.timePreference === "min_days" &&
+                              scheduleFilters.maxGap === 1 &&
+                              earliestClassTime === "09:00" &&
+                              latestClassTime === "15:30"
+                              ? "border-amber-500 bg-amber-500/15 text-amber-700 dark:text-amber-300 ring-1 ring-amber-500/50"
+                              : "border-[var(--line)] bg-[var(--surface)] text-[var(--text)] hover:bg-[var(--sunken)]",
+                          )}
+                          title="تفعيل نمط المسافر/الموظف بنقرة واحدة (ضغط أيام الدوام، أقصى فراغ 1 ساعة، محاضرات بين 09:00 و 15:30)"
+                        >
+                          <span className="text-sm">🚌</span>
+                          <span>نمط المسافر/الموظف</span>
+                          {scheduleFilters.timePreference === "min_days" &&
+                            scheduleFilters.maxGap === 1 &&
+                            earliestClassTime === "09:00" &&
+                            latestClassTime === "15:30" && (
+                              <span className="rounded-full bg-amber-500 text-white px-1.5 py-0.2 text-[10px] font-bold">
+                                مفعل
+                              </span>
+                            )}
+                        </button>
+
+                        {/* Preferred Doctor Active Badge */}
+                        {preferredDoctor && (
+                          <div className="inline-flex min-h-10 items-center gap-1.5 rounded-xl border border-[var(--accent)]/40 bg-[var(--accent-soft)] px-3 text-xs font-bold text-[var(--accent)] shadow-2xs">
+                            <Sparkles size={14} className="text-[var(--accent)]" />
+                            <span>تفضيل د. {preferredDoctor}</span>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setPreferredDoctor(null);
+                                sessionStorage.removeItem("ptuk_preferred_doctor");
+                                setActiveScheduleIndex(0);
+                              }}
+                              className="mr-1 h-4 w-4 rounded-full hover:bg-[var(--accent)]/20 cursor-pointer text-xs font-bold flex items-center justify-center transition-colors"
+                              title="إلغاء تفضيل هذا الدكتور"
+                            >
+                              ×
+                            </button>
+                          </div>
                         )}
-                        {isFiltersOpen ? (
-                          <ChevronUp size={15} />
-                        ) : (
-                          <ChevronDown size={15} />
-                        )}
-                      </button>
+                      </div>
 
                       {generatedSchedules.length > 1 && (
                         <button
@@ -2478,6 +2455,10 @@ export const WeeklyScheduleModal: React.FC<WeeklyScheduleModalProps> = ({
                                   maxGap: null,
                                   diverseSolutions: true,
                                 });
+                                setEarliestClassTime("");
+                                setLatestClassTime("");
+                                setPreferredDoctor(null);
+                                sessionStorage.removeItem("ptuk_preferred_doctor");
                                 setActiveScheduleIndex(0);
                               }}
                               className="text-[11px] font-bold text-[var(--danger)] hover:underline cursor-pointer"
@@ -2594,6 +2575,60 @@ export const WeeklyScheduleModal: React.FC<WeeklyScheduleModalProps> = ({
                               <option value="1">ساعة واحدة كحد أقصى</option>
                               <option value="2">ساعتان كحد أقصى</option>
                               <option value="3">3 ساعات كحد أقصى</option>
+                            </select>
+                          </div>
+                        </div>
+
+                        {/* Commuter Travel Time Window (Feature 13) */}
+                        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 pt-2 border-t border-[var(--line)]/50">
+                          <div className="grid gap-1.5">
+                            <label
+                              htmlFor="commuter-earliest-time"
+                              className="text-xs font-black text-[var(--text-2)] flex items-center gap-1"
+                            >
+                              <Clock size={13} className="text-[var(--accent)]" />
+                              <span>أبكر موعد لبدء المحاضرات (تجنب الحواجز الصباحية)</span>
+                            </label>
+                            <select
+                              id="commuter-earliest-time"
+                              value={earliestClassTime}
+                              onChange={(e) => {
+                                setEarliestClassTime(e.target.value);
+                                setActiveScheduleIndex(0);
+                              }}
+                              className="min-h-10 rounded-xl border border-[var(--line-control)] bg-[var(--surface)] px-3 text-sm font-bold text-[var(--text)] cursor-pointer"
+                            >
+                              <option value="">بدون قيد (من أي وقت مبكر)</option>
+                              <option value="08:00">08:00 صباحاً فما بعد</option>
+                              <option value="08:30">08:30 صباحاً فما بعد</option>
+                              <option value="09:00">09:00 صباحاً فما بعد (نمط المسافرين)</option>
+                              <option value="09:30">09:30 صباحاً فما بعد</option>
+                              <option value="10:00">10:00 صباحاً فما بعد</option>
+                            </select>
+                          </div>
+                          <div className="grid gap-1.5">
+                            <label
+                              htmlFor="commuter-latest-time"
+                              className="text-xs font-black text-[var(--text-2)] flex items-center gap-1"
+                            >
+                              <Clock size={13} className="text-[var(--accent)]" />
+                              <span>أقصى موعد لانتهاء المحاضرات (تجنب أزمة المواصلات)</span>
+                            </label>
+                            <select
+                              id="commuter-latest-time"
+                              value={latestClassTime}
+                              onChange={(e) => {
+                                setLatestClassTime(e.target.value);
+                                setActiveScheduleIndex(0);
+                              }}
+                              className="min-h-10 rounded-xl border border-[var(--line-control)] bg-[var(--surface)] px-3 text-sm font-bold text-[var(--text)] cursor-pointer"
+                            >
+                              <option value="">بدون قيد (حتى نهاية الدوام)</option>
+                              <option value="14:00">14:00 (2:00 مساءً كحد أقصى)</option>
+                              <option value="15:00">15:00 (3:00 مساءً كحد أقصى)</option>
+                              <option value="15:30">15:30 (3:30 مساءً كحد أقصى - نمط المسافرين)</option>
+                              <option value="16:00">16:00 (4:00 مساءً كحد أقصى)</option>
+                              <option value="17:00">17:00 (5:00 مساءً كحد أقصى)</option>
                             </select>
                           </div>
                         </div>
@@ -2922,23 +2957,39 @@ export const WeeklyScheduleModal: React.FC<WeeklyScheduleModalProps> = ({
               {/* Navigation & Adoption Control Bar */}
               <nav
                 aria-label="التنقل بين الجداول المقترحة"
-                className="sticky top-0 z-20 flex flex-col sm:flex-row items-center justify-between gap-2.5 rounded-xl border border-[var(--line)] p-2.5 bg-[var(--surface)]/95 backdrop-blur-md shadow-xs transition-all"
+                className="sticky top-0 z-20 flex flex-col md:flex-row items-stretch md:items-center justify-between gap-1.5 sm:gap-2.5 rounded-xl border border-[var(--line)] p-2 sm:p-2.5 bg-[var(--surface)]/95 backdrop-blur-md shadow-xs transition-all"
               >
-                <div className="text-xs font-bold text-[var(--text)] text-center sm:text-right flex items-center gap-2 flex-wrap">
-                  <span>
+                <div className="text-xs font-bold text-[var(--text)] flex items-center justify-between sm:justify-start gap-1.5 sm:gap-2 flex-wrap">
+                  <span className="text-[11px] sm:text-xs">
                     {generatedSchedules.length
-                      ? `الاحتمال ${activeScheduleIndex + 1} من أصل ${generatedSchedules.length} خالي من أي تعارض`
+                      ? `الاحتمال ${activeScheduleIndex + 1} من أصل ${generatedSchedules.length}`
                       : !selectionReady || isSelectionLoading || isSolvingWorker
-                        ? "جارٍ معالجة وتوليد التوافقات في الخلفية..."
+                        ? "جارٍ معالجة التوافقات..."
                         : selectedCourseCodes.length
-                          ? "لا يوجد توافق خالي من التعارض (راجع الحلول المقترحة أعلاه)"
-                          : "اختر مواد من البحث أو من خطتك لتوليد الجداول فوراً"}
+                          ? "لا يوجد توافق خالي من التعارض"
+                          : "اختر مواد لتوليد الجداول فوراً"}
                   </span>
+
+                  {/* Visible Gap & Attendance Metrics (Feature 13) */}
+                  {activeScheduleStats && generatedSchedules.length > 0 && (
+                    <div className="inline-flex items-center gap-1 sm:gap-1.5 px-2 py-0.5 rounded-lg bg-[var(--sunken)] border border-[var(--line)] text-[10px] sm:text-[11px] font-mono text-[var(--text-2)]">
+                      <span className="font-bold text-[var(--text)]">{activeScheduleStats.usedDays} أيام</span>
+                      <span>•</span>
+                      <span className="text-[var(--text)] font-bold">
+                        فراغ {activeScheduleStats.totalGap}س
+                        {activeScheduleStats.maxGap > 0 && (
+                          <span className="text-[10px] text-[var(--text-3)] font-normal mr-0.5 hidden xs:inline">
+                            (أقصى {activeScheduleStats.maxGap}س)
+                          </span>
+                        )}
+                      </span>
+                    </div>
+                  )}
 
                   {scheduleQuality && generatedSchedules.length > 0 && (
                     <span
                       className={cn(
-                        "text-[11px] px-2.5 py-0.5 rounded-full font-bold border flex items-center gap-1 shadow-2xs",
+                        "text-[10px] sm:text-[11px] px-2 py-0.5 rounded-full font-bold border flex items-center gap-1 shadow-2xs",
                         scheduleQuality.tier === "excellent"
                           ? "bg-[var(--accent-soft)] text-[var(--accent)] border-[var(--accent)]/30"
                           : scheduleQuality.tier === "good"
@@ -2956,15 +3007,15 @@ export const WeeklyScheduleModal: React.FC<WeeklyScheduleModalProps> = ({
                     </span>
                   )}
                   {adoptedFeedback && (
-                    <span className="text-[var(--accent)] font-bold flex items-center gap-1 animate-pulse">
-                      <CheckCheck size={14} />
-                      <span>تم اعتماد هذا الجدول بنجاح!</span>
+                    <span className="text-[var(--accent)] font-bold flex items-center gap-1 text-[11px] animate-pulse">
+                      <CheckCheck size={13} />
+                      <span>تم الاعتماد!</span>
                     </span>
                   )}
                   {trackedFeedback && (
-                    <span className="text-[var(--warn)] font-bold flex items-center gap-1 animate-pulse">
+                    <span className="text-[var(--warn)] font-bold flex items-center gap-1 text-[11px] animate-pulse">
                       <Bell
-                        size={14}
+                        size={13}
                         className="fill-[var(--warn)] text-[var(--warn)]"
                       />
                       <span>{trackedFeedback}</span>
@@ -2973,8 +3024,8 @@ export const WeeklyScheduleModal: React.FC<WeeklyScheduleModalProps> = ({
                 </div>
 
                 {generatedSchedules.length > 0 && (
-                  <div className="flex flex-wrap items-center justify-center sm:justify-end gap-2 w-full md:w-auto">
-                    {/* Connected Atomic Pager: السابق + الرقم + التالي (لا ينفصلان أبداً) */}
+                  <div className="flex items-center justify-between sm:justify-end gap-1.5 sm:gap-2 w-full md:w-auto">
+                    {/* Connected Atomic Pager: السابق + الرقم + التالي */}
                     <div className="inline-flex items-center rounded-lg border border-[var(--line-control)] bg-[var(--sunken)] p-0.5 shadow-2xs shrink-0">
                       <button
                         type="button"
@@ -2983,14 +3034,14 @@ export const WeeklyScheduleModal: React.FC<WeeklyScheduleModalProps> = ({
                           setActiveScheduleIndex((index) => index - 1);
                           triggerHaptic("selection");
                         }}
-                        className="h-8 px-2.5 rounded-md font-bold text-xs text-[var(--text)] hover:bg-[var(--surface)] disabled:opacity-30 disabled:hover:bg-transparent cursor-pointer transition-colors flex items-center gap-1"
+                        className="h-7 sm:h-8 px-2 sm:px-2.5 rounded-md font-bold text-[11px] sm:text-xs text-[var(--text)] hover:bg-[var(--surface)] disabled:opacity-30 disabled:hover:bg-transparent cursor-pointer transition-colors flex items-center gap-0.5 sm:gap-1"
                         title="الجدول السابق"
                       >
-                        <ChevronRight size={14} />
-                        <span>السابق</span>
+                        <ChevronRight size={13} />
+                        <span className="hidden xs:inline">السابق</span>
                       </button>
 
-                      <div className="px-2 h-7 text-xs font-black text-[var(--text)] flex items-center gap-1 border-x border-[var(--line)]">
+                      <div className="px-1.5 sm:px-2 h-6 sm:h-7 text-[11px] sm:text-xs font-black text-[var(--text)] flex items-center gap-1 border-x border-[var(--line)]">
                         <input
                           type="number"
                           min={1}
@@ -3006,10 +3057,10 @@ export const WeeklyScheduleModal: React.FC<WeeklyScheduleModalProps> = ({
                               setActiveScheduleIndex(val - 1);
                             }
                           }}
-                          className="w-10 text-center font-mono font-bold text-xs bg-[var(--surface)] border border-[var(--line-control)] rounded py-0.5 text-[var(--text)] focus:outline-none focus:border-[var(--accent)]"
+                          className="w-8 sm:w-10 text-center font-mono font-bold text-[11px] sm:text-xs bg-[var(--surface)] border border-[var(--line-control)] rounded py-0.5 text-[var(--text)] focus:outline-none focus:border-[var(--accent)]"
                           title="انتقل لرقم جدول محدد مباشرة"
                         />
-                        <span className="text-[11px] font-mono text-[var(--text-3)]">
+                        <span className="text-[10px] sm:text-[11px] font-mono text-[var(--text-3)]">
                           / {generatedSchedules.length}
                         </span>
                       </div>
@@ -3023,11 +3074,11 @@ export const WeeklyScheduleModal: React.FC<WeeklyScheduleModalProps> = ({
                           setActiveScheduleIndex((index) => index + 1);
                           triggerHaptic("selection");
                         }}
-                        className="h-8 px-2.5 rounded-md font-bold text-xs text-[var(--text)] hover:bg-[var(--surface)] disabled:opacity-30 disabled:hover:bg-transparent cursor-pointer transition-colors flex items-center gap-1"
+                        className="h-7 sm:h-8 px-2 sm:px-2.5 rounded-md font-bold text-[11px] sm:text-xs text-[var(--text)] hover:bg-[var(--surface)] disabled:opacity-30 disabled:hover:bg-transparent cursor-pointer transition-colors flex items-center gap-0.5 sm:gap-1"
                         title="الجدول التالي"
                       >
-                        <span>التالي</span>
-                        <ChevronLeft size={14} />
+                        <span className="hidden xs:inline">التالي</span>
+                        <ChevronLeft size={13} />
                       </button>
                     </div>
 
@@ -3037,53 +3088,25 @@ export const WeeklyScheduleModal: React.FC<WeeklyScheduleModalProps> = ({
                       id="adopt-schedule-btn"
                       disabled={generatedSchedules.length === 0}
                       onClick={() => handleAdoptSchedule(activeSchedule)}
-                      className="h-8 rounded-lg bg-[var(--accent)] hover:opacity-90 text-[var(--text-on-accent)] px-3.5 text-xs font-bold transition-opacity disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer flex items-center justify-center gap-1.5 shadow-2xs shrink-0"
+                      className="h-7 sm:h-8 rounded-lg bg-[var(--accent)] hover:opacity-90 text-[var(--text-on-accent)] px-2.5 sm:px-3.5 text-[11px] sm:text-xs font-bold transition-opacity disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer flex items-center justify-center gap-1 sm:gap-1.5 shadow-2xs shrink-0"
                       title="حفظ واعتماد هذا التوزيع كجدول أسبوعي أساسي لهذا الفصل"
                     >
-                      <Check size={14} />
-                      <span>اعتماد هذا الجدول</span>
+                      <Check size={13} />
+                      <span>اعتماد الجدول</span>
                     </button>
 
                     {/* Secondary Tools Cluster */}
-                    <div className="flex items-center gap-1.5 flex-wrap">
-                      {generatedSchedules.length > 1 && (
-                        <button
-                          type="button"
-                          id="add-to-comparison-btn"
-                          onClick={() => {
-                            setCompareScheduleIndexA(activeScheduleIndex);
-                            if (compareScheduleIndexB === activeScheduleIndex) {
-                              setCompareScheduleIndexB(
-                                (activeScheduleIndex + 1) %
-                                  generatedSchedules.length,
-                              );
-                            }
-                            setIsComparing(true);
-                            triggerHaptic("selection");
-                          }}
-                          className={cn(
-                            "h-8 rounded-lg border px-2.5 text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5 shadow-2xs",
-                            isComparing
-                              ? "border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--accent)]"
-                              : "border-[var(--line-control)] bg-[var(--surface)] hover:bg-[var(--sunken)] text-[var(--text)]",
-                          )}
-                          title="تثبيت هذا الجدول في شاشة المقارنة لمقارنته مع جداول أخرى جنباً إلى جنب"
-                        >
-                          <Columns size={13} className="text-[var(--accent)]" />
-                          <span>مقارنة</span>
-                        </button>
-                      )}
-
+                    <div className="flex items-center gap-1 sm:gap-1.5 shrink-0">
                       <button
                         type="button"
                         id="adopt-as-draft-btn"
                         disabled={generatedSchedules.length === 0}
                         onClick={() => handleAdoptAsDraft(activeSchedule)}
-                        className="h-8 rounded-lg bg-[var(--surface)] hover:bg-[var(--sunken)] border border-[var(--line-control)] text-[var(--text)] px-2.5 text-xs font-bold transition-colors disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer flex items-center justify-center gap-1.5"
+                        className="h-7 sm:h-8 rounded-lg bg-[var(--surface)] hover:bg-[var(--sunken)] border border-[var(--line-control)] text-[var(--text)] px-2 sm:px-2.5 text-[10px] sm:text-xs font-bold transition-colors disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer flex items-center justify-center gap-1"
                         title="حفظ واعتماد هذا الجدول كمسودة بديلة جديدة (A/B/C) للمقارنة بها دون استبدال مسودتك الحالية"
                       >
-                        <Bookmark size={13} className="text-[var(--accent)]" />
-                        <span>مسودة بديلة</span>
+                        <Bookmark size={12} className="text-[var(--accent)]" />
+                        <span className="hidden xs:inline">مسودة بديلة</span>
                       </button>
 
                       <button
@@ -3091,11 +3114,11 @@ export const WeeklyScheduleModal: React.FC<WeeklyScheduleModalProps> = ({
                         id="track-schedule-sections-btn"
                         disabled={generatedSchedules.length === 0}
                         onClick={handleTrackScheduleSections}
-                        className="h-8 rounded-lg bg-[var(--warn-soft)] hover:opacity-90 border border-[var(--warn)]/30 text-[var(--warn)] px-2.5 text-xs font-bold transition-opacity disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer flex items-center justify-center gap-1.5"
+                        className="h-7 sm:h-8 rounded-lg bg-[var(--warn-soft)] hover:opacity-90 border border-[var(--warn)]/30 text-[var(--warn)] px-2 sm:px-2.5 text-[10px] sm:text-xs font-bold transition-opacity disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer flex items-center justify-center gap-1"
                         title="تتبع الشعب المغلقة فقط في هذا الجدول لتلقي إشعار فور توفر مقعد شاغر"
                       >
-                        <Bell size={13} className="text-[var(--warn)]" />
-                        <span>تتبع المغلقة</span>
+                        <Bell size={12} className="text-[var(--warn)]" />
+                        <span className="hidden xs:inline">تتبع المغلقة</span>
                       </button>
                     </div>
                   </div>
@@ -3148,6 +3171,51 @@ export const WeeklyScheduleModal: React.FC<WeeklyScheduleModalProps> = ({
                     : "يمكنك التمرير أفقياً لرؤية جميع أيام الأسبوع"}
                 </div>
               </div>
+
+              {selectedCourseCodes.length === 0 && (
+                <div className="p-6 rounded-2xl bg-[var(--surface)] border border-[var(--line)] text-center space-y-3 my-2 shadow-xs animate-in fade-in duration-200">
+                  <div className="w-12 h-12 rounded-full bg-[var(--accent)]/10 text-[var(--accent)] flex items-center justify-center mx-auto">
+                    <Sparkles size={24} />
+                  </div>
+                  <h4 className="text-[15px] font-bold text-[var(--text)]">
+                    لم تقم باختيار مساقات لتوليد الجدول بعد
+                  </h4>
+                  <p className="text-xs text-[var(--text-2)] max-w-md mx-auto leading-relaxed">
+                    اختر مساقات من الخطة أدناه بنقرة واحدة، أو استخدم مربع البحث أعلاه لاختيار أي مساق في الجامعة لبدء توليد الجداول الخالية من التعارضات فوراً:
+                  </p>
+                  <div className="flex flex-wrap items-center justify-center gap-2 pt-1">
+                    {(() => {
+                      const dynamicSuggestions = courses
+                        .filter((c) => !completedCourses?.has(c.id))
+                        .slice(0, 5)
+                        .map((c) => ({ code: c.id, name: c.name }));
+
+                      const suggestions =
+                        dynamicSuggestions.length >= 3
+                          ? dynamicSuggestions
+                          : [
+                              { code: "15200106", name: "اللغة الإنجليزية (1)" },
+                              { code: "13010006", name: "مهارات الحاسوب وتطبيقاته" },
+                              { code: "14010101", name: "اللغة العربية" },
+                              { code: "14010102", name: "الدراسات الفلسطينية" },
+                              { code: "15200099", name: "إنجليزي استدراكي" },
+                            ];
+
+                      return suggestions.map((sample) => (
+                        <button
+                          key={sample.code}
+                          type="button"
+                          onClick={() => addGeneratedCourse(sample.code)}
+                          className="px-3 py-1.5 rounded-xl border border-[var(--line-control)] bg-[var(--sunken)] hover:bg-[var(--accent-soft)] hover:border-[var(--accent)] text-xs font-medium text-[var(--text)] hover:text-[var(--accent)] transition-all cursor-pointer flex items-center gap-1.5 shadow-2xs"
+                        >
+                          <Plus size={13} className="text-[var(--accent)]" />
+                          <span>{sample.name}</span>
+                        </button>
+                      ));
+                    })()}
+                  </div>
+                </div>
+              )}
 
               {scheduleViewMode === "daily" ? (
                 renderDailyScheduleView()
@@ -3327,138 +3395,7 @@ export const WeeklyScheduleModal: React.FC<WeeklyScheduleModalProps> = ({
                 </section>
               )}
 
-              {/* Bottom Schedule Pager (User Request: Allows student to cycle schedules from the bottom without scrolling back up) */}
-              {generatedSchedules.length > 0 && (
-                <div
-                  aria-label="التنقل بين الجداول (أسفل الجدول)"
-                  className="mt-1 flex flex-wrap items-center justify-between gap-2.5 rounded-xl border border-[var(--line)] p-2.5 bg-[var(--surface)] shadow-xs"
-                >
-                  <div className="flex items-center gap-2 text-xs font-bold text-[var(--text)]">
-                    <span>
-                      الاحتمال {activeScheduleIndex + 1} من أصل{" "}
-                      {generatedSchedules.length} خالي من أي تعارض
-                    </span>
-                    {scheduleQuality && (
-                      <span
-                        className={cn(
-                          "text-[10px] px-2 py-0.5 rounded-full font-bold border",
-                          scheduleQuality.tier === "excellent"
-                            ? "bg-[var(--accent-soft)] text-[var(--accent)] border-[var(--accent)]/30"
-                            : scheduleQuality.tier === "good"
-                              ? "bg-[var(--accent-soft)] text-[var(--accent)] border-[var(--accent)]/20"
-                              : scheduleQuality.tier === "fair"
-                                ? "bg-[var(--warn-soft)] text-[var(--warn)] border-[var(--warn)]/30"
-                                : "bg-[var(--danger-soft)] text-[var(--danger)] border-[var(--danger)]/30",
-                        )}
-                      >
-                        <span>{scheduleQuality.badge}</span>
-                        <span className="opacity-80 font-mono">
-                          ({scheduleQuality.score}%)
-                        </span>
-                      </span>
-                    )}
-                  </div>
-
-                  <div className="flex items-center gap-2 w-full sm:w-auto justify-end flex-wrap">
-                    {/* Connected Atomic Pager: السابق + الرقم + التالي */}
-                    <div className="inline-flex items-center rounded-lg border border-[var(--line-control)] bg-[var(--sunken)] p-0.5 shadow-2xs shrink-0">
-                      <button
-                        type="button"
-                        disabled={activeScheduleIndex <= 0}
-                        onClick={() => {
-                          setActiveScheduleIndex((index) => index - 1);
-                          triggerHaptic("selection");
-                        }}
-                        className="h-8 px-2.5 rounded-md font-bold text-xs text-[var(--text)] hover:bg-[var(--surface)] disabled:opacity-30 disabled:hover:bg-transparent cursor-pointer transition-colors flex items-center gap-1"
-                        title="الجدول السابق"
-                      >
-                        <ChevronRight size={14} />
-                        <span>السابق</span>
-                      </button>
-
-                      <div className="px-2 h-7 text-xs font-black text-[var(--text)] flex items-center gap-1 border-x border-[var(--line)]">
-                        <input
-                          type="number"
-                          min={1}
-                          max={generatedSchedules.length}
-                          value={activeScheduleIndex + 1}
-                          onChange={(e) => {
-                            const val = parseInt(e.target.value, 10);
-                            if (
-                              !isNaN(val) &&
-                              val >= 1 &&
-                              val <= generatedSchedules.length
-                            ) {
-                              setActiveScheduleIndex(val - 1);
-                            }
-                          }}
-                          className="w-10 text-center font-mono font-bold text-xs bg-[var(--surface)] border border-[var(--line-control)] rounded py-0.5 text-[var(--text)] focus:outline-none focus:border-[var(--accent)]"
-                          title="انتقل لرقم جدول محدد مباشرة"
-                        />
-                        <span className="text-[11px] font-mono text-[var(--text-3)]">
-                          / {generatedSchedules.length}
-                        </span>
-                      </div>
-
-                      <button
-                        type="button"
-                        disabled={
-                          activeScheduleIndex >= generatedSchedules.length - 1
-                        }
-                        onClick={() => {
-                          setActiveScheduleIndex((index) => index + 1);
-                          triggerHaptic("selection");
-                        }}
-                        className="h-8 px-2.5 rounded-md font-bold text-xs text-[var(--text)] hover:bg-[var(--surface)] disabled:opacity-30 disabled:hover:bg-transparent cursor-pointer transition-colors flex items-center gap-1"
-                        title="الجدول التالي"
-                      >
-                        <span>التالي</span>
-                        <ChevronLeft size={14} />
-                      </button>
-                    </div>
-
-                    <button
-                      type="button"
-                      disabled={generatedSchedules.length === 0}
-                      onClick={() => handleAdoptSchedule(activeSchedule)}
-                      className="h-8 rounded-lg bg-[var(--accent)] hover:opacity-90 text-[var(--text-on-accent)] px-3 text-xs font-bold transition-opacity disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer flex items-center justify-center gap-1.5 shadow-2xs shrink-0"
-                    >
-                      <Check size={14} />
-                      <span>اعتماد هذا الجدول</span>
-                    </button>
-
-                    {/* Action: Add to Comparison from bottom pager */}
-                    {generatedSchedules.length > 1 && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setCompareScheduleIndexA(activeScheduleIndex);
-                          if (compareScheduleIndexB === activeScheduleIndex) {
-                            setCompareScheduleIndexB(
-                              (activeScheduleIndex + 1) %
-                                generatedSchedules.length,
-                            );
-                          }
-                          setIsComparing(true);
-                          triggerHaptic("selection");
-                        }}
-                        className={cn(
-                          "h-8 rounded-lg border px-2.5 text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5 shadow-2xs",
-                          isComparing
-                            ? "border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--accent)]"
-                            : "border-[var(--line-control)] bg-[var(--surface)] hover:bg-[var(--sunken)] text-[var(--text)]",
-                        )}
-                        title="إضافة وتثبيت هذا الجدول في شاشة المقارنة لمقارنته مع جداول أخرى"
-                      >
-                        <Columns size={13} className="text-[var(--accent)]" />
-                        <span>مقارنة</span>
-                      </button>
-                    )}
-                  </div>
-                </div>
-              )}
             </section>
-          )}
 
           {/* Footer Info */}
           <div className="mt-4 pt-4 border-t border-[var(--line)] flex justify-between items-center text-[10px] font-bold text-[var(--text-3)]">
@@ -3472,7 +3409,6 @@ export const WeeklyScheduleModal: React.FC<WeeklyScheduleModalProps> = ({
                 يتم الحفظ تلقائياً
               </span>
             </div>
-            <p>يمكنك التبديل بين الأقسام من الأعلى</p>
           </div>
         </div>
       </ErrorBoundary>

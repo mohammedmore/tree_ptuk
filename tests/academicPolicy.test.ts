@@ -162,6 +162,22 @@ test("academicPolicy: getStudentCreditLimits enforces PTUK credit limits", () =>
   });
   assert.equal(highGpaSummer.maxCredits, 12);
   assert.equal(highGpaSummer.isHighGpaOrGraduating, true);
+
+  // 7. Graduating senior in regular semester (allowed up to 21)
+  const graduatingReg = getStudentCreditLimits({
+    semesterName: "الفصل الأول 2024/2025",
+    isGraduating: true,
+  });
+  assert.equal(graduatingReg.maxCredits, 21);
+  assert.equal(graduatingReg.isHighGpaOrGraduating, true);
+
+  // 8. Graduating senior in summer semester (allowed up to 12)
+  const graduatingSummer = getStudentCreditLimits({
+    semesterName: "الفصل الصيفي 2024/2025",
+    isGraduating: true,
+  });
+  assert.equal(graduatingSummer.maxCredits, 12);
+  assert.equal(graduatingSummer.isHighGpaOrGraduating, true);
 });
 
 test("academicPolicy: getOfficialDegreeTotalCredits scales across diploma, bachelor, and engineering", () => {

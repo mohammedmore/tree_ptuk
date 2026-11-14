@@ -372,6 +372,7 @@ export const GlobalModalsContainer: React.FC<GlobalModalsContainerProps> = ({
           darkMode={isDarkMode}
           categoryRequirements={categoryRequirements}
           totalDegreeCredits={degreeTotalCredits}
+          activeMajorId={activeMajorId}
         />
       )}
 
@@ -427,6 +428,8 @@ export const GlobalModalsContainer: React.FC<GlobalModalsContainerProps> = ({
           weeklySchedule={weeklySchedule}
           setWeeklySchedule={setWeeklySchedule}
           completedCourses={completedCourses}
+          activeMajorId={activeMajorId}
+          totalDegreeCredits={degreeTotalCredits}
         />
       )}
 
