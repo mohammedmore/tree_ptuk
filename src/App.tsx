@@ -148,13 +148,13 @@ import { usePrivacyMask } from "./hooks/usePrivacyMask";
 import { cn } from "./utils";
 
 const READY_THEMES: Array<{ id: ThemeMode; name: string; swatch: string }> = [
-  { id: "midnight-forest", name: "أسود أخضر", swatch: "#75b895" },
-  { id: "deep-navy", name: "أزرق عميق", swatch: "#67b7e8" },
-  { id: "warm-sand", name: "رملي دافئ", swatch: "#9a6541" },
-  { id: "slate-indigo", name: "سليت نيلي", swatch: "#5b61ad" },
-  { id: "midnight-violet", name: "بنفسجي ليلي", swatch: "#b99aee" },
-  { id: "tokyo-coral", name: "مرجاني", swatch: "#ef927f" },
-  { id: "liquid-amber", name: "كهرماني", swatch: "#e2b85c" },
+  { id: "midnight-forest", name: "غابة منتصف الليل", swatch: "#7aa78f" },
+  { id: "deep-navy", name: "كحلي هادئ", swatch: "#839cb0" },
+  { id: "warm-sand", name: "رملي كلاسيكي", swatch: "#a38b70" },
+  { id: "slate-indigo", name: "رمادي نيلي", swatch: "#7a7e9a" },
+  { id: "midnight-violet", name: "بنفسجي دخاني", swatch: "#9f95ac" },
+  { id: "tokyo-coral", name: "مرجاني هادئ", swatch: "#c48d84" },
+  { id: "liquid-amber", name: "كهرماني هادئ", swatch: "#b39d6a" },
 ];
 
 const PageLoadingFallback = () => (
@@ -933,18 +933,18 @@ export function App() {
   const [customTheme, setCustomTheme] = useState<Record<string, string>>(
     () =>
       themeManager.getCustomTheme() ?? {
-        "--bg": "#080d0b",
-        "--surface": "#101714",
-        "--sunken": "#050806",
-        "--text": "#edf5ef",
-        "--text-2": "#bcc8c1",
-        "--text-3": "#8e9d95",
-        "--text-on-accent": "#07110d",
-        "--line": "#26342e",
-        "--line-control": "#52675d",
-        "--accent": "#75b895",
-        "--accent-hover": "#8bcaa7",
-        "--accent-soft": "#1c3026",
+        "--bg": "#0b1210",
+        "--surface": "#141d19",
+        "--sunken": "#080d0b",
+        "--text": "#edf3ef",
+        "--text-2": "#bfcac4",
+        "--text-3": "#929f98",
+        "--text-on-accent": "#0b1712",
+        "--line": "#29372f",
+        "--line-control": "#59685f",
+        "--accent": "#7aa78f",
+        "--accent-hover": "#8fb7a1",
+        "--accent-soft": "#203027",
       },
   );
 
@@ -1674,7 +1674,7 @@ export function App() {
                     onClick={() => applyPresetTheme("midnight-forest")}
                     className="mt-2 w-full h-9 rounded-[var(--r-control)] border border-[var(--line)] text-[12px] text-[var(--text-2)] hover:bg-[var(--sunken)] cursor-pointer"
                   >
-                    استعادة الافتراضي: أسود أخضر
+                    استعادة الافتراضي: غابة منتصف الليل
                   </button>
                 </div>
               </div>
