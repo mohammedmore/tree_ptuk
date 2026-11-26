@@ -86,7 +86,14 @@ body {
   margin: 0;
   width: 100%;
   min-height: 100%;
-  background-color: var(--bg);
+  background:
+    radial-gradient(circle at 100% 0%, var(--accent-soft) 0, transparent 300px),
+    radial-gradient(
+      circle at 0% 100%,
+      color-mix(in srgb, var(--accent) 7%, transparent) 0,
+      transparent 280px
+    ),
+    var(--bg);
   color: var(--text);
   font-family: var(--font-ui);
   line-height: var(--lh-body);
@@ -166,6 +173,43 @@ input[type="number"] {
 
 ::-webkit-scrollbar-thumb:hover {
   background: var(--text-3);
+}
+
+button,
+[role="button"] {
+  -webkit-tap-highlight-color: transparent;
+}
+
+button:active:not(:disabled),
+[role="button"]:active {
+  transform: translateY(1px);
+}
+
+button:not(:disabled),
+[role="button"] {
+  transition:
+    background-color var(--dur-2) var(--ease),
+    border-color var(--dur-2) var(--ease),
+    color var(--dur-2) var(--ease),
+    box-shadow var(--dur-2) var(--ease),
+    transform var(--dur-1) var(--ease);
+}
+
+::selection {
+  background: var(--accent-soft);
+  color: var(--text);
+}
+
+input:not([type="checkbox"]):not([type="radio"]),
+select,
+textarea {
+  box-shadow: inset 0 1px 1px rgb(31 36 33 / 0.025);
+}
+
+input:not([type="checkbox"]):not([type="radio"]),
+select,
+textarea {
+  border-radius: var(--r-control);
 }
 
 /* Transitions: Basic, purposeful, respecting reduced motion */

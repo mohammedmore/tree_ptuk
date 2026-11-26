@@ -1671,7 +1671,7 @@ export const CoursesPage: React.FC<CoursesPageProps> = ({
       </div>
 
       {/* Header */}
-      <header className="px-4 sm:px-6 py-4 border-b border-[var(--line)] bg-[var(--bg)] shrink-0 no-print">
+      <header className="mx-3 mt-3 mb-2 px-4 sm:px-5 py-3.5 border border-[var(--line)] rounded-[14px] bg-[var(--surface)] shrink-0 no-print shadow-[0_1px_8px_rgba(31,36,33,0.04)]">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div>
             <h1 className="text-[26px] font-semibold text-[var(--text)] font-['Noto_Naskh_Arabic',serif] leading-tight">

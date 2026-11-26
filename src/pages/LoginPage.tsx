@@ -160,8 +160,8 @@ export const LoginPage: React.FC<LoginPageProps> = ({
       className={cn(
         "w-full bg-[var(--bg)] text-[var(--text)] transition-all",
         isLoading
-          ? "min-h-[calc(100vh-52px)] md:h-[calc(100vh-52px)] md:max-h-[calc(100vh-52px)] overflow-hidden flex flex-col items-center justify-center md:justify-between px-2 sm:px-6 pt-2 pb-2 md:pb-0"
-          : "min-h-[calc(100vh-52px)] flex justify-center px-4 pt-[var(--s-8)] pb-12",
+          ? "min-h-[calc(100vh-64px)] md:h-[calc(100vh-64px)] md:max-h-[calc(100vh-64px)] overflow-hidden flex flex-col items-center justify-center md:justify-between px-2 sm:px-6 pt-2 pb-2 md:pb-0"
+          : "min-h-[calc(100vh-64px)] flex justify-center px-4 py-8 sm:py-12",
       )}
     >
       <div
@@ -169,7 +169,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({
           "w-full text-right transition-all flex flex-col",
           isLoading
             ? "max-w-4xl flex-1 md:h-full justify-center md:justify-between overflow-hidden"
-            : "max-w-[400px]",
+            : "max-w-[440px] bg-[var(--surface)] border border-[var(--line)] rounded-[16px] shadow-[var(--shadow-pop)] p-6 sm:p-8",
         )}
       >
         {/* Title & University Subtitle */}

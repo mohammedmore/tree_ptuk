@@ -6,9 +6,6 @@ import React, {
   useCallback,
 } from "react";
 import {
-  Sun,
-  Moon,
-  Laptop,
   MoreHorizontal,
   X,
   Share2,
@@ -29,13 +26,12 @@ import {
   Calendar,
   Clock,
   Search,
-  Sliders,
-  Printer,
   Eye,
   EyeOff,
+  Palette,
 } from "lucide-react";
 import { useAppRoute } from "./router";
-import { themeManager } from "./themeManager";
+import { themeManager, type ThemeMode } from "./themeManager";
 import { OfflineBanner, UndoToast } from "./components/common";
 import { triggerHaptic } from "./utils/haptics";
 import { SEMESTERS, TOTAL_CREDITS } from "./constants";
@@ -143,16 +139,23 @@ import {
   LoadScheduleModal,
   SharedSchedulePreviewModal,
 } from "./components/modals/SharedScheduleModals";
-import {
-  CommandPaletteModal,
-  CourseComparisonDrawer,
-} from "./components/modals";
+import { CommandPaletteModal } from "./components/modals";
 import { AcademicAuditPrint } from "./components/planner/AcademicAuditPrint";
 import { SyncStatusPill } from "./components/common/SyncStatusPill";
 import { ErrorBoundary } from "./components/common/ErrorBoundary";
 import FeatureTourGuide from "./components/FeatureTourGuide";
 import { usePrivacyMask } from "./hooks/usePrivacyMask";
 import { cn } from "./utils";
+
+const READY_THEMES: Array<{ id: ThemeMode; name: string; swatch: string }> = [
+  { id: "midnight-forest", name: "أسود أخضر", swatch: "#75b895" },
+  { id: "deep-navy", name: "أزرق عميق", swatch: "#67b7e8" },
+  { id: "warm-sand", name: "رملي دافئ", swatch: "#9a6541" },
+  { id: "slate-indigo", name: "سليت نيلي", swatch: "#5b61ad" },
+  { id: "midnight-violet", name: "بنفسجي ليلي", swatch: "#b99aee" },
+  { id: "tokyo-coral", name: "مرجاني", swatch: "#ef927f" },
+  { id: "liquid-amber", name: "كهرماني", swatch: "#e2b85c" },
+];
 
 const PageLoadingFallback = () => (
   <div
@@ -234,31 +237,26 @@ export function App() {
   }, []);
 
   // Theme state (Item 85: Tri-cycle dark -> light -> system, plus high-contrast Item 91)
-  const [themeMode, setThemeMode] = useState<
-    "light" | "dark" | "system" | "high-contrast"
-  >(() => {
+  const [themeMode, setThemeMode] = useState<ThemeMode | "system">(() => {
     themeManager.initialize();
-    if (themeManager.isHighContrast) return "high-contrast";
-    if (themeManager.isSystemTheme) return "system";
-    return themeManager.isDarkMode ? "dark" : "light";
+    return themeManager.currentTheme;
   });
   const [isDarkMode, setIsDarkMode] = useState(() => themeManager.isDarkMode);
 
-  const cycleTheme = () => {
-    if (themeMode === "dark") {
-      themeManager.setTheme("light");
-      setThemeMode("light");
-      setIsDarkMode(false);
-    } else if (themeMode === "light") {
-      themeManager.followSystem();
-      setThemeMode("system");
-      setIsDarkMode(themeManager.isDarkMode);
-    } else {
-      themeManager.setTheme("dark");
-      setThemeMode("dark");
-      setIsDarkMode(true);
-    }
-    triggerHaptic();
+  const applyPresetTheme = (theme: ThemeMode): void => {
+    themeManager.setTheme(theme);
+    setThemeMode(theme);
+    setIsDarkMode(themeManager.isDarkMode);
+    setIsThemeMenuOpen(false);
+    triggerHaptic("selection");
+  };
+
+  const applyCustomColor = (token: string, value: string): void => {
+    const next = { ...customTheme, [token]: value };
+    setCustomTheme(next);
+    themeManager.setCustomTheme(next);
+    setThemeMode("custom");
+    setIsDarkMode(false);
   };
 
   // Major and courses state
@@ -930,6 +928,25 @@ export function App() {
   // Modals & Popups State
   const [isToolsMenuOpen, setIsToolsMenuOpen] = useState(false);
   const toolsMenuRef = useRef<HTMLDivElement>(null);
+  const [isThemeMenuOpen, setIsThemeMenuOpen] = useState(false);
+  const themeMenuRef = useRef<HTMLDivElement>(null);
+  const [customTheme, setCustomTheme] = useState<Record<string, string>>(
+    () =>
+      themeManager.getCustomTheme() ?? {
+        "--bg": "#080d0b",
+        "--surface": "#101714",
+        "--sunken": "#050806",
+        "--text": "#edf5ef",
+        "--text-2": "#bcc8c1",
+        "--text-3": "#8e9d95",
+        "--text-on-accent": "#07110d",
+        "--line": "#26342e",
+        "--line-control": "#52675d",
+        "--accent": "#75b895",
+        "--accent-hover": "#8bcaa7",
+        "--accent-soft": "#1c3026",
+      },
+  );
 
   const [showResetConfirm, setShowResetConfirm] = useState(false);
   const [showMajorSelector, setShowMajorSelector] = useState(false);
@@ -941,7 +958,6 @@ export function App() {
   const [isRecordsModalOpen, setIsRecordsModalOpen] = useState(false);
   const [isCalendarModalOpen, setIsCalendarModalOpen] = useState(false);
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
-  const [isComparisonOpen, setIsComparisonOpen] = useState(false);
 
   // Global keyboard shortcut for Command Palette (Ctrl+K / Cmd+K)
   useEffect(() => {
@@ -1001,6 +1017,12 @@ export function App() {
         !toolsMenuRef.current.contains(e.target as Node)
       ) {
         setIsToolsMenuOpen(false);
+      }
+      if (
+        themeMenuRef.current &&
+        !themeMenuRef.current.contains(e.target as Node)
+      ) {
+        setIsThemeMenuOpen(false);
       }
     };
     document.addEventListener("mousedown", handleOutsideClick);
@@ -1363,26 +1385,34 @@ export function App() {
       {/* Offline Status Alert Banner */}
       <OfflineBanner />
 
-      {/* 52px Fixed/Sticky Topbar */}
-      <header className="h-[52px] bg-[var(--bg)] border-b border-[var(--line)] sticky top-0 z-[var(--z-sticky)] px-3 sm:px-5 lg:px-6 flex items-center justify-between overflow-x-clip">
+      {/* Academic navigation shell */}
+      <header className="h-[64px] bg-[var(--surface)]/95 backdrop-blur-md border-b border-[var(--line)] sticky top-0 z-[var(--z-sticky)] px-3 sm:px-5 lg:px-7 flex items-center justify-between overflow-x-clip shadow-[0_1px_0_rgba(31,36,33,0.03)]">
         {/* Leading edge: Site name + 5 text tabs */}
         <div className="flex items-center gap-3 sm:gap-5 lg:gap-7 shrink-0 min-w-0">
           <a
             href="#/plan"
-            className="text-[16px] lg:text-[17px] font-semibold text-[var(--text)] font-['Noto_Naskh_Arabic',serif] hover:opacity-90 transition-opacity no-underline flex items-center gap-2 whitespace-nowrap shrink-0"
+            className="text-[16px] lg:text-[18px] font-bold text-[var(--text)] font-['Noto_Naskh_Arabic',serif] hover:text-[var(--accent)] transition-colors no-underline flex items-center gap-2.5 whitespace-nowrap shrink-0"
           >
-            <span>بوابة التخطيط</span>
+            <span className="w-9 h-9 rounded-[10px] bg-[var(--accent)] text-[var(--text-on-accent)] flex items-center justify-center shadow-sm">
+              <GraduationCap size={19} strokeWidth={2} />
+            </span>
+            <span>
+              بوابة التخطيط
+              <small className="hidden lg:block text-[10px] leading-none font-medium text-[var(--text-3)] mt-1">
+                جامعة فلسطين التقنية - خضوري
+              </small>
+            </span>
           </a>
 
           {/* 5 Text Navigation Tabs (Desktop >= 768px) */}
-          <nav className="hidden md:flex items-center gap-3 lg:gap-5 text-[13px] lg:text-[14px] font-medium h-[52px] shrink-0 whitespace-nowrap">
+          <nav className="hidden md:flex items-center gap-1 text-[13px] lg:text-[14px] font-medium h-[64px] px-1 shrink-0 whitespace-nowrap">
             <a
               href="#/plan"
               className={cn(
-                "h-full flex items-center border-b-2 transition-colors no-underline whitespace-nowrap shrink-0 px-0.5",
+                "h-10 flex items-center rounded-[9px] transition-colors no-underline whitespace-nowrap shrink-0 px-3",
                 currentRoute === "plan"
-                  ? "border-[var(--accent)] text-[var(--text)] font-semibold"
-                  : "border-transparent text-[var(--text-2)] hover:text-[var(--text)]",
+                  ? "bg-[var(--accent-soft)] text-[var(--accent)] font-bold"
+                  : "text-[var(--text-2)] hover:bg-[var(--sunken)] hover:text-[var(--text)]",
               )}
             >
               الخطة
@@ -1390,10 +1420,10 @@ export function App() {
             <a
               href="#/semester-planning"
               className={cn(
-                "h-full flex items-center border-b-2 transition-colors no-underline whitespace-nowrap shrink-0 px-0.5",
+                "h-10 flex items-center rounded-[9px] transition-colors no-underline whitespace-nowrap shrink-0 px-3",
                 currentRoute === "semester-planning"
-                  ? "border-[var(--accent)] text-[var(--text)] font-semibold"
-                  : "border-transparent text-[var(--text-2)] hover:text-[var(--text)]",
+                  ? "bg-[var(--accent-soft)] text-[var(--accent)] font-bold"
+                  : "text-[var(--text-2)] hover:bg-[var(--sunken)] hover:text-[var(--text)]",
               )}
             >
               تخطيط الفصل
@@ -1401,10 +1431,10 @@ export function App() {
             <a
               href="#/courses"
               className={cn(
-                "h-full flex items-center border-b-2 transition-colors no-underline whitespace-nowrap shrink-0 px-0.5",
+                "h-10 flex items-center rounded-[9px] transition-colors no-underline whitespace-nowrap shrink-0 px-3",
                 currentRoute === "courses"
-                  ? "border-[var(--accent)] text-[var(--text)] font-semibold"
-                  : "border-transparent text-[var(--text-2)] hover:text-[var(--text)]",
+                  ? "bg-[var(--accent-soft)] text-[var(--accent)] font-bold"
+                  : "text-[var(--text-2)] hover:bg-[var(--sunken)] hover:text-[var(--text)]",
               )}
             >
               المواد
@@ -1412,10 +1442,10 @@ export function App() {
             <a
               href="#/schedule"
               className={cn(
-                "h-full flex items-center border-b-2 transition-colors no-underline whitespace-nowrap shrink-0 px-0.5",
+                "h-10 flex items-center rounded-[9px] transition-colors no-underline whitespace-nowrap shrink-0 px-3",
                 currentRoute === "schedule"
-                  ? "border-[var(--accent)] text-[var(--text)] font-semibold"
-                  : "border-transparent text-[var(--text-2)] hover:text-[var(--text)]",
+                  ? "bg-[var(--accent-soft)] text-[var(--accent)] font-bold"
+                  : "text-[var(--text-2)] hover:bg-[var(--sunken)] hover:text-[var(--text)]",
               )}
             >
               الجدول الأسبوعي
@@ -1425,7 +1455,7 @@ export function App() {
               disabled
               title="قيد التطوير"
               aria-label="تسجيل الفصل، قيد التطوير"
-              className="h-full flex items-center gap-1.5 border-b-2 border-transparent whitespace-nowrap shrink-0 px-0.5 text-[var(--text-3)] opacity-60 cursor-not-allowed"
+              className="h-10 flex items-center gap-1.5 rounded-[9px] whitespace-nowrap shrink-0 px-3 text-[var(--text-3)] opacity-60 cursor-not-allowed"
             >
               <span>تسجيل الفصل</span>
               <Lock size={12} aria-hidden="true" />
@@ -1433,10 +1463,10 @@ export function App() {
             <a
               href="#/gpa"
               className={cn(
-                "h-full flex items-center border-b-2 transition-colors no-underline whitespace-nowrap shrink-0 px-0.5",
+                "h-10 flex items-center rounded-[9px] transition-colors no-underline whitespace-nowrap shrink-0 px-3",
                 currentRoute === "gpa"
-                  ? "border-[var(--accent)] text-[var(--text)] font-semibold"
-                  : "border-transparent text-[var(--text-2)] hover:text-[var(--text)]",
+                  ? "bg-[var(--accent-soft)] text-[var(--accent)] font-bold"
+                  : "text-[var(--text-2)] hover:bg-[var(--sunken)] hover:text-[var(--text)]",
               )}
             >
               المعدل والدرجات
@@ -1479,14 +1509,11 @@ export function App() {
           <button
             type="button"
             onClick={() => setIsCalendarModalOpen(true)}
-            className="flex items-center gap-1.5 h-8 px-2 sm:px-2.5 text-[12px] sm:text-[13px] font-medium text-indigo-700 dark:text-indigo-300 hover:text-indigo-800 dark:hover:text-indigo-200 bg-indigo-50/90 dark:bg-indigo-950/40 hover:bg-indigo-100/90 dark:hover:bg-indigo-900/60 border border-indigo-200/90 dark:border-indigo-800/60 rounded-[var(--r-control)] transition-all cursor-pointer whitespace-nowrap shrink-0 shadow-2xs"
+            aria-label="التقويم الأكاديمي المعتمد"
+            className="w-10 h-10 flex items-center justify-center rounded-[var(--r-control)] text-[var(--accent)] hover:bg-[var(--accent-soft)] hover:text-[var(--accent-hover)] active:scale-95 transition-all cursor-pointer shrink-0"
             title="التقويم الأكاديمي المعتمد ومواعيد الامتحانات والسحب والإضافة"
           >
-            <Calendar
-              size={14}
-              className="text-indigo-600 dark:text-indigo-400 shrink-0"
-            />
-            <span className="whitespace-nowrap">التقويم الأكاديمي</span>
+            <Calendar size={14} className="shrink-0" />
           </button>
 
           {/* Quick Export Button (Available on 2xl or in ⋯ tools menu) */}
@@ -1559,34 +1586,100 @@ export function App() {
             {isPrivacyMasked ? <EyeOff size={18} /> : <Eye size={18} />}
           </button>
 
-          {/* Tri-cycle Theme Toggle Button (Item 85: Dark -> Light -> System) */}
-          <button
-            type="button"
-            onClick={cycleTheme}
-            aria-label={
-              themeMode === "dark"
-                ? "المظهر الداكن (انقر للتبديل للفاتح)"
-                : themeMode === "light"
-                  ? "المظهر الفاتح (انقر للتبديل للتلقائي)"
-                  : "مظهر النظام التلقائي (انقر للتبديل للداكن)"
-            }
-            title={
-              themeMode === "dark"
-                ? "المظهر الداكن (انقر للتبديل للفاتح)"
-                : themeMode === "light"
-                  ? "المظهر الفاتح (انقر للتبديل للتلقائي)"
-                  : "مظهر النظام التلقائي (انقر للتبديل للداكن)"
-            }
-            className="w-10 h-10 flex items-center justify-center rounded-[var(--r-control)] text-[var(--text)] hover:bg-[var(--sunken)] active:scale-95 transition-all cursor-pointer"
-          >
-            {themeMode === "dark" ? (
-              <Moon size={18} />
-            ) : themeMode === "light" ? (
-              <Sun size={18} />
-            ) : (
-              <Laptop size={18} />
+          {/* Theme studio menu */}
+          <div className="relative" ref={themeMenuRef}>
+            <button
+              type="button"
+              onClick={() => setIsThemeMenuOpen((prev) => !prev)}
+              aria-label="قائمة أنماط الألوان والتخصيص"
+              aria-expanded={isThemeMenuOpen}
+              title="أنماط الألوان والتخصيص"
+              className="w-10 h-10 flex items-center justify-center rounded-[var(--r-control)] text-[var(--text)] hover:bg-[var(--sunken)] active:scale-95 transition-all cursor-pointer"
+            >
+              <Palette size={18} />
+            </button>
+
+            {isThemeMenuOpen && (
+              <div
+                role="menu"
+                className="absolute left-0 top-full mt-2 w-[280px] max-h-[70vh] overflow-y-auto bg-[var(--surface)] border border-[var(--line)] rounded-[var(--r-surface)] shadow-[var(--shadow-pop)] p-3 z-[var(--z-menu)] text-right"
+              >
+                <div className="mb-2 flex items-center justify-between">
+                  <span className="text-[13px] font-bold text-[var(--text)]">
+                    أنماط جاهزة
+                  </span>
+                  <span className="text-[11px] text-[var(--text-3)]">
+                    7 ثيمات
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 gap-1.5">
+                  {READY_THEMES.map((theme) => (
+                    <button
+                      key={theme.id}
+                      type="button"
+                      role="menuitem"
+                      onClick={() => applyPresetTheme(theme.id)}
+                      className={cn(
+                        "w-full h-10 px-2.5 rounded-[var(--r-control)] border text-[13px] flex items-center justify-between cursor-pointer",
+                        themeMode === theme.id
+                          ? "border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--accent)]"
+                          : "border-transparent text-[var(--text)] hover:bg-[var(--sunken)]",
+                      )}
+                    >
+                      <span className="flex items-center gap-2">
+                        <span
+                          className="w-5 h-5 rounded-full border border-white/30"
+                          style={{ backgroundColor: theme.swatch }}
+                        />
+                        {theme.name}
+                      </span>
+                      {themeMode === theme.id && <Check size={15} />}
+                    </button>
+                  ))}
+                </div>
+
+                <div className="mt-3 pt-3 border-t border-[var(--line)]">
+                  <div className="mb-2 text-[13px] font-bold text-[var(--text)]">
+                    تخصيص الألوان
+                  </div>
+                  {[
+                    ["--bg", "الخلفية"],
+                    ["--surface", "البطاقات"],
+                    ["--sunken", "المناطق الثانوية"],
+                    ["--accent", "الأزرار"],
+                    ["--accent-soft", "الخلفية الناعمة"],
+                    ["--text", "النص الأساسي"],
+                    ["--text-2", "النص الثانوي"],
+                    ["--line", "الحدود"],
+                  ].map(([token, label]) => (
+                    <label
+                      key={token}
+                      className="h-9 flex items-center justify-between gap-3 text-[12px] text-[var(--text-2)] cursor-pointer"
+                    >
+                      <span>{label}</span>
+                      <input
+                        type="color"
+                        value={customTheme[token]}
+                        onChange={(event) =>
+                          applyCustomColor(token, event.target.value)
+                        }
+                        className="w-8 h-7 p-0.5 border border-[var(--line)] rounded-[8px] bg-[var(--surface)] cursor-pointer"
+                        aria-label={label}
+                      />
+                    </label>
+                  ))}
+                  <button
+                    type="button"
+                    onClick={() => applyPresetTheme("midnight-forest")}
+                    className="mt-2 w-full h-9 rounded-[var(--r-control)] border border-[var(--line)] text-[12px] text-[var(--text-2)] hover:bg-[var(--sunken)] cursor-pointer"
+                  >
+                    استعادة الافتراضي: أسود أخضر
+                  </button>
+                </div>
+              </div>
             )}
-          </button>
+          </div>
 
           {/* ⋯ Menu */}
           <div className="relative" ref={toolsMenuRef}>
@@ -1727,30 +1820,6 @@ export function App() {
                     type="button"
                     onClick={() => {
                       setIsToolsMenuOpen(false);
-                      setIsComparisonOpen(true);
-                    }}
-                    className="w-full h-8 px-3.5 text-right text-[13px] text-[var(--text)] hover:bg-[var(--sunken)] transition-colors flex items-center justify-between cursor-pointer"
-                  >
-                    <span>مقارنة المساقات الاختيارية</span>
-                    <Sliders size={14} className="text-[var(--text-3)]" />
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setIsToolsMenuOpen(false);
-                      window.print();
-                    }}
-                    className="w-full h-8 px-3.5 text-right text-[13px] text-[var(--text)] hover:bg-[var(--sunken)] transition-colors flex items-center justify-between cursor-pointer"
-                  >
-                    <span>طباعة الخطة الورقية (A4)</span>
-                    <Printer size={14} className="text-[var(--text-3)]" />
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setIsToolsMenuOpen(false);
                       setShowSupportModal(true);
                     }}
                     className="w-full h-8 px-3.5 text-right text-[13px] text-[var(--text)] hover:bg-[var(--sunken)] transition-colors flex items-center justify-between cursor-pointer"
@@ -1834,7 +1903,7 @@ export function App() {
       </header>
 
       {/* Main Page View Switching based on Route (Item 35: Error Boundary protected) */}
-      <main className="flex-1 flex flex-col pb-14 md:pb-0">
+      <main className="flex-1 flex flex-col pb-[76px] md:pb-0">
         <ErrorBoundary>
           <React.Suspense fallback={<PageLoadingFallback />}>
             {(currentRoute === "plan" || currentRoute === "calendar") && (
@@ -2120,7 +2189,7 @@ export function App() {
       />
 
       {/* Mobile Fixed Bottom Navigation Bar (< 768px) with Active Route Indicators (Item 11) */}
-      <nav className="md:hidden fixed bottom-0 inset-x-0 h-[58px] bg-[var(--surface)]/95 backdrop-blur-md border-t border-[var(--line)] flex items-center justify-around px-1 z-[var(--z-sticky)] shadow-lg">
+      <nav className="md:hidden fixed bottom-2 inset-x-2 h-[60px] bg-[var(--surface)]/95 backdrop-blur-md border border-[var(--line)] rounded-[16px] flex items-center justify-around px-1 z-[var(--z-sticky)] shadow-[var(--shadow-pop)]">
         {[
           { route: "plan", label: "الخطة", icon: Zap },
           { route: "semester-planning", label: "الفصل", icon: Calendar },
@@ -2155,7 +2224,7 @@ export function App() {
               href={`#/${item.route}`}
               onClick={() => triggerHaptic("selection")}
               className={cn(
-                "flex-1 h-full flex flex-col items-center justify-center py-1 rounded-xl transition-all no-underline text-[11px] active:scale-95 select-none",
+                "flex-1 h-[52px] flex flex-col items-center justify-center py-1 rounded-[12px] transition-all no-underline text-[10px] active:scale-95 select-none",
                 isActive
                   ? "text-[var(--accent)] font-bold font-semibold"
                   : "text-[var(--text-3)] hover:text-[var(--text)] font-medium",
@@ -2392,30 +2461,11 @@ export function App() {
             handleSelectMajor(majorId);
             setIsCommandPaletteOpen(false);
           }}
-          onOpenComparison={() => {
-            setIsCommandPaletteOpen(false);
-            setIsComparisonOpen(true);
-          }}
           onOpenCalendar={() => {
             setIsCommandPaletteOpen(false);
             setIsCalendarModalOpen(true);
           }}
-          onPrintTranscript={() => {
-            setIsCommandPaletteOpen(false);
-            window.print();
-          }}
           activeMajorId={activeMajorId}
-        />
-
-        {/* Course Comparison Drawer */}
-        <CourseComparisonDrawer
-          isOpen={isComparisonOpen}
-          onClose={() => setIsComparisonOpen(false)}
-          courses={courses}
-          completedCourses={completedCourses}
-          plannedCourses={plannedCourses}
-          onToggleComplete={handleToggleComplete}
-          onPlanCourse={handlePlanCourse}
         />
 
         {/* Academic Audit Official Printable A4 Document */}

@@ -1215,7 +1215,7 @@ export const SemesterPlanningPage: React.FC<SemesterPlanningPageProps> = ({
   return (
     <div
       dir="rtl"
-      className="w-full min-h-[calc(100dvh-52px)] md:h-[calc(100dvh-52px)] md:overflow-hidden bg-[var(--bg)] flex flex-col text-[var(--text)]"
+      className="w-full min-h-[calc(100dvh-64px)] md:h-[calc(100dvh-64px)] md:overflow-hidden bg-[var(--bg)] flex flex-col text-[var(--text)]"
     >
       {/* Toast Notification */}
       {toastMessage && (
@@ -1229,7 +1229,7 @@ export const SemesterPlanningPage: React.FC<SemesterPlanningPageProps> = ({
       )}
 
       {/* Screen Header */}
-      <header className="px-3 sm:px-6 py-2.5 sm:py-3 border-b border-[var(--line)] bg-[var(--bg)] shrink-0 shadow-xs">
+      <header className="mx-3 mt-3 mb-2 px-3 sm:px-5 py-2.5 sm:py-3 border border-[var(--line)] rounded-[14px] bg-[var(--surface)] shrink-0 shadow-[0_1px_8px_rgba(31,36,33,0.04)]">
         <div className="flex flex-col gap-2.5 sm:flex-row sm:items-center sm:justify-between">
           {/* Top Line: Back + Title & Status */}
           <div className="flex items-center gap-2.5 min-w-0">
