@@ -1169,7 +1169,7 @@ function PlanFlowContent({
         {/* Screen Header */}
         <header
           data-feature-tour="plan-overview"
-          className="px-4 sm:px-6 py-3 border-b border-[var(--line)] bg-[var(--bg)] shrink-0 space-y-2.5"
+          className="mx-3 mt-3 mb-2 px-4 sm:px-5 py-3 border border-[var(--line)] rounded-[14px] bg-[var(--surface)] shrink-0 space-y-2.5 shadow-[0_1px_8px_rgba(31,36,33,0.04)]"
         >
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div>

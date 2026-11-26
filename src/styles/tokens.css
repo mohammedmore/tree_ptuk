@@ -1,24 +1,25 @@
 :root,
 :root[data-theme="light"] {
   color-scheme: light;
-  --bg: #f1f2ed;
-  --surface: #fafaf7;
-  --sunken: #e5e7e0;
-  --scrim: rgb(31 36 33 / 0.45);
-  --text: #1f2421;
-  --text-2: #3d443f;
-  --text-3: #5c635d;
-  --text-on-accent: #f7f8f3;
-  --line: #d6d9d1;
-  --line-control: #858d82;
-  --accent: #3f5b2e;
-  --accent-hover: #334a25;
-  --accent-soft: #e1e8d6;
-  --warn: #8a5f10;
-  --warn-soft: #f1e8cf;
-  --danger: #a33a2b;
-  --danger-soft: #f3ddd8;
-  --shadow-pop: 0 4px 16px rgb(31 36 33 / 0.12);
+  --bg: #f3f6f4;
+  --surface: #ffffff;
+  --sunken: #edf2ef;
+  --scrim: rgb(17 31 27 / 0.42);
+  --text: #17211e;
+  --text-2: #46534f;
+  --text-3: #73807b;
+  --text-on-accent: #ffffff;
+  --line: #dde5e1;
+  --line-control: #b4c1bc;
+  --accent: #176b5b;
+  --accent-hover: #115746;
+  --accent-soft: #dcefeb;
+  --warn: #9a6810;
+  --warn-soft: #f7edcf;
+  --danger: #b83d35;
+  --danger-soft: #fbe5e2;
+  --shadow-pop:
+    0 18px 45px rgb(32 68 58 / 0.13), 0 3px 10px rgb(32 68 58 / 0.07);
 
   /* ألوان المواد للجدول الأسبوعي (المضيء) */
   --c1-bg: oklch(0.92 0.03 30);
@@ -37,24 +38,24 @@
 
 :root[data-theme="dark"] {
   color-scheme: dark;
-  --bg: #212724;
-  --surface: #2a312d;
-  --sunken: #1a1f1c;
-  --scrim: rgb(0 0 0 / 0.6);
-  --text: #e9ece6;
-  --text-2: #bcc2ba;
-  --text-3: #98a09a;
-  --text-on-accent: #1b2417;
-  --line: #3a423d;
-  --line-control: #75807a;
-  --accent: #a9c38b;
-  --accent-hover: #bad29f;
-  --accent-soft: #2f3a27;
-  --warn: #ddb35a;
-  --warn-soft: #3a301a;
-  --danger: #e4907f;
-  --danger-soft: #402723;
-  --shadow-pop: 0 4px 16px rgb(0 0 0 / 0.45);
+  --bg: #101816;
+  --surface: #182220;
+  --sunken: #0d1412;
+  --scrim: rgb(0 0 0 / 0.68);
+  --text: #edf5f1;
+  --text-2: #bdcbc5;
+  --text-3: #91a39c;
+  --text-on-accent: #08251f;
+  --line: #30413c;
+  --line-control: #61766f;
+  --accent: #69cbb7;
+  --accent-hover: #84d9c7;
+  --accent-soft: #213e37;
+  --warn: #e3b866;
+  --warn-soft: #413820;
+  --danger: #f09a92;
+  --danger-soft: #452825;
+  --shadow-pop: 0 20px 50px rgb(0 0 0 / 0.38), 0 3px 12px rgb(0 0 0 / 0.24);
 
   /* ألوان المواد للجدول الأسبوعي (الداكن) */
   --c1-bg: oklch(0.33 0.03 30);
@@ -69,6 +70,148 @@
   --c5-bar: oklch(0.74 0.09 255);
   --c6-bg: oklch(0.33 0.03 320);
   --c6-bar: oklch(0.74 0.09 320);
+}
+
+:root[data-theme="midnight-forest"] {
+  color-scheme: dark;
+  --bg: #080d0b;
+  --surface: #101714;
+  --sunken: #050806;
+  --scrim: rgb(0 0 0 / 0.72);
+  --text: #edf5ef;
+  --text-2: #bcc8c1;
+  --text-3: #8e9d95;
+  --text-on-accent: #07110d;
+  --line: #26342e;
+  --line-control: #52675d;
+  --accent: #75b895;
+  --accent-hover: #8bcaa7;
+  --accent-soft: #1c3026;
+  --warn: #ddb866;
+  --warn-soft: #3b321a;
+  --danger: #ea948a;
+  --danger-soft: #422724;
+  --shadow-pop: 0 20px 50px rgb(0 0 0 / 0.48), 0 3px 12px rgb(0 0 0 / 0.28);
+}
+
+:root[data-theme="deep-navy"] {
+  color-scheme: dark;
+  --bg: #07111f;
+  --surface: #0d1b2a;
+  --sunken: #091420;
+  --text: #edf4fb;
+  --text-2: #b7c8d8;
+  --text-3: #839aae;
+  --text-on-accent: #06131f;
+  --line: #203448;
+  --line-control: #4d687f;
+  --accent: #67b7e8;
+  --accent-hover: #87c8ef;
+  --accent-soft: #17344a;
+  --warn: #edbd67;
+  --danger: #f18f98;
+  --danger-soft: #44262d;
+  --shadow-pop: 0 20px 50px rgb(0 0 0 / 0.42);
+}
+
+:root[data-theme="warm-sand"] {
+  color-scheme: light;
+  --bg: #f5f1e8;
+  --surface: #fffdf8;
+  --sunken: #eee7da;
+  --text: #322d25;
+  --text-2: #665d50;
+  --text-3: #8a8071;
+  --text-on-accent: #fffaf0;
+  --line: #ddd4c4;
+  --line-control: #b7aa96;
+  --accent: #9a6541;
+  --accent-hover: #7e5033;
+  --accent-soft: #eadac8;
+  --warn: #94610f;
+  --danger: #ad4339;
+  --danger-soft: #f4ddd7;
+  --shadow-pop: 0 18px 42px rgb(91 70 43 / 0.12);
+}
+
+:root[data-theme="slate-indigo"] {
+  color-scheme: light;
+  --bg: #f4f5fa;
+  --surface: #ffffff;
+  --sunken: #eaecf5;
+  --text: #23263a;
+  --text-2: #555a72;
+  --text-3: #7b8098;
+  --text-on-accent: #ffffff;
+  --line: #dde0ec;
+  --line-control: #b3b7ca;
+  --accent: #5b61ad;
+  --accent-hover: #484e94;
+  --accent-soft: #e4e5f5;
+  --warn: #93630d;
+  --danger: #b54747;
+  --danger-soft: #f5dddd;
+  --shadow-pop: 0 18px 42px rgb(65 68 108 / 0.12);
+}
+
+:root[data-theme="midnight-violet"] {
+  color-scheme: dark;
+  --bg: #100d18;
+  --surface: #1a1626;
+  --sunken: #0b0912;
+  --text: #f3efff;
+  --text-2: #c6bfd8;
+  --text-3: #998fac;
+  --text-on-accent: #150d21;
+  --line: #332c46;
+  --line-control: #665d80;
+  --accent: #b99aee;
+  --accent-hover: #cab1f4;
+  --accent-soft: #34284a;
+  --warn: #dfb66d;
+  --danger: #ed929c;
+  --danger-soft: #44272f;
+  --shadow-pop: 0 20px 50px rgb(0 0 0 / 0.44);
+}
+
+:root[data-theme="tokyo-coral"] {
+  color-scheme: dark;
+  --bg: #161316;
+  --surface: #211d20;
+  --sunken: #110f11;
+  --text: #fff5f1;
+  --text-2: #d1c2bd;
+  --text-3: #a99590;
+  --text-on-accent: #26100c;
+  --line: #403236;
+  --line-control: #71585c;
+  --accent: #ef927f;
+  --accent-hover: #f5aa9b;
+  --accent-soft: #4a302f;
+  --warn: #e1b86a;
+  --danger: #ff8d99;
+  --danger-soft: #4a2930;
+  --shadow-pop: 0 20px 50px rgb(0 0 0 / 0.42);
+}
+
+:root[data-theme="liquid-amber"] {
+  color-scheme: dark;
+  --bg: #17140d;
+  --surface: #211e14;
+  --sunken: #100e08;
+  --text: #fff9ea;
+  --text-2: #d7ceb6;
+  --text-3: #a99f82;
+  --text-on-accent: #241900;
+  --line: #403925;
+  --line-control: #716844;
+  --accent: #e2b85c;
+  --accent-hover: #eccb7d;
+  --accent-soft: #493d20;
+  --warn: #f0c46f;
+  --danger: #ef927f;
+  --danger-soft: #472924;
+  --shadow-pop: 0 20px 50px rgb(0 0 0 / 0.44);
 }
 
 /* نمط شاشات OLED الأسود الخالص لتوفير البطارية */
@@ -169,8 +312,8 @@
   --s-7: 48px;
   --s-8: 64px;
 
-  --r-control: 6px;
-  --r-surface: 10px;
+  --r-control: 11px;
+  --r-surface: 18px;
 
   --dur-1: 120ms;
   --dur-2: 200ms;
@@ -181,6 +324,6 @@
   --z-dialog: 40;
   --z-toast: 50;
 
-  --topbar-h: 52px;
-  --control-h: 36px;
+  --topbar-h: 64px;
+  --control-h: 40px;
 }

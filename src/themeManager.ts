@@ -1,4 +1,16 @@
-export type ThemeMode = "light" | "dark" | "oled" | "high-contrast";
+export type ThemeMode =
+  | "light"
+  | "dark"
+  | "oled"
+  | "high-contrast"
+  | "midnight-forest"
+  | "deep-navy"
+  | "warm-sand"
+  | "slate-indigo"
+  | "midnight-violet"
+  | "tokyo-coral"
+  | "liquid-amber"
+  | "custom";
 export type ThemeName = ThemeMode | "system";
 export type ThemeTokens = Record<string, string>;
 export type SavedTheme = { id: string; name: string; tokens: ThemeTokens };
@@ -39,28 +51,36 @@ export class ThemeManager {
       stored !== "light" &&
       stored !== "dark" &&
       stored !== "oled" &&
-      stored !== "high-contrast"
+      stored !== "high-contrast" &&
+      stored !== "midnight-forest" &&
+      stored !== "deep-navy" &&
+      stored !== "warm-sand" &&
+      stored !== "slate-indigo" &&
+      stored !== "midnight-violet" &&
+      stored !== "tokyo-coral" &&
+      stored !== "liquid-amber" &&
+      stored !== "custom"
     );
   }
 
   public get currentTheme(): ThemeMode {
-    if (typeof window === "undefined") return "light";
+    if (typeof window === "undefined") return "midnight-forest";
     const stored = localStorage.getItem("theme");
-    if (
-      stored === "light" ||
-      stored === "dark" ||
-      stored === "oled" ||
-      stored === "high-contrast"
-    ) {
+    if (stored) {
       return stored as ThemeMode;
     }
-    return window.matchMedia("(prefers-color-scheme: dark)").matches
-      ? "dark"
-      : "light";
+    return "midnight-forest";
   }
 
   public get isDarkMode(): boolean {
-    return this.currentTheme === "dark" || this.currentTheme === "oled";
+    return (
+      this.currentTheme === "dark" ||
+      this.currentTheme === "oled" ||
+      this.currentTheme === "midnight-forest" ||
+      this.currentTheme === "deep-navy" ||
+      this.currentTheme === "midnight-violet" ||
+      this.currentTheme === "liquid-amber"
+    );
   }
 
   public get isOled(): boolean {
@@ -74,8 +94,60 @@ export class ThemeManager {
   public setTheme(theme: ThemeMode): void {
     if (typeof window === "undefined") return;
     localStorage.setItem("theme", theme);
+    localStorage.removeItem("customTheme");
+    this.clearCustomTokens();
     this.applyCurrent();
     this.notifyListeners();
+  }
+
+  public setCustomTheme(tokens: ThemeTokens): void {
+    if (typeof window === "undefined" || typeof document === "undefined")
+      return;
+    localStorage.setItem("theme", "custom");
+    localStorage.setItem("customTheme", JSON.stringify(tokens));
+    this.applyCustomTokens(tokens);
+    this.notifyListeners();
+  }
+
+  public getCustomTheme(): ThemeTokens | null {
+    if (typeof window === "undefined") return null;
+    const saved = localStorage.getItem("customTheme");
+    if (!saved) return null;
+    try {
+      const parsed: unknown = JSON.parse(saved);
+      return typeof parsed === "object" && parsed !== null
+        ? (parsed as ThemeTokens)
+        : null;
+    } catch {
+      return null;
+    }
+  }
+
+  private applyCustomTokens(tokens: ThemeTokens): void {
+    if (!this.root) return;
+    this.root.dataset.theme = "custom";
+    this.root.classList.toggle("dark", true);
+    Object.entries(tokens).forEach(([name, value]) => {
+      this.root.style.setProperty(name, value);
+    });
+  }
+
+  private clearCustomTokens(): void {
+    if (!this.root) return;
+    [
+      "--bg",
+      "--surface",
+      "--sunken",
+      "--text",
+      "--text-2",
+      "--text-3",
+      "--text-on-accent",
+      "--line",
+      "--line-control",
+      "--accent",
+      "--accent-hover",
+      "--accent-soft",
+    ].forEach((name) => this.root.style.removeProperty(name));
   }
 
   public toggleTheme(): void {
@@ -99,6 +171,13 @@ export class ThemeManager {
   public applyCurrent(): void {
     if (typeof document === "undefined" || !this.root) return;
     const theme = this.currentTheme;
+    if (theme === "custom") {
+      const custom = this.getCustomTheme();
+      if (custom) {
+        this.applyCustomTokens(custom);
+        return;
+      }
+    }
     const effectiveThemeAttr = theme === "oled" ? "oled-black" : theme;
     this.root.dataset.theme = effectiveThemeAttr;
     this.root.classList.toggle("dark", theme === "dark" || theme === "oled");

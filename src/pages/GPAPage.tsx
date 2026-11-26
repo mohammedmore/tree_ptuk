@@ -411,7 +411,7 @@ export const GPAPage: React.FC<GPAPageProps> = ({
       className="w-full max-w-[1200px] mx-auto p-4 sm:p-6 space-y-[var(--s-6)] text-[var(--text)]"
     >
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-[var(--line)] pb-4">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-5 py-4 border border-[var(--line)] rounded-[14px] bg-[var(--surface)] shadow-[0_1px_8px_rgba(31,36,33,0.04)]">
         <div>
           <h1 className="text-[var(--fs-xl)] font-title text-[var(--text)] m-0">
             المعدل والدرجات

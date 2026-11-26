@@ -20,9 +20,7 @@ import {
   GraduationCap,
   Sparkles,
   ArrowRight,
-  Sliders,
   Eye,
-  Printer,
   Contrast,
   X,
 } from "lucide-react";
@@ -44,9 +42,7 @@ export interface CommandPaletteProps {
   onOpenExport?: () => void;
   onOpenMajorSelector?: () => void;
   onSelectMajor?: (majorId: string) => void;
-  onOpenComparison?: () => void;
   onOpenCalendar?: () => void;
-  onPrintTranscript?: () => void;
   activeMajorId?: string;
 }
 
@@ -70,9 +66,7 @@ export const CommandPaletteModal: React.FC<CommandPaletteProps> = ({
   onOpenExport,
   onOpenMajorSelector,
   onSelectMajor,
-  onOpenComparison,
   onOpenCalendar,
-  onPrintTranscript,
   activeMajorId,
 }) => {
   const [query, setQuery] = useState("");
@@ -181,34 +175,6 @@ export const CommandPaletteModal: React.FC<CommandPaletteProps> = ({
           if (onOpenExport) onOpenExport();
         },
         keywords: ["تصدير", "pdf", "ical", "حفظ", "export"],
-      },
-      {
-        id: "action-compare",
-        title: "مقارنة مادتين اختياريتين جنباً إلى جنب",
-        subtitle: "مقارنة الساعات والمتطلبات ومواعيد الشعب",
-        category: "actions",
-        icon: <Sliders size={16} className="text-teal-500" />,
-        perform: () => {
-          if (onOpenComparison) onOpenComparison();
-        },
-        keywords: ["مقارنة", "اختياري", "مساقات", "compare"],
-      },
-      {
-        id: "action-print-a4",
-        title: "طباعة السجل الأكاديمي الورقي (A4)",
-        subtitle: "إخراج وثيقة نظيفة معتمدة خالية من عناصر الواجهة",
-        category: "actions",
-        icon: (
-          <Printer size={16} className="text-slate-600 dark:text-slate-300" />
-        ),
-        perform: () => {
-          if (onPrintTranscript) {
-            onPrintTranscript();
-          } else {
-            window.print();
-          }
-        },
-        keywords: ["طباعة", "ورقي", "a4", "سجل", "print", "transcript"],
       },
       {
         id: "action-privacy-mask",
@@ -324,8 +290,6 @@ export const CommandPaletteModal: React.FC<CommandPaletteProps> = ({
     onSelectCourse,
     onOpenExport,
     onSelectMajor,
-    onOpenComparison,
-    onPrintTranscript,
   ]);
 
   // Filter actions based on query
