@@ -9,7 +9,6 @@ import {
   getMajorCohortPlan,
   getMajorById,
   upsertMajor,
-  getCourses,
 } from "../db.js";
 import {
   AI_CURRICULUM_COURSES,
@@ -17,6 +16,12 @@ import {
 } from "../majorsData.js";
 import { hashStudentPassword, verifyStudentPassword } from "./securityVault.js";
 import { edugateCircuitBreaker } from "../utils/circuitBreaker.js";
+import {
+  EDUGATE_PLAN_SOURCE,
+  normalizeEdugateMajorPlan,
+} from "./majorPlanParser.js";
+import { parseExemptionExamRows } from "./exemptionExamParser.js";
+export { parseExemptionExamRows };
 export { AI_CURRICULUM_COURSES, AI_CATEGORY_REQUIREMENTS };
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -810,7 +815,7 @@ function buildCohortCurriculumAndProgress(studentId) {
   });
 
   const completedCourses = coursesWithStatus.filter(
-    (c) => c.status === "completed",
+    (course) => course.status === "completed",
   );
   const registeredCourses = coursesWithStatus.filter(
     (c) => c.status === "registered",
@@ -1061,238 +1066,6 @@ function buildCohortCurriculumAndProgress(studentId) {
   };
 }
 
-/**
- * Parses scraped exemption and placement exam rows from Edugate PTUK.
- * Handles single or multiple comma-separated course codes in the "المقررات المعفاة" column
- * (e.g. "15200099,15200106" for English level exam exempting both Remedial English and English 1).
- *
- * @param {Array<object>} scrapedExams - Extracted table rows with metadata
- * @returns {{ exemptionExams: Array<object>, passedCourseCodes: Set<string> }}
- */
-export function parseExemptionExamRows(scrapedExams) {
-  const exemptionExams = [];
-  const passedCourseCodes = new Set();
-
-  if (!Array.isArray(scrapedExams)) {
-    return { exemptionExams, passedCourseCodes };
-  }
-
-  for (const item of scrapedExams) {
-    const rowText = item.text || (item.cells || []).join(" ");
-    if (
-      (rowText.includes("رمز المقرر") && rowText.includes("اسم المقرر")) ||
-      (rowText.includes("اسم الامتحان") && rowText.includes("النتيجة")) ||
-      (rowText.includes("الامتحان") && rowText.includes("المقررات المعفاة"))
-    ) {
-      continue;
-    }
-
-    const examName = (item.examName || item.cells?.[0] || "").trim();
-    const semester = (item.semester || item.cells?.[1] || "").trim();
-    const exemptedRaw = (item.exemptedCoursesRaw || "").trim();
-    const passedRaw = (item.passedRaw || "").trim();
-
-    // Extract potential exam grade from cells or item.grade first
-    let examGrade = null;
-    if (typeof item.grade === "number" && !isNaN(item.grade)) {
-      examGrade = item.grade;
-    } else {
-      for (const c of item.cells || []) {
-        const trimmedCell = String(c).trim();
-        const n = parseFloat(trimmedCell);
-        if (
-          !isNaN(n) &&
-          n >= 0 &&
-          n <= 100 &&
-          trimmedCell.length <= 5 &&
-          !/^\d{6,8}$/.test(trimmedCell)
-        ) {
-          examGrade = n;
-          break;
-        }
-      }
-    }
-
-    const isExplicitFail =
-      Boolean(item.hasCloseIcon) ||
-      (examGrade !== null && examGrade < 50) ||
-      /(راسب|غير معفى|غير مجتاز|فشل|fail|no|\bلا\b)/i.test(passedRaw) ||
-      /(راسب|غير معفى|غير مجتاز)/i.test(rowText);
-
-    // Extract all 6-to-8 digit course codes
-    let foundCodes = [];
-    if (exemptedRaw) {
-      const matches = exemptedRaw.match(/\b\d{6,8}\b/g);
-      if (matches) foundCodes.push(...matches);
-    }
-    if (foundCodes.length === 0) {
-      // Look across cells for 6-8 digit course codes
-      const matches = rowText.match(/\b\d{6,8}\b/g);
-      if (matches) {
-        foundCodes.push(...matches);
-      }
-    }
-
-    // Deduplicate
-    foundCodes = Array.from(new Set(foundCodes));
-
-    const isEnglishExam =
-      examName.includes("انجليزي") ||
-      examName.includes("إنجليزية") ||
-      examName.includes("English") ||
-      rowText.includes("انجليزي") ||
-      rowText.includes("إنجليزية") ||
-      rowText.includes("English") ||
-      foundCodes.some((c) => c === "15200099" || c === "15200106");
-
-    const isComputerExam =
-      examName.includes("حاسوب") ||
-      examName.includes("Computer") ||
-      rowText.includes("حاسوب") ||
-      rowText.includes("Computer") ||
-      foundCodes.includes("13010006");
-
-    const isArabicExam =
-      examName.includes("عربي") ||
-      examName.includes("عربية") ||
-      examName.includes("Arabic") ||
-      rowText.includes("عربي") ||
-      rowText.includes("عربية") ||
-      rowText.includes("Arabic") ||
-      foundCodes.includes("15200098");
-
-    const hasExplicitEnglish1 =
-      /(?:لغة\s+إ?نجليزي[ةه]\s*\(?1\)?|إ?نجليزي\s*\(?1\)?|\bEnglish\s*1\b)(?!\d)/i.test(
-        rowText,
-      ) ||
-      /(?:لغة\s+إ?نجليزي[ةه]\s*\(?1\)?|إ?نجليزي\s*\(?1\)?|\bEnglish\s*1\b)(?!\d)/i.test(
-        exemptedRaw,
-      );
-
-    const hasExplicitEnglish2 =
-      /(?:لغة\s+إ?نجليزي[ةه]\s*\(?2\)?|إ?نجليزي\s*\(?2\)?|\bEnglish\s*2\b)(?!\d)/i.test(
-        rowText,
-      ) ||
-      /(?:لغة\s+إ?نجليزي[ةه]\s*\(?2\)?|إ?نجليزي\s*\(?2\)?|\bEnglish\s*2\b)(?!\d)/i.test(
-        exemptedRaw,
-      );
-
-    // PTUK Placement Exam Regulations:
-    // - English Placement:
-    //     Grade >= 80: Exempts BOTH Remedial English (15200099) AND English 1 (15200106).
-    //     Grade 50-79: Exempts Remedial English (15200099). Student must take English 1 (15200106).
-    //     Grade < 50: Fails placement test. Student must register Remedial English (15200099).
-    if (isEnglishExam && !isExplicitFail) {
-      if ((examGrade !== null && examGrade >= 80) || hasExplicitEnglish1) {
-        if (!foundCodes.includes("15200106")) foundCodes.push("15200106");
-        if (!foundCodes.includes("15200099")) foundCodes.unshift("15200099");
-      } else if (foundCodes.length === 0) {
-        foundCodes.push("15200099");
-      }
-    }
-
-    if (hasExplicitEnglish2 && !isExplicitFail) {
-      if (!foundCodes.includes("15200112")) foundCodes.push("15200112");
-      if (!foundCodes.includes("15200106")) foundCodes.push("15200106");
-      if (!foundCodes.includes("15200099")) foundCodes.unshift("15200099");
-    }
-
-    // If no course code was found in the text, fallback to default exam codes:
-    if (foundCodes.length === 0) {
-      if (isEnglishExam) foundCodes.push("15200099");
-      else if (isComputerExam) foundCodes.push("13010006");
-      else if (isArabicExam) foundCodes.push("15200098");
-      else {
-        const anyCode = (item.cells || []).find((c) =>
-          /^\d{6,8}$/.test(c.trim()),
-        );
-        if (anyCode) foundCodes.push(anyCode.trim());
-      }
-    }
-
-    // Determine pass / exemption status:
-    // If courses are listed in "المقررات المعفاة" and not explicitly failed,
-    // or if check icon is present, or if passed text indicates pass,
-    // or if grade is >= 50.
-    const hasExemptionList = Boolean(exemptedRaw && foundCodes.length > 0);
-    const isPassedOrExempt =
-      !isExplicitFail &&
-      (Boolean(item.hasCheckIcon) ||
-        hasExemptionList ||
-        (examGrade !== null && examGrade >= 50) ||
-        /(معفى|معفاة|ناجح|اجتياز|محتسب|معادل|نعم|pass|exempt|yes)/i.test(
-          passedRaw,
-        ) ||
-        /(معفى|معفاة|ناجح|اجتياز|محتسب|معادل|pass|exempt)/i.test(rowText) ||
-        (item.cells || []).some((cell) => {
-          const num = parseFloat(cell);
-          return (
-            !isNaN(num) &&
-            num >= 50 &&
-            num <= 100 &&
-            !foundCodes.includes(cell.trim())
-          );
-        }));
-
-    // If English placement exam exempted English 1 (15200106), ensure English Remedial (15200099) is also included
-    if (foundCodes.includes("15200106") && !foundCodes.includes("15200099")) {
-      foundCodes.unshift("15200099");
-    }
-
-    for (const code of foundCodes) {
-      let courseName = "";
-      if (code === "15200099") courseName = "إنجليزي إستدراكي";
-      else if (code === "15200106") courseName = "اللغة الإنجليزية (1)";
-      else if (code === "15200112") courseName = "اللغة الإنجليزية (2)";
-      else if (code === "13010006") courseName = "مهارات الحاسوب وتطبيقاته";
-      else if (code === "15200098") courseName = "لغة عربية إستدراكية";
-      else if (code === "15200102") courseName = "اللغة العربية";
-      else if (code === "15200103") courseName = "مهارات اللغة العربية";
-      else courseName = `مساق ${code}`;
-
-      const resolvedExamName =
-        examName ||
-        (isEnglishExam
-          ? "امتحان مستوى انجليزي"
-          : isComputerExam
-            ? "امتحان مهارات حاسوب"
-            : isArabicExam
-              ? "امتحان مستوى عربي"
-              : "امتحان مستوى");
-
-      const isHighScoreEnglishExemption =
-        code === "15200106" &&
-        ((examGrade !== null && examGrade >= 80) ||
-          !exemptedRaw?.includes("15200106"));
-
-      const statusDesc = isPassedOrExempt
-        ? code === "15200106"
-          ? examGrade !== null && examGrade >= 80
-            ? "معفى/ناجح (تفوق امتحان مستوى ≥ 80)"
-            : "معفى/ناجح (إعفاء مستوى)"
-          : "معفى/ناجح"
-        : "غير معفى/راسب";
-
-      exemptionExams.push({
-        code,
-        name: courseName,
-        examName: resolvedExamName,
-        semester: semester || undefined,
-        status: statusDesc,
-        grade: examGrade,
-        isPassed: isPassedOrExempt,
-        rawText: rowText,
-      });
-
-      if (isPassedOrExempt) {
-        passedCourseCodes.add(code);
-      }
-    }
-  }
-
-  return { exemptionExams, passedCourseCodes };
-}
-
 let sharedBrowser = null;
 let browserIdleTimer = null;
 const BROWSER_IDLE_TIMEOUT_MS = 3 * 60 * 1000;
@@ -1356,17 +1129,14 @@ export async function authenticateAndSyncStudent(
 
   const cohortYear = extractStudentCohortYear(normId);
 
-  // Support demo / offline credentials
-  if (
-    options.demoMode ||
-    normId === "demo" ||
-    normId.startsWith("demo_") ||
-    rawPassword === "demo" ||
-    !rawPassword
-  ) {
+  // Demo plans are available only when explicitly requested.
+  if (options.demoMode || normId === "demo" || normId.startsWith("demo_")) {
     const data = buildCohortCurriculumAndProgress(normId);
     saveStudentRecord(normId, data);
     return data;
+  }
+  if (!rawPassword) {
+    throw new Error("كلمة مرور بوابة الجامعة مطلوبة لمزامنة الخطة.");
   }
 
   // ─── 0-Second Fast Cached Authentication ───────────────────────
@@ -1376,12 +1146,13 @@ export async function authenticateAndSyncStudent(
     const existing = getStudentRecord(normId);
     if (
       existing &&
+      existing.planSource === EDUGATE_PLAN_SOURCE &&
+      Array.isArray(existing.planCourses) &&
+      existing.planCourses.length > 0 &&
       existing.authHash &&
       verifyStudentPassword(rawPassword, existing.authHash)
     ) {
-      console.log(
-        `⚡ [FAST CACHE] استرجاع فوري لسجل الطالب (${normId}) من الكاش (0 ثوانٍ).`,
-      );
+      console.log("⚡ [FAST CACHE] استرجاع فوري لسجل الطالب من الكاش.");
       return {
         ...existing,
         fromCache: true,
@@ -1399,9 +1170,7 @@ export async function authenticateAndSyncStudent(
   let page;
 
   try {
-    console.log(
-      `🔐 محاولة تسجيل الدخول للطالب (${normId}) عبر بوابة خضوري Edugate...`,
-    );
+    console.log("🔐 محاولة تسجيل الدخول عبر بوابة خضوري Edugate...");
     const browser = await getSharedBrowser();
     context = await browser.newContext();
 
@@ -1617,9 +1386,6 @@ export async function authenticateAndSyncStudent(
     );
     let actualStudentId =
       domMetadata.studentId || (studentIdMatch ? studentIdMatch[1] : normId);
-    let resolvedCohort = extractStudentCohortYear(
-      actualStudentId || normId || cohortYear,
-    );
 
     const cleanStudentName = (str) => {
       if (!str) return "";
@@ -1663,21 +1429,9 @@ export async function authenticateAndSyncStudent(
     const currentSemesterMatch = landingText.match(
       /(?:الفصل الدراسي|الفصل الحالي|Semester)\s*[:：\n\r\t]*([^\n\r\t]{3,50})/i,
     );
-    const now = new Date();
-    const calYear = now.getFullYear();
-    const month = now.getMonth() + 1;
-    const defaultTermName =
-      month >= 2 && month <= 5
-        ? "الفصل الثاني"
-        : month >= 6 && month <= 8
-          ? "الفصل الصيفي"
-          : "الفصل الأول";
-    const defaultAcadYear =
-      month >= 8 ? `${calYear}/${calYear + 1}` : `${calYear - 1}/${calYear}`;
-    const dynamicFallbackSemester = `${defaultTermName} ${defaultAcadYear}`;
     const currentSemester = currentSemesterMatch
       ? currentSemesterMatch[1].trim()
-      : dynamicFallbackSemester;
+      : "";
 
     const collegeMatch = landingText.match(
       /(?:الكلية|Faculty|College)\s*[:：\n\r\t]*([^\n\r\t]{3,60})/i,
@@ -1695,8 +1449,7 @@ export async function authenticateAndSyncStudent(
       /(?:الحالة|الوضع الأكاديمي|Status)\s*[:：\n\r\t]*([^\n\r\t]{2,30})/i,
     );
     const academicStatus =
-      domMetadata.academicStatus ||
-      (statusMatch ? statusMatch[1].trim() : "منتظم");
+      domMetadata.academicStatus || (statusMatch ? statusMatch[1].trim() : "");
 
     const advisorMatch = landingText.match(
       /(?:المرشد الأكاديمي|المرشد الاكاديمي|المرشد|Advisor)\s*[:：\n\r\t]*([^\n\r\t]{2,50})/i,
@@ -1713,7 +1466,7 @@ export async function authenticateAndSyncStudent(
     const warningMatch = landingText.match(
       /(?:حالة الإنذار|حالة الانذار|الإنذار الأكاديمي|الانذار الأكاديمي|Warning)\s*[:：\n\r\t]*([^\n\r\t]{2,30})/i,
     );
-    let academicWarning = warningMatch ? warningMatch[1].trim() : "لا يوجد";
+    let academicWarning = warningMatch ? warningMatch[1].trim() : "";
 
     const degreeMatch = landingText.match(
       /(?:الدرجة العلمية|الدرجة|Degree)\s*[:：\n\r\t]*([^\n\r\t]{3,30})/i,
@@ -1821,7 +1574,6 @@ export async function authenticateAndSyncStudent(
       );
       if (transIdMatch) {
         actualStudentId = transIdMatch[1].trim();
-        resolvedCohort = extractStudentCohortYear(actualStudentId);
       }
     }
     if (!majorName) {
@@ -2146,13 +1898,7 @@ export async function authenticateAndSyncStudent(
         parseSemesterWeight(b.semesterTitle),
     );
 
-    const latestTable =
-      chronologicalTables.length > 0
-        ? chronologicalTables[chronologicalTables.length - 1]
-        : null;
-
     for (const semTable of chronologicalTables) {
-      const isLatestSemester = semTable === latestTable;
       const semCourses = [];
       for (const row of semTable.rows) {
         const { code, name, credits, grade, statusText } = row;
@@ -2164,34 +1910,22 @@ export async function authenticateAndSyncStudent(
           );
         const isExplicitFail =
           /(راسب|غير مجتاز|حرمان|غياب|fail|withdrawn|منسحب)/i.test(statusText);
+        const isExplicitRegistered =
+          /(مسجل|قيد الدراسة|registered|enrolled)/i.test(statusText);
 
-        let isPassed = false;
-        let isFailed = false;
-        let isRegistered = false;
-
-        if (grade !== null) {
-          if (grade >= 50) {
-            isPassed = true;
-          } else {
-            isFailed = true;
-          }
-        } else if (isExplicitPass) {
-          isPassed = true;
-        } else if (isExplicitFail) {
-          isFailed = true;
-        } else if (!isLatestSemester) {
-          // In an older semester without an explicit failure, course is considered passed/completed
-          isPassed = true;
-        } else {
-          // Current in-progress semester without submitted grade yet
-          isRegistered = true;
-        }
+        const isPassed = isExplicitPass && !isExplicitFail;
+        const isFailed = isExplicitFail;
+        const isRegistered =
+          isExplicitRegistered &&
+          !/(غير مسجل|not registered)/i.test(statusText);
 
         const resolvedStatus = isPassed
-          ? statusText || "ناجح"
+          ? statusText
           : isFailed
-            ? statusText || "راسب"
-            : "مسجل";
+            ? statusText
+            : isRegistered
+              ? statusText
+              : "غير متاح";
 
         semCourses.push({
           code,
@@ -2207,7 +1941,7 @@ export async function authenticateAndSyncStudent(
         // Update latest course grade and status:
         if (grade !== null) {
           courseGrades[code] = grade;
-        } else if (isPassed && !courseGrades[code]) {
+        } else if (isPassed && courseGrades[code] === undefined) {
           courseGrades[code] = -1; // Non-numerical pass/fail course (excluded from GPA calculation)
         }
 
@@ -2343,10 +2077,6 @@ export async function authenticateAndSyncStudent(
             let passedRaw =
               passedIdx !== -1 && cells[passedIdx] ? cells[passedIdx] : "";
 
-            if (exemptCoursesIdx === -1) {
-              const codeCell = cells.find((c) => /\b\d{6,8}\b/.test(c));
-              if (codeCell) exemptedCoursesRaw = codeCell;
-            }
             if (!examName && cells.length > 0) {
               examName = cells[0];
             }
@@ -2382,8 +2112,7 @@ export async function authenticateAndSyncStudent(
                 cells,
                 text: cells.join(" "),
                 examName: cells[0] || "",
-                exemptedCoursesRaw:
-                  cells.find((c) => /\b\d{6,8}\b/.test(c)) || "",
+                exemptedCoursesRaw: "",
                 hasCheckIcon: Boolean(
                   tr.querySelector(".ui-icon-check, .fa-check"),
                 ),
@@ -2408,77 +2137,19 @@ export async function authenticateAndSyncStudent(
         passedCourseIds.add(code);
         failedCourseIds.delete(code);
         registeredCourseIds.delete(code);
-        const matchingExam = parsedExams.find(
-          (e) => e.code === code && e.grade !== null,
-        );
-        if (matchingExam?.grade !== null && matchingExam?.grade !== undefined) {
-          courseGrades[code] = matchingExam.grade;
-        } else if (!courseGrades[code]) {
-          courseGrades[code] = -1; // Exemption exams are non-graded pass
+        if (courseGrades[code] === undefined) {
+          courseGrades[code] = -1;
         }
       }
     } catch (examErr) {
       console.warn(`⚠️ تعذر جلب صفحة امتحانات الإعفاء: ${examErr.message}`);
     }
 
-    // 3.6. Smart Remedial & Prerequisite Inference
-    if (passedCourseIds.has("15200112")) {
-      // If student passed English 2 (15200112), English 1 (15200106) must be passed/exempted
-      passedCourseIds.add("15200106");
-      if (!courseGrades["15200106"]) courseGrades["15200106"] = -1;
-      if (!exemptionExams.some((e) => e.code === "15200106")) {
-        exemptionExams.push({
-          code: "15200106",
-          name: "اللغة الإنجليزية (1)",
-          status: "معفى (مستنتج من اجتياز لغة إنجليزية 2)",
-          examName: "امتحان مستوى انجليزي",
-          grade: null,
-          isPassed: true,
-        });
-      }
-    }
-
-    if (passedCourseIds.has("15200106") || passedCourseIds.has("15200112")) {
-      passedCourseIds.add("15200099");
-      if (!courseGrades["15200099"]) courseGrades["15200099"] = -1;
-      if (!exemptionExams.some((e) => e.code === "15200099")) {
-        exemptionExams.push({
-          code: "15200099",
-          name: "إنجليزي إستدراكي",
-          status: "معفى (مستنتج من اجتياز لغة إنجليزية 1)",
-          grade: null,
-          isPassed: true,
-        });
-      }
-    }
-
-    if (
-      passedCourseIds.has("12140101") ||
-      passedCourseIds.has("12010101") ||
-      passedCourseIds.has("12140111")
-    ) {
-      passedCourseIds.add("13010006");
-      if (!courseGrades["13010006"]) courseGrades["13010006"] = -1;
-      if (!exemptionExams.some((e) => e.code === "13010006")) {
-        exemptionExams.push({
-          code: "13010006",
-          name: "مهارات الحاسوب وتطبيقاته",
-          status: "معفى/ناجح",
-          grade: null,
-          isPassed: true,
-        });
-      }
-    }
-
-    if (passedCourseIds.has("15200103")) {
-      passedCourseIds.add("15200098");
-      if (!courseGrades["15200098"]) courseGrades["15200098"] = -1;
-    }
-
     // 3.7. Scrape Major Plan (/student/majorPlan)
     let scrapedPlanCourses = [];
     let scrapedMajorCategoryRequirements = {};
     let scrapedMajorTotalCredits = 0;
+    let scrapedPlanSource = "";
     try {
       await navigateEdugateSection(page, {
         urls: EDUGATE_MAJOR_PLAN_URLS,
@@ -2599,9 +2270,43 @@ export async function authenticateAndSyncStudent(
           return norm(clone.textContent || clone.innerText || "").trim();
         }
 
+        function categoryFromText(text) {
+          const mandatory = text.includes("إجباري") || text.includes("إجبارية");
+          const elective =
+            text.includes("اختياري") || text.includes("اختيارية");
+          if (
+            text.includes("متطلب جامعة") ||
+            text.includes("متطلبات جامعة") ||
+            text.includes("متطلبات الجامعة")
+          ) {
+            if (mandatory) return "متطلب جامعة إجباري";
+            if (elective) return "متطلب جامعة اختياري";
+          }
+          if (
+            text.includes("متطلب كلية") ||
+            text.includes("متطلبات كلية") ||
+            text.includes("متطلبات الكلية")
+          ) {
+            if (mandatory) return "متطلب كلية إجباري";
+            if (elective) return "متطلب كلية اختياري";
+          }
+          if (
+            text.includes("متطلب تخصص") ||
+            text.includes("متطلبات تخصص") ||
+            text.includes("متطلبات التخصص")
+          ) {
+            if (mandatory) return "متطلب تخصص إجباري";
+            if (elective) return "متطلب تخصص اختياري";
+          }
+          if (text.includes("استدراكي") && mandatory) {
+            return "متطلب استدراكي إجباري";
+          }
+          return "";
+        }
+
         const results = [];
         const seenCodes = new Set();
-        let currentCategory = "متطلب تخصص إجباري";
+        let currentCategory = "غير مصنف";
         let currentSemester = "";
 
         // Query all tables or data containers on the study plan page
@@ -2630,19 +2335,7 @@ export async function authenticateAndSyncStudent(
             : "";
           const headerContext = `${containerHeader} ${norm(table.querySelector("caption, th[colspan]")?.textContent || "")}`;
 
-          if (headerContext.includes("متطلب جامعة")) {
-            currentCategory = headerContext.includes("إجباري")
-              ? "متطلب جامعة إجباري"
-              : "متطلب جامعة اختياري";
-          } else if (headerContext.includes("متطلب كلية")) {
-            currentCategory = "متطلب كلية إجباري";
-          } else if (headerContext.includes("متطلب تخصص")) {
-            currentCategory = headerContext.includes("إجباري")
-              ? "متطلب تخصص إجباري"
-              : "متطلب تخصص اختياري";
-          } else if (headerContext.includes("استدراكي")) {
-            currentCategory = "متطلب استدراكي إجباري";
-          }
+          currentCategory = categoryFromText(headerContext) || "غير مصنف";
 
           if (
             headerContext.includes("السنة") ||
@@ -2689,19 +2382,8 @@ export async function authenticateAndSyncStudent(
             const hasCode = cells.some((c) => /\b\d{6,8}\b/.test(c));
             if (!hasCode) {
               // Row without course code is a section divider or category header row
-              if (fullRowText.includes("متطلب جامعة")) {
-                currentCategory = fullRowText.includes("إجباري")
-                  ? "متطلب جامعة إجباري"
-                  : "متطلب جامعة اختياري";
-              } else if (fullRowText.includes("متطلب كلية")) {
-                currentCategory = "متطلب كلية إجباري";
-              } else if (fullRowText.includes("متطلب تخصص")) {
-                currentCategory = fullRowText.includes("إجباري")
-                  ? "متطلب تخصص إجباري"
-                  : "متطلب تخصص اختياري";
-              } else if (fullRowText.includes("استدراكي")) {
-                currentCategory = "متطلب استدراكي إجباري";
-              }
+              currentCategory =
+                categoryFromText(fullRowText) || currentCategory;
               if (
                 fullRowText.includes("السنة") ||
                 fullRowText.includes("الفصل")
@@ -2747,20 +2429,28 @@ export async function authenticateAndSyncStudent(
                     c,
                   ),
               );
-              name = nameCandidate || `مساق ${code}`;
+              name = nameCandidate || "";
             }
             name = name.replace(/^اسم\s*المقرر\s*/, "").trim();
 
             // Extract credits
-            let credits = 3;
-            if (colMap.credits !== -1 && /^\d+$/.test(cells[colMap.credits])) {
-              credits = parseInt(cells[colMap.credits], 10) || 3;
+            let creditsText = "";
+            if (
+              colMap.credits !== -1 &&
+              /^\d+(?:\.\d+)?$/.test(cells[colMap.credits] || "")
+            ) {
+              creditsText = cells[colMap.credits];
             } else {
               const credCandidate = cells.find(
-                (c) => c !== code && /^[1-6]$/.test(c),
+                (c) =>
+                  c !== code &&
+                  /^\d+(?:\.\d+)?$/.test(c) &&
+                  Number(c) >= 0 &&
+                  Number(c) <= 12,
               );
-              credits = credCandidate ? parseInt(credCandidate, 10) : 3;
+              creditsText = credCandidate || "";
             }
+            const credits = creditsText ? Number(creditsText) : null;
 
             // Extract prerequisites
             let prerequisites = [];
@@ -2788,22 +2478,7 @@ export async function authenticateAndSyncStudent(
             prerequisites = Array.from(new Set(prerequisites));
 
             let rowCategory = currentCategory;
-            if (fullRowText.includes("متطلب جامعة")) {
-              rowCategory = fullRowText.includes("إجباري")
-                ? "متطلب جامعة إجباري"
-                : "متطلب جامعة اختياري";
-            } else if (fullRowText.includes("متطلب كلية")) {
-              rowCategory = "متطلب كلية إجباري";
-            } else if (fullRowText.includes("متطلب تخصص")) {
-              rowCategory = fullRowText.includes("إجباري")
-                ? "متطلب تخصص إجباري"
-                : "متطلب تخصص اختياري";
-            } else if (
-              fullRowText.includes("استدراكي") ||
-              isRemedialCourseCode(code, name)
-            ) {
-              rowCategory = "متطلب استدراكي إجباري";
-            }
+            rowCategory = categoryFromText(fullRowText) || rowCategory;
 
             const isCompleted =
               fullRowText.includes("منجز") ||
@@ -2847,56 +2522,25 @@ export async function authenticateAndSyncStudent(
                 norm(c.textContent || "").trim(),
               );
               if (cells.length >= 2) {
-                let matchedCat = "";
-                if (
-                  text.includes("متطلب جامعة") ||
-                  text.includes("متطلبات جامعة") ||
-                  text.includes("متطلبات الجامعة")
-                ) {
-                  matchedCat =
-                    text.includes("إجباري") || text.includes("إجبارية")
-                      ? "متطلب جامعة إجباري"
-                      : "متطلب جامعة اختياري";
-                } else if (
-                  text.includes("متطلب كلية") ||
-                  text.includes("متطلبات كلية") ||
-                  text.includes("متطلبات الكلية")
-                ) {
-                  matchedCat =
-                    text.includes("اختياري") || text.includes("اختيارية")
-                      ? "متطلب كلية اختياري"
-                      : "متطلب كلية إجباري";
-                } else if (
-                  text.includes("متطلب تخصص") ||
-                  text.includes("متطلبات تخصص") ||
-                  text.includes("متطلبات التخصص")
-                ) {
-                  matchedCat =
-                    text.includes("اختياري") || text.includes("اختيارية")
-                      ? "متطلب تخصص اختياري"
-                      : "متطلب تخصص إجباري";
-                } else if (
-                  text.includes("استدراكي") ||
-                  text.includes("استدراكية")
-                ) {
-                  matchedCat = "متطلب استدراكي إجباري";
-                }
+                const hasCourseCode = /\b\d{6,8}\b/.test(text);
+                const matchedCat = categoryFromText(text);
 
-                if (matchedCat) {
-                  for (let i = 1; i < cells.length; i++) {
-                    const num = parseInt(cells[i], 10);
-                    if (!isNaN(num) && num >= 1 && num <= 140) {
-                      scrapedCategoryRequirements[matchedCat] = num;
-                      break;
-                    }
+                if (matchedCat && !hasCourseCode) {
+                  const hoursMatch = text.match(
+                    /(\d{1,3})\s*(?:ساعة|ساعات|س\.م)/,
+                  );
+                  const hours = hoursMatch ? parseInt(hoursMatch[1], 10) : 0;
+                  if (hours >= 1 && hours <= 140) {
+                    scrapedCategoryRequirements[matchedCat] = hours;
                   }
                 }
 
                 if (
-                  text.includes("المجموع") ||
-                  text.includes("الإجمالي") ||
-                  text.includes("إجمالي الساعات") ||
-                  text.includes("مجموع الساعات")
+                  !hasCourseCode &&
+                  (text.includes("المجموع") ||
+                    text.includes("الإجمالي") ||
+                    text.includes("إجمالي الساعات") ||
+                    text.includes("مجموع الساعات"))
                 ) {
                   for (let i = 1; i < cells.length; i++) {
                     const num = parseInt(cells[i], 10);
@@ -2923,42 +2567,7 @@ export async function authenticateAndSyncStudent(
             const headerText = norm(headerEl.textContent || "").trim();
             if (!headerText) return;
 
-            let matchedCat = "";
-            if (
-              headerText.includes("متطلب جامعة") ||
-              headerText.includes("متطلبات جامعة") ||
-              headerText.includes("متطلبات الجامعة")
-            ) {
-              matchedCat =
-                headerText.includes("إجباري") || headerText.includes("إجبارية")
-                  ? "متطلب جامعة إجباري"
-                  : "متطلب جامعة اختياري";
-            } else if (
-              headerText.includes("متطلب كلية") ||
-              headerText.includes("متطلبات كلية") ||
-              headerText.includes("متطلبات الكلية")
-            ) {
-              matchedCat =
-                headerText.includes("اختياري") ||
-                headerText.includes("اختيارية")
-                  ? "متطلب كلية اختياري"
-                  : "متطلب كلية إجباري";
-            } else if (
-              headerText.includes("متطلب تخصص") ||
-              headerText.includes("متطلبات تخصص") ||
-              headerText.includes("متطلبات التخصص")
-            ) {
-              matchedCat =
-                headerText.includes("اختياري") ||
-                headerText.includes("اختيارية")
-                  ? "متطلب تخصص اختياري"
-                  : "متطلب تخصص إجباري";
-            } else if (
-              headerText.includes("استدراكي") ||
-              headerText.includes("استدراكية")
-            ) {
-              matchedCat = "متطلب استدراكي إجباري";
-            }
+            const matchedCat = categoryFromText(headerText);
 
             if (matchedCat && !scrapedCategoryRequirements[matchedCat]) {
               const m =
@@ -2988,14 +2597,13 @@ export async function authenticateAndSyncStudent(
         typeof scrapedPlanResult === "object" &&
         !Array.isArray(scrapedPlanResult)
       ) {
-        scrapedPlanCourses = scrapedPlanResult.courses || [];
-        scrapedMajorCategoryRequirements =
-          scrapedPlanResult.categoryRequirements || {};
-        scrapedMajorTotalCredits = scrapedPlanResult.totalDegreeCredits || 0;
+        const normalizedPlan = normalizeEdugateMajorPlan(scrapedPlanResult);
+        scrapedPlanCourses = normalizedPlan.courses;
+        scrapedMajorCategoryRequirements = normalizedPlan.categoryRequirements;
+        scrapedMajorTotalCredits = normalizedPlan.totalDegreeCredits;
+        scrapedPlanSource = normalizedPlan.source;
       } else {
-        scrapedPlanCourses = Array.isArray(scrapedPlanResult)
-          ? scrapedPlanResult
-          : [];
+        throw new Error("تعذر قراءة الخطة الاسترشادية من بوابة الجامعة.");
       }
 
       for (const pc of scrapedPlanCourses) {
@@ -3012,243 +2620,22 @@ export async function authenticateAndSyncStudent(
     } catch (planErr) {
       console.warn(`⚠️ تعذر جلب صفحة الخطة الدراسية: ${planErr.message}`);
     }
-
-    // 4. Match with Major Curriculum Plan
-    // Ground truth inference: check courses in the transcript to establish student's real major
-    const allTranscriptCourses = structuredSemesters.flatMap(
-      (s) => s.courses || [],
-    );
-    const allKnownCourses = [...allTranscriptCourses, ...scrapedPlanCourses];
-    const inferredMajor = inferMajorFromCourses(
-      allKnownCourses,
-      actualStudentId,
-    );
-    let majorId = inferredMajor.id;
     if (
-      !majorName ||
-      (majorName.includes("أنظمة الحاسوب") &&
-        !allTranscriptCourses.some((c) => c.code === "12110236"))
+      scrapedPlanSource !== EDUGATE_PLAN_SOURCE ||
+      !scrapedPlanCourses.length
     ) {
-      majorName = inferredMajor.name;
-      college = inferredMajor.college;
-      majorId = inferredMajor.id;
-    } else {
-      majorId = inferredMajor.id || slugifyMajor(majorName);
+      throw new Error(
+        "تعذر التحقق من الخطة الاسترشادية في بوابة الجامعة؛ لم يتم استخدام خطة ثابتة أو تخمينية.",
+      );
     }
 
-    const isCseMajor =
-      (majorId === "cse" || majorName.includes("أنظمة الحاسوب")) &&
-      !majorName.includes("الذكاء") &&
-      !majorName.includes("برمجيات") &&
-      !majorName.includes("علم الحاسوب");
+    // 4. Match with the major explicitly identified by Edugate, if present.
+    const majorId = majorName ? slugifyMajor(majorName) : "";
 
-    const existingCohortPlan = getMajorCohortPlan(majorId, resolvedCohort);
-    const baseMajor = existingCohortPlan || getMajorById(majorId);
-
-    let baseCourses = [];
-    if (Array.isArray(scrapedPlanCourses) && scrapedPlanCourses.length > 0) {
-      console.log(
-        `📋 تم استخدام الخطة المسحوبة مباشرة من بوابة الطالب (${scrapedPlanCourses.length} مادة).`,
-      );
-      baseCourses = applyCurriculumPrerequisitesAndSemesters(
-        scrapedPlanCourses,
-        majorId,
-        majorName,
-      );
-    } else if (
-      baseMajor &&
-      Array.isArray(baseMajor.courses) &&
-      baseMajor.courses.length > 0 &&
-      (isCseMajor ||
-        !baseMajor.courses.some((c) => (c.id || c.code) === "12110236"))
-    ) {
-      console.log(
-        `📦 استخدام الخطة المعتمدة المحفوظة للتخصص: ${majorName} (${baseMajor.courses.length} مادة).`,
-      );
-      baseCourses = applyCurriculumPrerequisitesAndSemesters(
-        baseMajor.courses,
-        majorId,
-        majorName,
-      );
-    } else if (isCseMajor) {
-      console.log("📐 استخدام الخطة العامة لهندسة أنظمة الحاسوب.");
-      baseCourses = extractCoursesFromDataTs();
-    } else if (majorId === "ai" || majorName.includes("الذكاء")) {
-      console.log(
-        "✨ استخدام الخطة المعتمدة الكاملة لتخصص الذكاء الاصطناعي (132 ساعة).",
-      );
-      baseCourses = AI_CURRICULUM_COURSES;
-    } else {
-      console.log(
-        `✨ بناء خطة مخصصة ومرتبة لتخصص (${majorName}) من سجل الطالب والكتالوج الجامعي...`,
-      );
-      const builtCourses = [];
-      const seenCodes = new Set();
-
-      // A) All courses from student transcript (completed, registered, failed)
-      for (const sem of structuredSemesters) {
-        for (const sc of sem.courses) {
-          if (!seenCodes.has(sc.code)) {
-            seenCodes.add(sc.code);
-            const isRem = isRemedialCourseCode(sc.code, sc.name);
-            const isUnivMandatory =
-              sc.code.startsWith("1520") || sc.code.startsWith("1301");
-            const isUnivElective =
-              sc.code.startsWith("1302") || sc.code.startsWith("152002");
-            const isFaculty =
-              sc.code.startsWith("1501") ||
-              sc.code.startsWith("1502") ||
-              sc.code.startsWith("1506");
-
-            let category = "متطلب تخصص إجباري";
-            if (isRem) category = "متطلب استدراكي إجباري";
-            else if (isUnivMandatory) category = "متطلب جامعة إجباري";
-            else if (isUnivElective) category = "متطلب جامعة اختياري";
-            else if (isFaculty) category = "متطلب كلية إجباري";
-
-            builtCourses.push({
-              id: sc.code,
-              code: sc.code,
-              name: sc.name,
-              credits: sc.credits || 3,
-              category,
-              prerequisites: [],
-              coPrerequisites: [],
-              semester: sem.title,
-              recommendedSemester: sem.title,
-            });
-          }
-        }
-      }
-
-      // B) Core University Requirements for any PTUK degree
-      const coreUniversityRequirements = [
-        {
-          id: "15200099",
-          name: "إنجليزي إستدراكي",
-          credits: 3,
-          category: "متطلب استدراكي إجباري",
-          prerequisites: [],
-          seasonal: "both",
-        },
-        {
-          id: "13010006",
-          name: "مهارات الحاسوب وتطبيقاته",
-          credits: 1,
-          category: "متطلب جامعة إجباري",
-          prerequisites: [],
-          seasonal: "both",
-        },
-        {
-          id: "13010007",
-          name: "مهارات الاتصال",
-          credits: 1,
-          category: "متطلب جامعة إجباري",
-          prerequisites: [],
-          seasonal: "both",
-        },
-        {
-          id: "15200101",
-          name: "القضية الفلسطينية",
-          credits: 3,
-          category: "متطلب جامعة إجباري",
-          prerequisites: [],
-          seasonal: "both",
-        },
-        {
-          id: "15200102",
-          name: "اللغة العربية",
-          credits: 3,
-          category: "متطلب جامعة إجباري",
-          prerequisites: [],
-          seasonal: "both",
-        },
-        {
-          id: "15200104",
-          name: "خدمة المجتمع",
-          credits: 1,
-          category: "متطلب جامعة إجباري",
-          prerequisites: [],
-          seasonal: "both",
-        },
-        {
-          id: "15200106",
-          name: "اللغة الإنجليزية (1)",
-          credits: 3,
-          category: "متطلب جامعة إجباري",
-          prerequisites: ["15200099"],
-          seasonal: "both",
-        },
-        {
-          id: "15200107",
-          name: "الدراسات الإسلامية",
-          credits: 3,
-          category: "متطلب جامعة إجباري",
-          prerequisites: [],
-          seasonal: "both",
-        },
-        {
-          id: "15200112",
-          name: "اللغة الإنجليزية (2)",
-          credits: 3,
-          category: "متطلب جامعة إجباري",
-          prerequisites: ["15200106"],
-          seasonal: "both",
-        },
-      ];
-
-      for (const core of coreUniversityRequirements) {
-        if (!seenCodes.has(core.id)) {
-          seenCodes.add(core.id);
-          builtCourses.push(core);
-        }
-      }
-
-      // C) Query university schedule catalog for courses matching student's specialization department
-      const deptPrefixes = new Set();
-      for (const c of builtCourses) {
-        if (
-          !c.id.startsWith("15") &&
-          !c.id.startsWith("13") &&
-          c.id.length >= 4
-        ) {
-          deptPrefixes.add(c.id.substring(0, 4));
-        }
-      }
-
-      if (deptPrefixes.size > 0) {
-        try {
-          const catalogCourses = await getCourses({});
-          for (const catCourse of catalogCourses) {
-            const code = catCourse.code || catCourse.id;
-            if (code && !seenCodes.has(code)) {
-              const matchesDept = Array.from(deptPrefixes).some((p) =>
-                code.startsWith(p),
-              );
-              if (matchesDept) {
-                seenCodes.add(code);
-                builtCourses.push({
-                  id: code,
-                  code,
-                  name: catCourse.name,
-                  credits: Number(catCourse.credits) || 3,
-                  category: "متطلب تخصص إجباري",
-                  prerequisites: [],
-                  coPrerequisites: [],
-                  seasonal: "both",
-                });
-              }
-            }
-          }
-        } catch {}
-      }
-
-      baseCourses = applyCurriculumPrerequisitesAndSemesters(
-        builtCourses,
-        majorId,
-        majorName,
-      );
-    }
+    console.log(
+      `📋 تم التحقق من الخطة المسحوبة من بوابة الطالب (${scrapedPlanCourses.length} مادة).`,
+    );
+    const baseCourses = scrapedPlanCourses;
 
     const baseCourseIds = new Set(baseCourses.map((c) => c.id || c.code));
     const coursesWithStatus = baseCourses.map((course) => {
@@ -3268,8 +2655,8 @@ export async function authenticateAndSyncStudent(
         id: cId,
         code: cId,
         name: course.name,
-        credits: course.credits || 3,
-        category: course.category || "متطلب تخصص إجباري",
+        credits: course.credits,
+        category: course.category,
         prerequisites: course.prerequisites || [],
         coPrerequisites: course.coPrerequisites || [],
         seasonal: course.seasonal || "both",
@@ -3289,14 +2676,13 @@ export async function authenticateAndSyncStudent(
         const semTitle = structuredSemesters.find((s) =>
           s.courses.some((c) => c.code === code),
         )?.title;
+        if (!semCourse) continue;
         coursesWithStatus.push({
           id: code,
           code,
-          name: semCourse?.name || `مساق ${code}`,
-          credits: semCourse?.credits || 3,
-          category: isRemedialCourseCode(code, semCourse?.name)
-            ? "متطلب استدراكي إجباري"
-            : "متطلب اختياري",
+          name: semCourse.name,
+          credits: semCourse.credits,
+          category: "غير مصنف",
           prerequisites: [],
           coPrerequisites: [],
           semester: semTitle,
@@ -3311,13 +2697,14 @@ export async function authenticateAndSyncStudent(
       }
     }
 
-    const completedCourses = coursesWithStatus.filter(
-      (c) => c.status === "completed",
+    const planCoursesWithStatus = coursesWithStatus.filter((course) =>
+      baseCourseIds.has(course.id),
     );
-    // Exclude remedial courses (English 15200099, Computer 13010006, Arabic 15200098) from earned degree credits
+    const completedCourses = planCoursesWithStatus.filter(
+      (course) => course.status === "completed",
+    );
     const earnedCredits = completedCourses.reduce((sum, c) => {
-      const code = String(c.code || c.id || "").trim();
-      if (isRemedialCourseCode(code, c.name, c.category)) return sum;
+      if (String(c.category || "").includes("استدراكي")) return sum;
       return sum + (c.credits || 0);
     }, 0);
 
@@ -3333,189 +2720,77 @@ export async function authenticateAndSyncStudent(
           typeof c.grade === "number" &&
           c.grade >= 0 &&
           c.grade <= 100 &&
-          c.grade !== -1
+          c.grade !== -1 &&
+          Number.isFinite(c.credits) &&
+          c.credits > 0
         ) {
-          totalQualityPoints += c.grade * (c.credits || 3);
-          totalGpaHours += c.credits || 3;
+          totalQualityPoints += c.grade * c.credits;
+          totalGpaHours += c.credits;
         }
       }
       gpa =
         totalGpaHours > 0
           ? parseFloat((totalQualityPoints / totalGpaHours).toFixed(2))
-          : 0.0;
+          : null;
     }
 
     // Clean General Curriculum Courses (without student marks or completion flags)
-    const cleanGeneralCourses = coursesWithStatus.map((c) => ({
-      id: c.id,
-      code: c.code || c.id,
-      name: c.name,
-      credits: Number(c.credits) || 3,
-      category: c.category || "متطلب تخصص إجباري",
-      prerequisites: Array.isArray(c.prerequisites) ? c.prerequisites : [],
-      coPrerequisites: Array.isArray(c.coPrerequisites)
-        ? c.coPrerequisites
+    const cleanGeneralCourses = planCoursesWithStatus.map((course) => ({
+      id: course.id,
+      code: course.code || course.id,
+      name: course.name,
+      credits: Number(course.credits),
+      category: course.category,
+      prerequisites: Array.isArray(course.prerequisites)
+        ? course.prerequisites
         : [],
-      seasonal: c.seasonal || "both",
-      semester: c.semester || c.recommendedSemester,
-      recommendedSemester: c.recommendedSemester || c.semester,
+      coPrerequisites: Array.isArray(course.coPrerequisites)
+        ? course.coPrerequisites
+        : [],
+      seasonal: course.seasonal || "both",
+      semester: course.semester || course.recommendedSemester,
+      recommendedSemester: course.recommendedSemester || course.semester,
     }));
 
-    const isDiploma = Boolean(
-      (college && (college.includes("دبلوم") || college.includes("متوسطة"))) ||
-      (majorName && majorName.includes("دبلوم")) ||
-      (scrapedDegree && scrapedDegree.includes("دبلوم")),
-    );
-    const isMaster = Boolean(
-      (college && college.includes("دراسات عليا")) ||
-      (majorName &&
-        (majorName.includes("ماجستير") || majorName.includes("Master"))) ||
-      (scrapedDegree && scrapedDegree.includes("ماجستير")),
-    );
-    const isFiveYear = Boolean(
-      college &&
-      college.includes("هندسة") &&
-      !majorName.includes("الذكاء") &&
-      !majorName.includes("علم الحاسوب"),
-    );
-    const defaultDegreeCredits = isDiploma
-      ? 72
-      : isMaster
-        ? 36
-        : isFiveYear
-          ? 164
-          : 132;
-    const resolvedDegree =
-      scrapedDegree ||
-      (isDiploma ? "دبلوم متوسط" : isMaster ? "ماجستير" : "بكالوريوس");
+    const resolvedDegree = scrapedDegree;
 
-    // Calculate category requirements:
-    // For compulsory categories, sum compulsory course hours.
-    // For elective categories, use scraped requirement from Edugate majorPlan or standard caps (never sum the entire pool of elective choices).
-    const calculatedCategoryReqs = {};
+    const calculatedCategoryReqs = {
+      ...scrapedMajorCategoryRequirements,
+    };
     for (const c of cleanGeneralCourses) {
-      const cat = c.category || "متطلب تخصص إجباري";
-      if (!cat.includes("اختياري")) {
+      const cat = c.category;
+      if (!cat.includes("اختياري") && !calculatedCategoryReqs[cat]) {
         calculatedCategoryReqs[cat] =
           (calculatedCategoryReqs[cat] || 0) + (c.credits || 0);
       }
     }
 
-    // Set elective caps (using scraped major category requirements if available, else standard caps)
-    if (
-      cleanGeneralCourses.some((c) =>
-        c.category?.includes("متطلب جامعة اختياري"),
-      )
-    ) {
-      const scrapedCap =
-        scrapedMajorCategoryRequirements["متطلب جامعة اختياري"];
-      calculatedCategoryReqs["متطلب جامعة اختياري"] =
-        scrapedCap && scrapedCap >= 3 && scrapedCap <= 18
-          ? scrapedCap
-          : isFiveYear
-            ? 6
-            : 9;
-    }
-    if (
-      cleanGeneralCourses.some((c) =>
-        c.category?.includes("متطلب تخصص اختياري"),
-      )
-    ) {
-      const scrapedCap = scrapedMajorCategoryRequirements["متطلب تخصص اختياري"];
-      calculatedCategoryReqs["متطلب تخصص اختياري"] =
-        scrapedCap && scrapedCap >= 3 && scrapedCap <= 24
-          ? scrapedCap
-          : isFiveYear
-            ? 15
-            : 9;
-    }
-    if (
-      cleanGeneralCourses.some((c) =>
-        c.category?.includes("متطلب كلية اختياري"),
-      )
-    ) {
-      const scrapedCap = scrapedMajorCategoryRequirements["متطلب كلية اختياري"];
-      calculatedCategoryReqs["متطلب كلية اختياري"] =
-        scrapedCap && scrapedCap >= 3 && scrapedCap <= 12 ? scrapedCap : 3;
-    }
-
-    // Total degree credits is sum of non-remedial category requirements
-    let calculatedTotalCredits = Object.entries(calculatedCategoryReqs).reduce(
-      (sum, [cat, cr]) => {
-        if (cat.includes("استدراكي")) return sum;
-        return sum + cr;
-      },
-      0,
+    const unresolvedCategoryRequirement = cleanGeneralCourses.some(
+      (course) =>
+        course.category === "غير مصنف" ||
+        (course.category.includes("اختياري") &&
+          !Number.isFinite(calculatedCategoryReqs[course.category])),
     );
+    const calculatedTotalCredits = Object.entries(
+      calculatedCategoryReqs,
+    ).reduce((sum, [cat, cr]) => {
+      if (cat.includes("استدراكي")) return sum;
+      return sum + cr;
+    }, 0);
 
-    const minValidCr = isDiploma ? 60 : isMaster ? 30 : 120;
-    const maxValidCr = isDiploma ? 90 : isMaster ? 45 : 175;
     const finalTotalCredits =
-      scrapedMajorTotalCredits >= minValidCr &&
-      scrapedMajorTotalCredits <= maxValidCr
+      scrapedMajorTotalCredits > 0 && scrapedMajorTotalCredits <= 260
         ? scrapedMajorTotalCredits
-        : calculatedTotalCredits >= minValidCr &&
-            calculatedTotalCredits <= maxValidCr
+        : !unresolvedCategoryRequirement &&
+            calculatedTotalCredits > 0 &&
+            calculatedTotalCredits <= 260
           ? calculatedTotalCredits
-          : defaultDegreeCredits;
+          : 0;
 
-    const cleanMajorKey = `${slugifyMajor(majorName)}_${resolvedCohort}`;
+    const cleanMajorKey = majorId;
 
-    const cleanMajorRecord = {
-      id: cleanMajorKey,
-      code: cleanMajorKey,
-      name: majorName,
-      cohortYear: resolvedCohort,
-      displayName: `${majorName} - دفعة ${resolvedCohort}`,
-      college:
-        college ||
-        baseMajor?.college ||
-        (isFiveYear
-          ? "كلية الهندسة والتكنولوجيا"
-          : "كلية تكنولوجيا المعلومات والاتصالات"),
-      degree: resolvedDegree,
-      totalCredits: finalTotalCredits,
-      categoryRequirements: calculatedCategoryReqs,
-      description: `الخطة الاسترشادية العامة لتخصص ${majorName} (دفعة ${resolvedCohort})`,
-      courses: cleanGeneralCourses,
-      updatedAt: new Date().toISOString(),
-    };
-
-    upsertMajor(cleanMajorRecord);
-    saveMajorCohortPlan(cleanMajorKey, resolvedCohort, cleanMajorRecord);
-
-    // 5. Build Enrolled Courses with Section Details from DB
+    // The transcript does not identify a student's registered section.
     const enrolledCourses = [];
-    const dbCourses = await getCourses({
-      codes: Array.from(registeredCourseIds),
-    });
-    const dbCourseMap = new Map(dbCourses.map((c) => [c.code, c]));
-
-    for (const regCode of registeredCourseIds) {
-      const match = dbCourseMap.get(regCode);
-      const planCourse = coursesWithStatus.find((c) => c.code === regCode);
-      const courseName = match?.name || planCourse?.name || regCode;
-
-      if (match && Array.isArray(match.sections) && match.sections.length > 0) {
-        const sec = match.sections[0];
-        enrolledCourses.push({
-          code: regCode,
-          name: courseName,
-          sec: sec.sec || "1",
-          instructor: sec.instructor,
-          room: sec.room,
-          building: sec.building,
-          blocks: sec.blocks || [],
-        });
-      } else {
-        enrolledCourses.push({
-          code: regCode,
-          name: courseName,
-          sec: "1",
-          blocks: [],
-        });
-      }
-    }
 
     // 6. Scrape Academic Transactions & Financial Records (graceful fetch)
     let liveTransactions = [];
@@ -3552,7 +2827,7 @@ export async function authenticateAndSyncStudent(
                 type: cells[0],
                 semester: cells[1] || "",
                 date: cells[2] || "",
-                status: cells[3] || "معتمد",
+                status: cells[3] || "",
                 notes: cells[4] || "",
               };
             }
@@ -3566,8 +2841,8 @@ export async function authenticateAndSyncStudent(
       liveTransactions = [];
     }
 
-    let liveFinancial = {
-      balance: financialBalance || "0 دائن",
+    const liveFinancial = {
+      balance: financialBalance || "",
       currency: "دينار أردني (JOD)",
       totalDebit: null,
       totalCredit: null,
@@ -3604,10 +2879,12 @@ export async function authenticateAndSyncStudent(
               norm(c.textContent || c.innerText),
             );
             if (cells.length >= 4 && cells[0]) {
+              const amount = Number(cells[2].replace(/,/g, ""));
+              if (!Number.isFinite(amount)) return null;
               return {
                 receiptNo: cells[0],
                 date: cells[1],
-                amount: parseFloat(cells[2]) || 0,
+                amount,
                 description: cells[3],
               };
             }
@@ -3623,32 +2900,29 @@ export async function authenticateAndSyncStudent(
       }
     } catch {}
 
-    if (!studentName || studentName.includes("رقم") || studentName.length < 3) {
-      studentName = `طالب جامعي (${actualStudentId})`;
-    }
-
     const studentRecord = {
       studentId: actualStudentId,
-      studentName,
-      cohortYear: resolvedCohort,
+      studentName: studentName || "",
+      cohortYear: "",
       majorId: cleanMajorKey,
       majorName,
-      college: cleanMajorRecord.college,
+      college,
       degree: resolvedDegree,
-      academicStatus: academicStatus || "منتظم",
-      academicAdvisor: academicAdvisor || "غير محدد",
-      academicWarning: academicWarning || "لا يوجد",
-      currentSemester: currentSemester || "الفصل الحالي",
-      financialBalance: financialBalance || "0",
+      academicStatus,
+      academicAdvisor,
+      academicWarning,
+      currentSemester,
+      financialBalance,
       earnedCredits,
       totalCredits: finalTotalCredits,
+      planSource: scrapedPlanSource,
       gpa,
       courseGrades,
-      planCourses: coursesWithStatus,
+      planCourses: planCoursesWithStatus,
       passedCourseIds: Array.from(passedCourseIds),
       registeredCourseIds: Array.from(registeredCourseIds),
       failedCourseIds: Array.from(failedCourseIds),
-      remainingCourseIds: coursesWithStatus
+      remainingCourseIds: planCoursesWithStatus
         .filter((c) => c.status === "remaining")
         .map((c) => c.id),
       enrolledCourses,
@@ -3672,16 +2946,14 @@ export async function authenticateAndSyncStudent(
     }
 
     console.log(
-      `✅ تمت مزامنة الطالب (${studentName || actualStudentId}) بنجاح: ${passedCourseIds.size} مادة مجتازة، ${registeredCourseIds.size} مسجلة حالياً، معدل: ${gpa}.`,
+      `✅ تمت مزامنة السجل بنجاح: ${passedCourseIds.size} مادة مجتازة، ${registeredCourseIds.size} مسجلة حالياً، معدل: ${gpa}.`,
     );
 
     edugateCircuitBreaker.recordSuccess();
     return studentRecord;
   } catch (err) {
     edugateCircuitBreaker.recordFailure(err);
-    console.error(
-      `⚠️ خطأ أثناء مزامنة بيانات الطالب (${normId}): ${err.message}`,
-    );
+    console.error(`⚠️ خطأ أثناء مزامنة بيانات الطالب: ${err.message}`);
 
     // If it is an authentication error (e.g., bad credentials or user locked out),
     // rethrow directly so the student receives immediate, clear feedback!
@@ -3697,7 +2969,12 @@ export async function authenticateAndSyncStudent(
 
     // Check if we already have a previously synchronized real student record in the database
     const existingSaved = getStudentRecord(normId);
-    if (existingSaved && existingSaved.isLiveEdugate) {
+    if (
+      existingSaved?.isLiveEdugate &&
+      existingSaved.planSource === EDUGATE_PLAN_SOURCE &&
+      Array.isArray(existingSaved.planCourses) &&
+      existingSaved.planCourses.length > 0
+    ) {
       // If student provided password and it does not match their stored hash, do not return cached data
       if (
         rawPassword &&
@@ -3708,9 +2985,7 @@ export async function authenticateAndSyncStudent(
           "بيانات الدخول غير صحيحة. يرجى التأكد من اسم المستخدم أو الرقم الجامعي وكلمة المرور.",
         );
       }
-      console.log(
-        `📦 استرجاع آخر نسخة محفوظة للطالب (${normId}) من قاعدة البيانات.`,
-      );
+      console.log("📦 استرجاع آخر نسخة محفوظة من قاعدة البيانات.");
       existingSaved.note =
         "تعذر الاتصال المباشر بالبوابة حالياً؛ تم تحميل آخر بيانات معتمدة تم سحبها لسجلك الأكاديمي.";
       return {
@@ -3718,9 +2993,17 @@ export async function authenticateAndSyncStudent(
         fromCache: true,
       };
     }
+    if (
+      existingSaved?.isLiveEdugate &&
+      existingSaved.planSource !== EDUGATE_PLAN_SOURCE
+    ) {
+      throw new Error(
+        "الخطة المحفوظة قديمة أو غير موثقة من بوابة الجامعة؛ أعد المزامنة بعد عودة الاتصال.",
+      );
+    }
 
     // Only use mock demo fallback if demoMode was explicitly requested!
-    if (options.demoMode || normId === "demo" || rawPassword === "demo") {
+    if (options.demoMode || normId === "demo" || normId.startsWith("demo_")) {
       const fallback = buildCohortCurriculumAndProgress(normId);
       fallback.note =
         "تم تفعيل الخطة المعتمدة للدفعة وحساب المواد المنجزة احتياطياً.";

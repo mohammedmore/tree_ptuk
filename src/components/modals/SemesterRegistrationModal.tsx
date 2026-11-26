@@ -185,7 +185,7 @@ export const SemesterRegistrationModal: React.FC<
     () =>
       checkPlanCreditLimits(currentPlan.totalCredits, selectedSemester, {
         hasAcademicWarning,
-        gpa: cachedProfile?.gpa,
+        gpa: cachedProfile?.gpa ?? undefined,
       }),
     [
       currentPlan.totalCredits,
@@ -513,7 +513,7 @@ export const SemesterRegistrationModal: React.FC<
             <Wallet size={14} className="text-emerald-500" />
             <span>الرصيد الجامعي:</span>
             <span className="font-bold text-[var(--text)] font-mono">
-              {cachedProfile?.financialBalance || "0 دائن"}
+              {cachedProfile?.financialBalance || "غير متاح"}
             </span>
           </div>
         </div>

@@ -536,6 +536,7 @@ export const WeeklySchedulePage: React.FC<WeeklySchedulePageProps> = ({
           <div className="flex flex-wrap items-center gap-2 sm:gap-3">
             {/* Semester selector */}
             <select
+              data-feature-tour="schedule-semester"
               value={selectedSemester}
               onChange={(e) => setSelectedSemester(e.target.value)}
               className="h-[var(--control-h)] px-3 text-[13px] bg-[var(--surface)] border border-[var(--line-control)] rounded-[var(--r-control)] text-[var(--text)] focus:outline-none focus:ring-2 focus:ring-[var(--accent)] cursor-pointer"
@@ -564,6 +565,7 @@ export const WeeklySchedulePage: React.FC<WeeklySchedulePageProps> = ({
             {/* Consolidated Export Menu (Item 84: 3 buttons consolidated into 1 clean popover) */}
             <div className="relative" ref={exportMenuRef}>
               <button
+                data-feature-tour="schedule-export-share"
                 type="button"
                 id="export-menu-btn"
                 onClick={() => {
@@ -652,7 +654,10 @@ export const WeeklySchedulePage: React.FC<WeeklySchedulePageProps> = ({
         </div>
 
         {/* Feature 6: Drafts Toolbar Row (مسودات الجداول A / B / C) */}
-        <div className="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-[var(--line)] mt-3">
+        <div
+          data-feature-tour="schedule-drafts"
+          className="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-[var(--line)] mt-3"
+        >
           <div className="flex items-center gap-2 overflow-x-auto pb-1 sm:pb-0">
             <span className="text-xs font-bold text-[var(--text-3)] flex items-center gap-1.5 shrink-0 ml-1">
               <Bookmark size={13} className="text-amber-500" />
@@ -762,9 +767,15 @@ export const WeeklySchedulePage: React.FC<WeeklySchedulePageProps> = ({
       </header>
 
       {/* Mobile Day Agenda View (Point 35: Responsive Day-by-Day View) */}
-      <div className="block md:hidden p-4 space-y-4">
+      <div
+        data-feature-tour="schedule-course-actions"
+        className="block md:hidden p-4 space-y-4"
+      >
         {/* Day Switcher Tabs */}
-        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 no-scrollbar">
+        <div
+          data-feature-tour="schedule-view"
+          className="flex items-center gap-1.5 overflow-x-auto pb-1 no-scrollbar"
+        >
           {DAYS.map((dayName, idx) => {
             const dayLectureCount = scheduledList.filter(
               (item) => item.dayIndex === idx,
@@ -883,6 +894,7 @@ export const WeeklySchedulePage: React.FC<WeeklySchedulePageProps> = ({
       <div className="hidden md:flex flex-1 p-4 sm:p-6 overflow-x-auto">
         <div
           id="weekly-schedule-grid-container"
+          data-feature-tour="schedule-view schedule-course-actions"
           className="min-w-[750px] border border-[var(--line)] bg-[var(--surface)] rounded-[var(--r-surface)] overflow-hidden shadow-xs"
         >
           {/* Header Row: Days of Week */}

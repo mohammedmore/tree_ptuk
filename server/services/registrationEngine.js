@@ -186,8 +186,7 @@ export async function executeRegistrationBatch({
 
         if (isSimulatedFinancial) {
           lastStatus = "financial_issue";
-          lastMessage =
-            "الرصيد المالي غير كافٍ لتثبيت المساق في حسابك الجامعي.";
+          lastMessage = "الرصيد المالي غير كافٍ لتثبيت المساق في حسابك الجامعي.";
           diagnostics.push({
             type: "warning",
             code: "INSUFFICIENT_FUNDS",

@@ -1,3 +1,5 @@
+import type { Course } from "../data";
+
 export interface EnrolledCourseBlock {
   days: string[];
   start: number;
@@ -64,6 +66,10 @@ export interface ExemptionExamRecord {
   rawText?: string;
 }
 
+export interface StudentPlanCourse extends Course {
+  code?: string;
+}
+
 export interface StudentSyncProfile {
   studentId: string;
   studentName?: string;
@@ -79,14 +85,15 @@ export interface StudentSyncProfile {
   financialBalance?: string;
   earnedCredits: number;
   totalCredits?: number;
-  gpa: number;
+  gpa: number | null;
   passedCourseIds: string[];
   registeredCourseIds?: string[];
   failedCourseIds?: string[];
   remainingCourseIds?: string[];
   courseGrades?: Record<string, number>;
-  planCourses?: any[];
+  planCourses?: StudentPlanCourse[];
   categoryRequirements?: Record<string, number>;
+  planSource?: string;
   enrolledCourses?: EnrolledCourse[];
   semesters?: StudentSemester[];
   transactions?: AcademicTransaction[];
@@ -97,6 +104,19 @@ export interface StudentSyncProfile {
   fromCache?: boolean;
   lastSyncedAt?: string;
   note?: string;
+}
+
+export const EDUGATE_PLAN_SOURCE = "edugate_major_plan";
+
+export function hasVerifiedEdugatePlan(
+  profile: Partial<StudentSyncProfile> | null | undefined,
+): boolean {
+  return Boolean(
+    profile?.isLiveEdugate === true &&
+    profile.planSource === EDUGATE_PLAN_SOURCE &&
+    Array.isArray(profile.planCourses) &&
+    profile.planCourses.length > 0,
+  );
 }
 
 export const STORAGE_STUDENT_KEY = "ptuk_synced_student_profile";
@@ -168,6 +188,14 @@ export async function syncStudentProfile(
   }
 
   const profile: StudentSyncProfile = result.data;
+  if (
+    !profile.isDemo &&
+    (!profile.isLiveEdugate || !hasVerifiedEdugatePlan(profile))
+  ) {
+    throw new Error(
+      "لم تصل خطة موثقة من بوابة الجامعة؛ لم يتم اعتماد الخطة المحلية.",
+    );
+  }
 
   // Persist student profile and session token securely
   if (typeof window !== "undefined") {
@@ -215,7 +243,17 @@ export function getCachedStudentProfile(): StudentSyncProfile | null {
     const raw = window.localStorage.getItem(STORAGE_STUDENT_KEY);
     if (raw) {
       try {
-        return JSON.parse(raw);
+        const profile = JSON.parse(raw) as StudentSyncProfile;
+        if (profile.isDemo || hasVerifiedEdugatePlan(profile)) {
+          return profile;
+        }
+        return {
+          ...profile,
+          planCourses: undefined,
+          categoryRequirements: undefined,
+          totalCredits: undefined,
+          planSource: undefined,
+        };
       } catch {
         // ignore
       }
@@ -279,5 +317,11 @@ export async function fetchStudentRecord(
     );
   }
   const result = await response.json();
-  return result.data;
+  const profile = result.data as StudentSyncProfile;
+  if (!profile.isDemo && !hasVerifiedEdugatePlan(profile)) {
+    throw new Error(
+      "لا توجد خطة موثقة من بوابة الجامعة لهذا السجل؛ أعد المزامنة.",
+    );
+  }
+  return profile;
 }

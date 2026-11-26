@@ -31,25 +31,49 @@ export const AcademicAuditPrint: React.FC<AcademicAuditPrintProps> = ({
   plannedCourses,
   courseGrades = {},
   activeMajorName = "الخطة الدراسية الجامعية",
-  studentName = "طالب جامعي",
+  studentName = "غير متاح",
   studentId = "—",
-  totalCredits = 132,
-  college = "عمادة القبول والتسجيل",
+  totalCredits = 0,
+  college = "غير متاح",
   currentStudent = null,
   categoryRequirements = {},
 }) => {
   const earnedCredits = calculateDegreeCredits(courses, completedCourses);
-  const effectiveTotalCredits = totalCredits >= 60 ? totalCredits : 132;
+  const effectiveTotalCredits = totalCredits > 0 ? totalCredits : null;
   const gpa = calculateGPA(courses, courseGrades, completedCourses);
-  const completionPercentage = Math.round(
-    (earnedCredits / effectiveTotalCredits) * 100,
-  );
+  const displayedStudentName =
+    currentStudent?.isLiveEdugate && !currentStudent.studentName
+      ? "غير متاح"
+      : studentName;
+  const displayedMajorName =
+    currentStudent?.isLiveEdugate && !currentStudent.majorName
+      ? "غير متاح"
+      : currentStudent?.isLiveEdugate
+        ? currentStudent.majorName
+        : activeMajorName;
+  const displayedCollege =
+    currentStudent?.isLiveEdugate && !currentStudent.college
+      ? "غير متاح"
+      : college;
+  const displayedGpa =
+    currentStudent?.isLiveEdugate && typeof currentStudent.gpa !== "number"
+      ? null
+      : (currentStudent?.gpa ?? gpa);
+  const completionPercentage = effectiveTotalCredits
+    ? Math.round((earnedCredits / effectiveTotalCredits) * 100)
+    : null;
 
   const hasWarning = hasStudentAcademicWarning(currentStudent);
   const creditLimits = getStudentCreditLimits({
     student: currentStudent,
-    isHighGpa: (currentStudent?.gpa ?? gpa) >= 80,
+    isHighGpa:
+      (currentStudent?.gpa ?? (currentStudent?.isLiveEdugate ? 0 : gpa)) >= 80,
   });
+  const hasVerifiedAcademicStanding = Boolean(
+    currentStudent?.academicStatus ||
+    currentStudent?.academicWarning ||
+    typeof currentStudent?.gpa === "number",
+  );
 
   const currentDate = new Date().toLocaleDateString("ar-EG", {
     year: "numeric",
@@ -157,24 +181,24 @@ export const AcademicAuditPrint: React.FC<AcademicAuditPrintProps> = ({
       className="hidden print:block text-black bg-white font-['IBM_Plex_Sans_Arabic',serif] p-6 max-w-[210mm] mx-auto text-right leading-normal text-[11px]"
       dir="rtl"
     >
-      {/* Official University Header */}
+      {/* Generated report header */}
       <div className="border-b-2 border-black pb-3 mb-3 flex items-center justify-between">
         <div className="space-y-0.5">
           <h1 className="text-[17px] font-bold text-black font-['Noto_Naskh_Arabic',serif]">
             جامعة فلسطين التقنية - خضوري
           </h1>
           <h2 className="text-[13px] font-semibold text-gray-800">
-            عمادة القبول والتسجيل • {college}
+            الكلية: {displayedCollege}
           </h2>
           <p className="text-[11.5px] font-medium text-gray-700">
-            وثيقة السجل الأكاديمي ومسار الخطة الدراسية المعتمدة
+            تقرير مولّد من التطبيق، وليس وثيقة رسمية من الجامعة
           </p>
         </div>
 
         <div className="text-left text-[10px] text-gray-600 font-mono space-y-0.5">
           <div>تاريخ الإصدار: {currentDate}</div>
-          <div>رقم الوثيقة: PTUK-PLAN-{Date.now().toString().slice(-6)}</div>
-          <div>الحالة: وثيقة رسمية معتمدة</div>
+          <div>معرّف التقرير: PTUK-PLAN-{Date.now().toString().slice(-6)}</div>
+          <div>الحالة: نسخة غير رسمية</div>
         </div>
       </div>
 
@@ -183,7 +207,7 @@ export const AcademicAuditPrint: React.FC<AcademicAuditPrintProps> = ({
         <div>
           <span className="text-gray-600 block text-[9.5px]">اسم الطالب:</span>
           <span className="font-bold text-black privacy-sensitive">
-            {studentName}
+            {displayedStudentName}
           </span>
         </div>
         <div>
@@ -198,17 +222,14 @@ export const AcademicAuditPrint: React.FC<AcademicAuditPrintProps> = ({
           <span className="text-gray-600 block text-[9.5px]">
             التخصص الأكاديمي:
           </span>
-          <span className="font-bold text-black">{activeMajorName}</span>
+          <span className="font-bold text-black">{displayedMajorName}</span>
         </div>
         <div>
           <span className="text-gray-600 block text-[9.5px]">
             المعدل التراكمي العام:
           </span>
           <span className="font-bold text-black privacy-sensitive">
-            {typeof currentStudent?.gpa === "number"
-              ? currentStudent.gpa.toFixed(2)
-              : gpa.toFixed(2)}
-            %
+            {displayedGpa === null ? "غير متاح" : `${displayedGpa.toFixed(2)}%`}
           </span>
         </div>
         <div>
@@ -216,7 +237,8 @@ export const AcademicAuditPrint: React.FC<AcademicAuditPrintProps> = ({
             الحالة الأكاديمية:
           </span>
           <span className="font-bold text-black">
-            {hasWarning ? "تحت الملاحظة (إنذار)" : "منتظم (وضع سليم)"}
+            {currentStudent?.academicStatus ||
+              (hasWarning ? "تحت الملاحظة (إنذار)" : "غير متاح")}
           </span>
         </div>
         <div>
@@ -224,12 +246,9 @@ export const AcademicAuditPrint: React.FC<AcademicAuditPrintProps> = ({
             سقف تسجيل الساعات:
           </span>
           <span className="font-bold text-black">
-            {creditLimits.maxCredits}س{" "}
-            {creditLimits.isHighGpaOrGraduating
-              ? "(سقف المتفوقين تلقائي)"
-              : hasWarning
-                ? "(مقيد بالإنذار)"
-                : "(طالب منتظم)"}
+            {currentStudent?.isLiveEdugate && !hasVerifiedAcademicStanding
+              ? "يرجى التحقق من البوابة"
+              : `${creditLimits.maxCredits}س`}
           </span>
         </div>
         <div>
@@ -237,7 +256,9 @@ export const AcademicAuditPrint: React.FC<AcademicAuditPrintProps> = ({
             ساعات التخرج المطلوبة:
           </span>
           <span className="font-mono font-bold text-black">
-            {effectiveTotalCredits} ساعة
+            {effectiveTotalCredits === null
+              ? "غير متاح"
+              : `${effectiveTotalCredits} ساعة`}
           </span>
         </div>
         <div>
@@ -245,7 +266,9 @@ export const AcademicAuditPrint: React.FC<AcademicAuditPrintProps> = ({
             نسبة الإنجاز الإجمالية:
           </span>
           <span className="font-mono font-bold text-black privacy-sensitive">
-            {completionPercentage}%
+            {completionPercentage === null
+              ? "غير متاح"
+              : `${completionPercentage}%`}
           </span>
         </div>
       </div>
@@ -254,7 +277,10 @@ export const AcademicAuditPrint: React.FC<AcademicAuditPrintProps> = ({
       <div className="flex items-center justify-between border-y border-black/80 py-1.5 mb-3 text-[11px] font-semibold bg-gray-100/70 px-2">
         <div>
           المطلوبة للتخرج:{" "}
-          <span className="font-mono font-bold">{effectiveTotalCredits}</span> س
+          <span className="font-mono font-bold">
+            {effectiveTotalCredits ?? "غير متاح"}
+          </span>{" "}
+          س
         </div>
         <div>
           المنجزة بالسجل:{" "}
@@ -282,7 +308,7 @@ export const AcademicAuditPrint: React.FC<AcademicAuditPrintProps> = ({
           <span className="font-mono font-bold">
             {earnedCredits + totalPlannedCredits}
           </span>{" "}
-          / {effectiveTotalCredits} س
+          / {effectiveTotalCredits ?? "غير متاح"} س
         </div>
       </div>
 

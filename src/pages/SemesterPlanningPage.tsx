@@ -1296,6 +1296,7 @@ export const SemesterPlanningPage: React.FC<SemesterPlanningPageProps> = ({
                 الفصل:
               </label>
               <select
+                data-feature-tour="semester-select"
                 id="semester-select"
                 value={activeSemester}
                 onChange={(e) => setCurrentPlanningSemester(e.target.value)}
@@ -1341,7 +1342,10 @@ export const SemesterPlanningPage: React.FC<SemesterPlanningPageProps> = ({
             </div>
 
             {/* 2. View Mode Switcher */}
-            <div className="flex items-center border border-[var(--line-control)] rounded-[var(--r-control)] bg-[var(--surface)] overflow-hidden text-[11px] sm:text-[12px] h-[34px] sm:h-[var(--control-h)] shrink-0">
+            <div
+              data-feature-tour="semester-layout"
+              className="flex items-center border border-[var(--line-control)] rounded-[var(--r-control)] bg-[var(--surface)] overflow-hidden text-[11px] sm:text-[12px] h-[34px] sm:h-[var(--control-h)] shrink-0"
+            >
               <button
                 type="button"
                 onClick={() => setLayoutView("single")}
@@ -1371,6 +1375,7 @@ export const SemesterPlanningPage: React.FC<SemesterPlanningPageProps> = ({
 
             {/* 3. Auto-Plan To Graduation with Summer Dropdown */}
             <div
+              data-feature-tour="semester-auto-plan"
               className="relative flex items-center shrink-0"
               ref={autoPlanMenuRef}
             >
@@ -1449,7 +1454,11 @@ export const SemesterPlanningPage: React.FC<SemesterPlanningPageProps> = ({
             </div>
 
             {/* 4. Consolidated Plan Options Dropdown (⋯ خيارات) */}
-            <div className="relative shrink-0" ref={moreActionsRef}>
+            <div
+              data-feature-tour="semester-plan-options"
+              className="relative shrink-0"
+              ref={moreActionsRef}
+            >
               <button
                 type="button"
                 onClick={() => setShowMoreActions((prev) => !prev)}
@@ -2157,7 +2166,10 @@ export const SemesterPlanningPage: React.FC<SemesterPlanningPageProps> = ({
             </section>
           ) : (
             /* Column 1: Available Courses (60%) */
-            <section className="flex-1 md:w-[60%] flex flex-col bg-[var(--bg)] min-h-0 overflow-hidden">
+            <section
+              data-feature-tour="semester-course-pool"
+              className="flex-1 md:w-[60%] flex flex-col bg-[var(--bg)] min-h-0 overflow-hidden"
+            >
               {/* Search & Filter Toolbar */}
               <div className="p-3 sm:p-4 border-b border-[var(--line)] space-y-2.5 bg-[var(--bg)] shrink-0">
                 {/* Single Search Field with Clear Button */}
@@ -2609,9 +2621,15 @@ export const SemesterPlanningPage: React.FC<SemesterPlanningPageProps> = ({
             </section>
           ) : (
             /* Column 2: Planned Courses (Desktop 40%) */
-            <section className="hidden md:flex md:w-[40%] flex-col bg-[var(--surface)] min-h-0 overflow-hidden">
+            <section
+              data-feature-tour="semester-course-details"
+              className="hidden md:flex md:w-[40%] flex-col bg-[var(--surface)] min-h-0 overflow-hidden"
+            >
               {/* Header */}
-              <div className="p-3 sm:p-4 border-b border-[var(--line)] flex items-center justify-between shrink-0">
+              <div
+                data-feature-tour="semester-schedule"
+                className="p-3 sm:p-4 border-b border-[var(--line)] flex items-center justify-between shrink-0"
+              >
                 <div className="flex items-center gap-2 min-w-0">
                   <h2 className="text-[15px] sm:text-[16px] font-bold text-[var(--text)] truncate">
                     مواد الفصل
@@ -2809,7 +2827,10 @@ export const SemesterPlanningPage: React.FC<SemesterPlanningPageProps> = ({
               </div>
 
               {/* Fixed Footer with Hours & Commit Action */}
-              <div className="p-4 border-t border-[var(--line)] bg-[var(--surface)] space-y-3 shrink-0">
+              <div
+                data-feature-tour="semester-summary"
+                className="p-4 border-t border-[var(--line)] bg-[var(--surface)] space-y-3 shrink-0"
+              >
                 {/* Hours and Limit warning */}
                 <div className="flex items-center justify-between">
                   <span
@@ -2870,7 +2891,10 @@ export const SemesterPlanningPage: React.FC<SemesterPlanningPageProps> = ({
 
       {/* Mobile Floating Bar (< 768px): Positioned directly above App.tsx mobile nav at bottom-[58px] */}
       {layoutView === "single" && (
-        <div className="md:hidden fixed bottom-[58px] inset-x-0 p-3 bg-[var(--surface)]/95 backdrop-blur-md border-t border-[var(--line)] flex items-center justify-between gap-3 z-[35] shadow-lg">
+        <div
+          data-feature-tour="semester-course-details semester-schedule semester-summary"
+          className="md:hidden fixed bottom-[58px] inset-x-0 p-3 bg-[var(--surface)]/95 backdrop-blur-md border-t border-[var(--line)] flex items-center justify-between gap-3 z-[35] shadow-lg"
+        >
           {isTranscriptSemester && activeTranscriptRecord ? (
             <>
               <div>

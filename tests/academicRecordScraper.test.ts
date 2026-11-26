@@ -12,10 +12,7 @@ test("academicRecordScraper normalizeDigitsAndText standardizes Arabic and Persi
   assert.equal(normalizeDigitsAndText("٢٠٢١١٠١٢٣"), "202110123");
   assert.equal(normalizeDigitsAndText("علامة: ٨٥.٥ %"), "علامة: 85.5 %");
   assert.equal(normalizeDigitsAndText("ساعات: ۳"), "ساعات: 3");
-  assert.equal(
-    normalizeDigitsAndText("السِّجِلّ الأكاديمي"),
-    "السجل الأكاديمي",
-  );
+  assert.equal(normalizeDigitsAndText("السِّجِلّ الأكاديمي"), "السجل الأكاديمي");
 });
 
 test("academicRecordScraper parseSemesterWeight provides strict chronological ordering", () => {
@@ -159,7 +156,7 @@ test("parseExemptionExamRows correctly handles English exam when only remedial i
   assert.equal(exemptionExams.length, 1);
 });
 
-test("parseExemptionExamRows ensures remedial English is also exempted when English 1 is exempted alone", () => {
+test("parseExemptionExamRows does not infer extra exemptions from a single listed course", () => {
   const mockScraped = [
     {
       examName: "امتحان مستوى انجليزي",
@@ -175,8 +172,8 @@ test("parseExemptionExamRows ensures remedial English is also exempted when Engl
   assert.equal(passedCourseCodes.has("15200106"), true);
   assert.equal(
     passedCourseCodes.has("15200099"),
-    true,
-    "English remedial must be automatically inferred if English 1 is exempted",
+    false,
+    "Only courses explicitly listed by Edugate are considered exempted",
   );
 });
 
@@ -185,10 +182,10 @@ test("parseExemptionExamRows marks exam as not passed when explicitly failed", (
     {
       examName: "امتحان مستوى انجليزي",
       semester: "20241",
-      exemptedCoursesRaw: "",
+      exemptedCoursesRaw: "15200099",
       passedRaw: "راسب",
-      cells: ["امتحان مستوى انجليزي", "20241", "", "راسب"],
-      text: "امتحان مستوى انجليزي 20241 راسب",
+      cells: ["امتحان مستوى انجليزي", "20241", "15200099", "راسب"],
+      text: "امتحان مستوى انجليزي 20241 15200099 راسب",
     },
   ];
 
@@ -197,10 +194,10 @@ test("parseExemptionExamRows marks exam as not passed when explicitly failed", (
   assert.equal(passedCourseCodes.size, 0);
   assert.equal(exemptionExams.length, 1);
   assert.equal(exemptionExams[0].isPassed, false);
-  assert.ok(exemptionExams[0].status.includes("راسب"));
+  assert.ok(exemptionExams[0].status.includes("غير مجتاز"));
 });
 
-test("parseExemptionExamRows automatically exempts BOTH English 1 (15200106) and Remedial English (15200099) when placement exam grade >= 80", () => {
+test("parseExemptionExamRows does not infer exemptions from an exam score", () => {
   const mockScraped = [
     {
       examName: "امتحان مستوى لغة انجليزية",
@@ -214,29 +211,11 @@ test("parseExemptionExamRows automatically exempts BOTH English 1 (15200106) and
 
   const { exemptionExams, passedCourseCodes } =
     parseExemptionExamRows(mockScraped);
-  assert.equal(
-    passedCourseCodes.has("15200099"),
-    true,
-    "Must exempt Remedial English",
-  );
-  assert.equal(
-    passedCourseCodes.has("15200106"),
-    true,
-    "Must exempt English 1 for grade >= 80",
-  );
-
-  const eng1 = exemptionExams.find((e) => e.code === "15200106");
-  assert.ok(eng1, "English 1 must be present in exemptionExams");
-  assert.equal(eng1?.grade, 85);
-  assert.equal(eng1?.isPassed, true);
-  assert.ok(eng1?.status.includes("تفوق"));
-
-  const engRem = exemptionExams.find((e) => e.code === "15200099");
-  assert.ok(engRem, "Remedial English must be present");
-  assert.equal(engRem?.isPassed, true);
+  assert.equal(passedCourseCodes.size, 0);
+  assert.equal(exemptionExams.length, 0);
 });
 
-test("parseExemptionExamRows only exempts Remedial English when placement exam grade is between 50 and 79", () => {
+test("parseExemptionExamRows does not infer exemptions from a passing exam label", () => {
   const mockScraped = [
     {
       examName: "امتحان مستوى لغة انجليزية",
@@ -250,21 +229,11 @@ test("parseExemptionExamRows only exempts Remedial English when placement exam g
 
   const { exemptionExams, passedCourseCodes } =
     parseExemptionExamRows(mockScraped);
-  assert.equal(
-    passedCourseCodes.has("15200099"),
-    true,
-    "Must exempt Remedial English for 50-79",
-  );
-  assert.equal(
-    passedCourseCodes.has("15200106"),
-    false,
-    "Must NOT exempt English 1 when grade < 80",
-  );
-  assert.equal(exemptionExams.length, 1);
-  assert.equal(exemptionExams[0].grade, 72);
+  assert.equal(passedCourseCodes.size, 0);
+  assert.equal(exemptionExams.length, 0);
 });
 
-test("parseExemptionExamRows correctly identifies Arabic and English 1 text in cells even without numeric code", () => {
+test("parseExemptionExamRows ignores course names without an explicit exempted-course code", () => {
   const mockScraped = [
     {
       examName: "امتحان قبول لغة إنجليزية",
@@ -277,14 +246,5 @@ test("parseExemptionExamRows correctly identifies Arabic and English 1 text in c
   ];
 
   const { passedCourseCodes } = parseExemptionExamRows(mockScraped);
-  assert.equal(
-    passedCourseCodes.has("15200106"),
-    true,
-    "Must extract English 1 from text",
-  );
-  assert.equal(
-    passedCourseCodes.has("15200099"),
-    true,
-    "Must infer Remedial English when English 1 is exempted",
-  );
+  assert.equal(passedCourseCodes.size, 0);
 });

@@ -5,7 +5,11 @@ import {
   aiCourses as defaultAiCourses,
   aiCategoryRequirements as defaultAiCategoryRequirements,
 } from "../data";
-import { STORAGE_STUDENT_KEY, StudentSyncProfile } from "./studentService";
+import {
+  hasVerifiedEdugatePlan,
+  STORAGE_STUDENT_KEY,
+  StudentSyncProfile,
+} from "./studentService";
 import { extractCohortYear } from "../utils/semesterUtils";
 
 export interface MajorSummary {
@@ -18,6 +22,7 @@ export interface MajorSummary {
   degree: string;
   totalCredits: number;
   categoryRequirements: Record<string, number>;
+  planSource?: string;
   description?: string;
   coursesCount?: number;
 }
@@ -89,8 +94,9 @@ function inferDegreeAndCredits(student: Partial<StudentSyncProfile> = {}) {
   const degree =
     student.degree ||
     (isDiploma ? "دبلوم متوسط" : isMaster ? "ماجستير" : "بكالوريوس");
-  const totalCredits =
-    student.totalCredits && student.totalCredits >= 60
+  const totalCredits = hasVerifiedEdugatePlan(student)
+    ? student.totalCredits || 0
+    : student.totalCredits && student.totalCredits >= 60
       ? student.totalCredits
       : defaultCredits;
   return { degree, totalCredits };
@@ -102,7 +108,11 @@ function mergeStudentMajor(list: MajorSummary[]): MajorSummary[] {
       const studentRaw = window.localStorage.getItem(STORAGE_STUDENT_KEY);
       if (studentRaw) {
         const student = JSON.parse(studentRaw) as StudentSyncProfile;
-        if (student && student.majorName) {
+        if (
+          student &&
+          student.majorName &&
+          (student.isDemo || hasVerifiedEdugatePlan(student))
+        ) {
           const studentMajorId = student.majorId || student.majorName;
           if (
             !list.some(
@@ -125,8 +135,7 @@ function mergeStudentMajor(list: MajorSummary[]): MajorSummary[] {
                 college: student.college || "جامعة فلسطين التقنية - خضوري",
                 degree,
                 totalCredits,
-                categoryRequirements:
-                  student.categoryRequirements || defaultCategoryRequirements,
+                categoryRequirements: student.categoryRequirements || {},
                 coursesCount: Array.isArray(student.planCourses)
                   ? student.planCourses.length
                   : undefined,
@@ -199,17 +208,20 @@ export async function fetchMajorPlan(majorId: string): Promise<MajorDetail> {
   const normId = majorId.toLowerCase().trim();
 
   // 1. Immediately check if cached synced student profile matches this major
+  let cachedStudent: StudentSyncProfile | null = null;
   if (typeof window !== "undefined" && window.localStorage) {
     try {
       const studentRaw = window.localStorage.getItem(STORAGE_STUDENT_KEY);
       if (studentRaw) {
         const student = JSON.parse(studentRaw) as StudentSyncProfile;
+        cachedStudent = student;
         const studentMajorId = (student.majorId || student.majorName || "")
           .toLowerCase()
           .trim();
         if (
           (studentMajorId === normId ||
             student.majorName?.toLowerCase?.().trim() === normId) &&
+          (student.isDemo || hasVerifiedEdugatePlan(student)) &&
           Array.isArray(student.planCourses) &&
           student.planCourses.length > 0
         ) {
@@ -226,9 +238,9 @@ export async function fetchMajorPlan(majorId: string): Promise<MajorDetail> {
             college: student.college || "جامعة فلسطين التقنية - خضوري",
             degree,
             totalCredits,
-            categoryRequirements:
-              student.categoryRequirements || defaultCategoryRequirements,
+            categoryRequirements: student.categoryRequirements || {},
             courses: student.planCourses,
+            planSource: student.planSource,
           };
           window.localStorage.setItem(
             `${STORAGE_MAJOR_PLAN_PREFIX}${normId}`,
@@ -238,6 +250,11 @@ export async function fetchMajorPlan(majorId: string): Promise<MajorDetail> {
         }
       }
     } catch {}
+  }
+  if (cachedStudent && !cachedStudent.isDemo) {
+    throw new Error(
+      "لا يمكن عرض خطة هذا التخصص قبل جلب خطة الطالب الموثقة من بوابة الجامعة.",
+    );
   }
 
   // 2. Fetch from backend API
@@ -257,7 +274,10 @@ export async function fetchMajorPlan(majorId: string): Promise<MajorDetail> {
       if (
         detail &&
         Array.isArray(detail.courses) &&
-        detail.courses.length > 0
+        detail.courses.length > 0 &&
+        (!cachedStudent ||
+          cachedStudent.isDemo ||
+          detail.planSource === "edugate_major_plan")
       ) {
         // Validation: verify that non-CSE major didn't inherit corrupted CSE circuit courses
         const isCse =
@@ -284,7 +304,11 @@ export async function fetchMajorPlan(majorId: string): Promise<MajorDetail> {
     if (cached) {
       try {
         const parsed = JSON.parse(cached);
-        if (Array.isArray(parsed?.courses) && parsed.courses.length > 0) {
+        if (
+          parsed?.planSource === "edugate_major_plan" &&
+          Array.isArray(parsed?.courses) &&
+          parsed.courses.length > 0
+        ) {
           return parsed;
         }
       } catch {}
@@ -296,6 +320,7 @@ export async function fetchMajorPlan(majorId: string): Promise<MajorDetail> {
       if (studentRaw) {
         const student = JSON.parse(studentRaw) as StudentSyncProfile;
         if (
+          (student.isDemo || hasVerifiedEdugatePlan(student)) &&
           Array.isArray(student.planCourses) &&
           student.planCourses.length > 0
         ) {
@@ -312,10 +337,16 @@ export async function fetchMajorPlan(majorId: string): Promise<MajorDetail> {
             college: student.college || "جامعة فلسطين التقنية - خضوري",
             degree,
             totalCredits,
-            categoryRequirements:
-              student.categoryRequirements || defaultCategoryRequirements,
+            categoryRequirements: student.categoryRequirements || {},
             courses: student.planCourses,
+            planSource: student.planSource,
           };
+        }
+
+        if (cachedStudent && !cachedStudent.isDemo) {
+          throw new Error(
+            "لم يتم العثور على خطة موثقة من بوابة الجامعة لهذا الطالب.",
+          );
         }
       }
     } catch {}

@@ -16,7 +16,20 @@ export function applyCurriculumPrerequisitesAndSemesters(
   majorId?: string,
   majorName?: string,
 ): any[];
-export function parseExemptionExamRows(scrapedExams: any[]): any[];
+export function parseExemptionExamRows(
+  scrapedExams: Array<Record<string, unknown>>,
+): {
+  exemptionExams: Array<{
+    code: string;
+    name: string;
+    examName: string;
+    semester?: string;
+    status: string;
+    grade: number | null;
+    isPassed: boolean;
+  }>;
+  passedCourseCodes: Set<string>;
+};
 export function closeSharedBrowser(): Promise<void>;
 export function authenticateAndSyncStudent(
   studentId: string,

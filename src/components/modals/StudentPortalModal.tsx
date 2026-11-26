@@ -607,7 +607,9 @@ export const StudentPortalModal: React.FC<StudentPortalModalProps> = ({
                     isPrivacyMasked && "blur-md select-none",
                   )}
                 >
-                  {syncedProfile.gpa}%
+                  {typeof syncedProfile.gpa === "number"
+                    ? `${syncedProfile.gpa}%`
+                    : "غير متاح"}
                 </div>
               </div>
 
