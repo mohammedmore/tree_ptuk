@@ -41,6 +41,22 @@ interface StudentRecordsModalProps {
   completedCourseIds?: Set<string>;
 }
 
+function getTransactionStatusTone(
+  status: string,
+): "positive" | "negative" | "unknown" {
+  if (
+    /(غير معتمد|غير مكتمل|غير مقبول|مرفوض|ملغي|راسب|failed|rejected|cancelled|not approved|incomplete)/i.test(
+      status,
+    )
+  ) {
+    return "negative";
+  }
+  if (/(معتمد|مكتمل|مقبول|approved|complete|نجاح)/i.test(status)) {
+    return "positive";
+  }
+  return "unknown";
+}
+
 export const StudentRecordsModal: React.FC<StudentRecordsModalProps> = ({
   isOpen,
   onClose,
@@ -98,44 +114,31 @@ export const StudentRecordsModal: React.FC<StudentRecordsModalProps> = ({
   if (!isOpen) return null;
 
   const financial: FinancialRecord = profile?.financial || {
-    balance: profile?.financialBalance || "0 دائن",
+    balance: profile?.financialBalance || "",
     currency: "دينار أردني (JOD)",
-    totalDebit: 0,
-    totalCredit: 0,
     payments: [],
   };
 
   const transactions: AcademicTransaction[] = profile?.transactions || [];
 
   const semesters = profile?.semesters || [];
+  const academicWarning = profile?.academicWarning?.trim() || "";
+  const hasConfirmedNoWarning =
+    /^(لا يوجد|لا توجد|بدون|غير موجود)(?:\s|$)/i.test(academicWarning);
+  const financialBalance =
+    financial.balance?.trim() || profile?.financialBalance?.trim() || "";
+  const warningClass = !academicWarning
+    ? "text-[var(--text-3)]"
+    : hasConfirmedNoWarning
+      ? "text-emerald-600"
+      : "text-red-500";
 
-  const exemptionExams: ExemptionExamRecord[] = React.useMemo(() => {
-    const list = [...(profile?.exemptionExams || [])];
-    if (
-      list.some((e) => e.code === "15200106") &&
-      !list.some((e) => e.code === "15200099")
-    ) {
-      list.unshift({
-        code: "15200099",
-        name: "إنجليزي إستدراكي",
-        examName: "امتحان مستوى انجليزي",
-        status: "معفى/ناجح",
-        isPassed: true,
-      });
-    }
-    return list;
-  }, [profile?.exemptionExams]);
+  const exemptionExams = profile?.exemptionExams || [];
 
-  const englishExam = exemptionExams.find(
-    (e) =>
-      e.code === "15200106" ||
-      e.code === "15200099" ||
-      /انجليزي|إنجليزية|English/i.test(e.examName || ""),
-  );
+  const englishExam = exemptionExams.find((e) => e.code === "15200106");
 
   const englishGrade =
     typeof englishExam?.grade === "number" ? englishExam.grade : null;
-  const isEnglishHighScore = englishGrade !== null && englishGrade >= 80;
   const isEnglish1ExemptedInPlan = Boolean(completedCourseIds?.has("15200106"));
 
   return (
@@ -282,11 +285,14 @@ export const StudentRecordsModal: React.FC<StudentRecordsModalProps> = ({
                   </div>
                   <div
                     className={cn(
-                      "text-[22px] font-black text-emerald-600 tabular-nums privacy-sensitive transition-all duration-200",
+                      "text-[22px] font-black tabular-nums privacy-sensitive transition-all duration-200",
+                      financialBalance
+                        ? "text-emerald-600"
+                        : "text-[var(--text-3)]",
                       isPrivacyMasked && "blur-md select-none",
                     )}
                   >
-                    {financial.balance || profile?.financialBalance || "0 دائن"}
+                    {financialBalance || "غير متاح"}
                   </div>
                   <div className="text-[11px] text-[var(--text-3)] mt-1">
                     العملة: {financial.currency || "دينار أردني (JOD)"}
@@ -303,10 +309,10 @@ export const StudentRecordsModal: React.FC<StudentRecordsModalProps> = ({
                       isPrivacyMasked && "blur-md select-none",
                     )}
                   >
-                    {profile?.academicAdvisor || "عمادة الكلية"}
+                    {profile?.academicAdvisor || "غير متاح"}
                   </div>
                   <div className="text-[11px] text-[var(--text-3)] mt-1">
-                    الحالة: {profile?.academicStatus || "منتظم"}
+                    الحالة: {profile?.academicStatus || "غير متاح"}
                   </div>
                 </div>
 
@@ -318,13 +324,10 @@ export const StudentRecordsModal: React.FC<StudentRecordsModalProps> = ({
                     className={cn(
                       "text-[16px] font-bold privacy-sensitive transition-all duration-200",
                       isPrivacyMasked && "blur-md select-none",
-                      profile?.academicWarning &&
-                        profile.academicWarning !== "لا يوجد"
-                        ? "text-red-500"
-                        : "text-emerald-600",
+                      warningClass,
                     )}
                   >
-                    {profile?.academicWarning || "لا يوجد إنذارات"}
+                    {academicWarning || "غير متاح"}
                   </div>
                   <div
                     className={cn(
@@ -332,7 +335,10 @@ export const StudentRecordsModal: React.FC<StudentRecordsModalProps> = ({
                       isPrivacyMasked && "blur-md select-none",
                     )}
                   >
-                    المعدل: %{profile?.gpa?.toFixed(1) || "0.0"}
+                    المعدل:{" "}
+                    {typeof profile?.gpa === "number"
+                      ? `%${profile.gpa.toFixed(1)}`
+                      : "غير متاح"}
                   </div>
                 </div>
               </div>
@@ -383,7 +389,7 @@ export const StudentRecordsModal: React.FC<StudentRecordsModalProps> = ({
                 ) : (
                   <div className="p-8 text-center border border-dashed border-[var(--line)] rounded-xl bg-[var(--sunken)]/40 text-[var(--text-3)]">
                     <p className="text-[14px]">
-                      لا توجد وصولات مالية مسجلة حالياً للفصل الجاري.
+                      لا تتوفر وصولات مالية من البوابة.
                     </p>
                   </div>
                 )}
@@ -592,11 +598,11 @@ export const StudentRecordsModal: React.FC<StudentRecordsModalProps> = ({
                     {isEnglish1ExemptedInPlan ? (
                       <span className="px-2 py-0.5 rounded-full text-[11px] font-bold bg-emerald-500/15 text-emerald-600 border border-emerald-500/30 flex items-center gap-1">
                         <Check size={12} />
-                        معفى ومحتسب بالخطة
+                        محتسب كمنجز في الخطة
                       </span>
                     ) : (
                       <span className="px-2 py-0.5 rounded-full text-[11px] font-bold bg-amber-500/15 text-amber-600 border border-amber-500/30">
-                        غير محتسب كمعفى
+                        غير محتسب كمنجز
                       </span>
                     )}
                   </div>
@@ -607,13 +613,13 @@ export const StudentRecordsModal: React.FC<StudentRecordsModalProps> = ({
                         <strong className="text-[var(--text)] tabular-nums font-bold">
                           {englishGrade}%
                         </strong>{" "}
-                        {isEnglishHighScore
-                          ? "🌟 (مؤهل لإعفاء لغة إنجليزية 1 لتجاوز 80%)"
-                          : "(أقل من 80%، مطلوب دراسة لغة إنجليزية 1)"}
                       </>
                     ) : (
-                      "إذا حصلت على علامة 80 فما فوق بامتحان القبول، يمكنك تفعيل الإعفاء فورياً لتحديث خطتك الدراسية."
+                      "لا تتوفر علامة امتحان موثقة من البوابة."
                     )}
+                    <span className="block mt-1">
+                      تعديل المنجزات هنا محلي للخطة ولا يؤكد الإعفاء الرسمي.
+                    </span>
                   </p>
                 </div>
 
@@ -633,12 +639,12 @@ export const StudentRecordsModal: React.FC<StudentRecordsModalProps> = ({
                     {isEnglish1ExemptedInPlan ? (
                       <>
                         <X size={14} />
-                        <span>إلغاء الإعفاء من الخطة</span>
+                        <span>إزالة المساق من المنجزات</span>
                       </>
                     ) : (
                       <>
                         <Sparkles size={14} />
-                        <span>تطبيق إعفاء لغة إنجليزية 1 (≥ 80) بالخطة</span>
+                        <span>إضافة المساق إلى المنجزات</span>
                       </>
                     )}
                   </button>
@@ -731,21 +737,21 @@ export const StudentRecordsModal: React.FC<StudentRecordsModalProps> = ({
                           onClick={() => onApplyExemption("15200106", true)}
                           className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-[var(--accent)] text-[var(--text-on-accent)] hover:opacity-90 transition cursor-pointer"
                         >
-                          احتساب إعفاء لغة إنجليزية (1)
+                          إضافة لغة إنجليزية (1) إلى المنجزات
                         </button>
                         <button
                           type="button"
                           onClick={() => onApplyExemption("13010006", true)}
                           className="px-3 py-1.5 rounded-lg text-xs font-semibold border border-[var(--line-control)] bg-[var(--surface)] text-[var(--text)] hover:bg-[var(--sunken)] transition cursor-pointer"
                         >
-                          احتساب إعفاء مهارات حاسوب
+                          إضافة مهارات الحاسوب إلى المنجزات
                         </button>
                         <button
                           type="button"
                           onClick={() => onApplyExemption("15200098", true)}
                           className="px-3 py-1.5 rounded-lg text-xs font-semibold border border-[var(--line-control)] bg-[var(--surface)] text-[var(--text)] hover:bg-[var(--sunken)] transition cursor-pointer"
                         >
-                          احتساب إعفاء عربي استدراكي
+                          إضافة العربي الاستدراكي إلى المنجزات
                         </button>
                       </div>
                     )}
@@ -775,38 +781,62 @@ export const StudentRecordsModal: React.FC<StudentRecordsModalProps> = ({
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-[var(--line)]">
-                      {transactions.map((tx, idx) => (
-                        <tr key={idx} className="hover:bg-[var(--sunken)]/50">
-                          <td className="py-3 px-4 font-bold text-[var(--text)] flex items-center gap-2">
-                            <CheckCircle2
-                              size={15}
-                              className="text-emerald-500 shrink-0"
-                            />
-                            <span>{tx.type}</span>
-                          </td>
-                          <td className="py-3 px-4 text-[var(--text-2)]">
-                            {tx.semester}
-                          </td>
-                          <td className="py-3 px-4 tabular-nums text-[var(--text-3)]">
-                            {tx.date}
-                          </td>
-                          <td className="py-3 px-4">
-                            <span className="px-2 py-0.5 text-[11px] font-semibold rounded-md bg-emerald-500/10 text-emerald-600 border border-emerald-500/20">
-                              {tx.status}
-                            </span>
-                          </td>
-                          <td className="py-3 px-4 text-[var(--text-3)]">
-                            {tx.notes || "—"}
-                          </td>
-                        </tr>
-                      ))}
+                      {transactions.map((tx, idx) => {
+                        const tone = getTransactionStatusTone(tx.status);
+                        return (
+                          <tr key={idx} className="hover:bg-[var(--sunken)]/50">
+                            <td className="py-3 px-4 font-bold text-[var(--text)] flex items-center gap-2">
+                              {tone === "positive" ? (
+                                <CheckCircle2
+                                  size={15}
+                                  className="text-emerald-500 shrink-0"
+                                />
+                              ) : (
+                                <AlertCircle
+                                  size={15}
+                                  className={cn(
+                                    "shrink-0",
+                                    tone === "negative"
+                                      ? "text-red-500"
+                                      : "text-[var(--text-3)]",
+                                  )}
+                                />
+                              )}
+                              <span>{tx.type}</span>
+                            </td>
+                            <td className="py-3 px-4 text-[var(--text-2)]">
+                              {tx.semester}
+                            </td>
+                            <td className="py-3 px-4 tabular-nums text-[var(--text-3)]">
+                              {tx.date}
+                            </td>
+                            <td className="py-3 px-4">
+                              <span
+                                className={cn(
+                                  "px-2 py-0.5 text-[11px] font-semibold rounded-md border",
+                                  tone === "positive"
+                                    ? "bg-emerald-500/10 text-emerald-600 border-emerald-500/20"
+                                    : tone === "negative"
+                                      ? "bg-red-500/10 text-red-600 border-red-500/20"
+                                      : "bg-[var(--sunken)] text-[var(--text-3)] border-[var(--line)]",
+                                )}
+                              >
+                                {tx.status || "غير متاح"}
+                              </span>
+                            </td>
+                            <td className="py-3 px-4 text-[var(--text-3)]">
+                              {tx.notes || "—"}
+                            </td>
+                          </tr>
+                        );
+                      })}
                     </tbody>
                   </table>
                 </div>
               ) : (
                 <div className="p-8 text-center border border-dashed border-[var(--line)] rounded-xl bg-[var(--sunken)]/40 text-[var(--text-3)]">
                   <p className="text-[14px]">
-                    لا توجد حركات أكاديمية سابقة مسجلة.
+                    لا تتوفر بيانات الحركات الأكاديمية من البوابة.
                   </p>
                 </div>
               )}

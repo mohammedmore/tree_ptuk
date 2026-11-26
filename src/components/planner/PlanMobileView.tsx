@@ -134,7 +134,10 @@ export const PlanMobileView: React.FC<PlanMobileViewProps> = ({
   return (
     <div dir="rtl" className="w-full space-y-3 p-3.5 pb-24">
       {/* Mobile Top Controls: Expand All / Match Count */}
-      <div className="flex items-center justify-between px-1 py-0.5 text-xs text-[var(--text-3)]">
+      <div
+        data-feature-tour="plan-view-options"
+        className="flex items-center justify-between px-1 py-0.5 text-xs text-[var(--text-3)]"
+      >
         <span>
           {filteredCourseIds
             ? `نتائج البحث: ${totalMatchingCourses} مادة`

@@ -786,7 +786,7 @@ export const RegistrationPage: React.FC<RegistrationPageProps> = ({
     () =>
       checkPlanCreditLimits(currentPlan.totalCredits, selectedSemester, {
         hasAcademicWarning,
-        gpa: cachedProfile?.gpa,
+        gpa: cachedProfile?.gpa ?? undefined,
       }),
     [
       currentPlan.totalCredits,
@@ -3676,8 +3676,8 @@ export const RegistrationPage: React.FC<RegistrationPageProps> = ({
                   1. تصدير الخطط الثلاث إلى جهاز آخر:
                 </span>
                 <p className="text-[var(--text-3)] leading-relaxed">
-                  انسخ رمز المشاركة لنقل جميع الخطط الثلاث وشعبها فوراً إلى
-                  هاتفك أو لابتوب زميلك:
+                  انسخ رمز المشاركة لنقل جميع الخطط الثلاث وشعبها فوراً إلى هاتفك
+                  أو لابتوب زميلك:
                 </p>
                 <button
                   type="button"
@@ -4261,8 +4261,8 @@ export const RegistrationPage: React.FC<RegistrationPageProps> = ({
                 </span>
               </div>
               <p className="text-[11px] text-[var(--text-3)] leading-relaxed">
-                يُنصح بسداد الرسوم عبر القنوات المعتمدة قبل موعد فتح التسجيل
-                بوقت كافٍ لضمان تغطية الرصيد وتفادي رفض المواد.
+                يُنصح بسداد الرسوم عبر القنوات المعتمدة قبل موعد فتح التسجيل بوقت
+                كافٍ لضمان تغطية الرصيد وتفادي رفض المواد.
               </p>
             </div>
 

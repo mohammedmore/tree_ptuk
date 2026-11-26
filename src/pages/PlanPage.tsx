@@ -1167,7 +1167,10 @@ function PlanFlowContent({
         className="w-full h-[calc(100dvh-var(--topbar-h))] flex flex-col bg-[var(--bg)] overflow-hidden"
       >
         {/* Screen Header */}
-        <header className="px-4 sm:px-6 py-3 border-b border-[var(--line)] bg-[var(--bg)] shrink-0 space-y-2.5">
+        <header
+          data-feature-tour="plan-overview"
+          className="px-4 sm:px-6 py-3 border-b border-[var(--line)] bg-[var(--bg)] shrink-0 space-y-2.5"
+        >
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div>
               <div className="flex items-center gap-3">
@@ -1176,7 +1179,10 @@ function PlanFlowContent({
                 </h1>
 
                 {/* View Switcher: Map vs List (hidden on mobile, forced to PlanMobileView) */}
-                <div className="hidden md:flex items-center border border-[var(--line-control)] rounded-[var(--r-control)] overflow-hidden bg-[var(--surface)]">
+                <div
+                  data-feature-tour="plan-view-options"
+                  className="hidden md:flex items-center border border-[var(--line-control)] rounded-[var(--r-control)] overflow-hidden bg-[var(--surface)]"
+                >
                   <button
                     type="button"
                     onClick={() => setViewMode("map")}
@@ -1250,7 +1256,10 @@ function PlanFlowContent({
             </div>
 
             {/* Clean Consolidated Header Tools Bar (Item 9) */}
-            <div className="flex items-center gap-1.5 sm:gap-2.5 w-full sm:w-auto justify-between sm:justify-end">
+            <div
+              data-feature-tour="plan-major-search"
+              className="flex items-center gap-1.5 sm:gap-2.5 w-full sm:w-auto justify-between sm:justify-end"
+            >
               {/* Major selector */}
               <button
                 type="button"
@@ -1283,7 +1292,11 @@ function PlanFlowContent({
               </div>
 
               {/* Consolidated Plan Options Menu (Item 9) */}
-              <div className="relative shrink-0" ref={optionsMenuRef}>
+              <div
+                data-feature-tour="plan-sync"
+                className="relative shrink-0"
+                ref={optionsMenuRef}
+              >
                 <button
                   type="button"
                   onClick={() => setIsOptionsMenuOpen((prev) => !prev)}
@@ -1520,7 +1533,10 @@ function PlanFlowContent({
           )}
 
           {/* Filters & Toggles Toolbar Row */}
-          <div className="flex flex-wrap items-center justify-between gap-2.5 pt-1">
+          <div
+            data-feature-tour="plan-filters"
+            className="flex flex-wrap items-center justify-between gap-2.5 pt-1"
+          >
             {/* Status Tabs (Horizontally scrollable on mobile) */}
             <div className="flex items-center gap-3 text-[13px] font-medium overflow-x-auto pb-1 no-scrollbar flex-nowrap shrink-0">
               <button
@@ -1893,7 +1909,10 @@ function PlanFlowContent({
         </div>
 
         {/* Main Viewport Area */}
-        <div className="flex-1 relative flex overflow-hidden">
+        <div
+          data-feature-tour="plan-map"
+          className="flex-1 relative flex overflow-hidden"
+        >
           {isMobile ? (
             <div className="flex-1 overflow-y-auto">
               <PlanMobileView
@@ -2004,7 +2023,10 @@ function PlanFlowContent({
               )}
 
               {/* Calm Zoom Controls & Quick Viewport Presets (Item 8) */}
-              <div className="absolute bottom-4 left-4 z-10 flex items-center gap-1.5 p-1 bg-[var(--surface)] border border-[var(--line-control)] rounded-[var(--r-control)] shadow-[var(--shadow-pop)]">
+              <div
+                data-feature-tour="plan-map-tools"
+                className="absolute bottom-4 left-4 z-10 flex items-center gap-1.5 p-1 bg-[var(--surface)] border border-[var(--line-control)] rounded-[var(--r-control)] shadow-[var(--shadow-pop)]"
+              >
                 <button
                   type="button"
                   onClick={() => zoomIn({ duration: 150 })}

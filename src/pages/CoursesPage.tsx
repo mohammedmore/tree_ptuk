@@ -75,11 +75,8 @@ import {
 } from "../services/courseService";
 import type { CatalogCourse, CatalogSection } from "../services/scheduleSolver";
 import { normalizeDayKey } from "../services/scheduleSolver";
-import {
-  courseRecommendedSemesters,
-  getRecommendedSemesterOfCourse,
-  SEMESTERS,
-} from "../constants";
+import { SEMESTERS } from "../constants";
+import { buildCourseYearGroups } from "../core/courseCatalogGrouping";
 import { cn, normalizeArabicText, matchDoctorName, wordsMatch } from "../utils";
 import type { AppRoute } from "../router";
 import { DoctorScheduleModal } from "../components/modals";
@@ -907,84 +904,16 @@ export const CoursesPage: React.FC<CoursesPageProps> = ({
   ]);
 
   // Feature 4: Year & Semester Grouping Data Structure
-  const yearGroups = useMemo(() => {
-    const groups: Array<{
-      id: string;
-      title: string;
-      courses: Course[];
-      totalCredits: number;
-      completedCredits: number;
-    }> = [
-      {
-        id: "year-1",
-        title: "السنة الأولى",
-        courses: [],
-        totalCredits: 0,
-        completedCredits: 0,
-      },
-      {
-        id: "year-2",
-        title: "السنة الثانية",
-        courses: [],
-        totalCredits: 0,
-        completedCredits: 0,
-      },
-      {
-        id: "year-3",
-        title: "السنة الثالثة",
-        courses: [],
-        totalCredits: 0,
-        completedCredits: 0,
-      },
-      {
-        id: "year-4",
-        title: "السنة الرابعة",
-        courses: [],
-        totalCredits: 0,
-        completedCredits: 0,
-      },
-      {
-        id: "year-5",
-        title: "السنة الخامسة ومشاريع التخرج",
-        courses: [],
-        totalCredits: 0,
-        completedCredits: 0,
-      },
-      {
-        id: "electives-remedial",
-        title: "متطلبات اختيارية واستدراكية",
-        courses: [],
-        totalCredits: 0,
-        completedCredits: 0,
-      },
-    ];
-
-    filteredCourses.forEach((c) => {
-      const sem =
-        getRecommendedSemesterOfCourse(c) ||
-        courseRecommendedSemesters[c.id] ||
-        "";
-      let targetIndex = 5;
-      if (sem.includes("السنة الأولى")) targetIndex = 0;
-      else if (sem.includes("السنة الثانية")) targetIndex = 1;
-      else if (sem.includes("السنة الثالثة")) targetIndex = 2;
-      else if (sem.includes("السنة الرابعة")) targetIndex = 3;
-      else if (sem.includes("السنة الخامسة")) targetIndex = 4;
-      else if (
-        c.category?.includes("استدراكي") ||
-        c.category?.includes("اختياري")
-      )
-        targetIndex = 5;
-
-      groups[targetIndex].courses.push(c);
-      groups[targetIndex].totalCredits += c.credits;
-      if (completedCourses.has(c.id)) {
-        groups[targetIndex].completedCredits += c.credits;
-      }
-    });
-
-    return groups.filter((g) => g.courses.length > 0);
-  }, [filteredCourses, completedCourses]);
+  const yearGroups = useMemo(
+    () =>
+      buildCourseYearGroups(
+        filteredCourses,
+        courses,
+        completedCourses,
+        categoryRequirements,
+      ),
+    [filteredCourses, courses, completedCourses, categoryRequirements],
+  );
 
   const toggleYearCollapse = (yearId: string) => {
     setCollapsedYears((prev) => ({
@@ -999,7 +928,7 @@ export const CoursesPage: React.FC<CoursesPageProps> = ({
     (index: number) => {
       const c = filteredCourses[index];
       if (!c) return 56;
-      return c.id === expandedCourseId ? 420 : 56;
+      return c.id === expandedCourseId ? 480 : 56;
     },
     [filteredCourses, expandedCourseId],
   );
@@ -1026,6 +955,10 @@ export const CoursesPage: React.FC<CoursesPageProps> = ({
     const catCourse = catalogMap[c.id];
     const sections = catCourse?.sections || [];
     const unlockedCourses = unlockedMap[c.id] || [];
+    const prerequisiteCourses = (c.prerequisites || []).map((id) => ({
+      id,
+      course: coursesById.get(id),
+    }));
 
     let statusText = "متاحة";
     let barColor = "bg-[var(--line-control)]";
@@ -1255,7 +1188,10 @@ export const CoursesPage: React.FC<CoursesPageProps> = ({
           </td>
 
           {/* Action Column with Explicit Plan Buttons */}
-          <td className="py-2 px-4 text-left">
+          <td
+            data-feature-tour="courses-actions"
+            className="py-2 px-4 text-left"
+          >
             <div className="flex items-center justify-end gap-1.5">
               {/* Feature 7: Quick GPA Impact Calculator Button */}
               {!isCompleted && isDegreeCreditBearing(c) && (
@@ -1369,6 +1305,47 @@ export const CoursesPage: React.FC<CoursesPageProps> = ({
                     </div>
                   )}
                 </div>
+
+                <section
+                  className="p-3 rounded-xl border border-[var(--line-control)] bg-[var(--surface)]"
+                  aria-label={`المتطلبات السابقة لمساق ${c.name}`}
+                >
+                  <h4 className="text-xs font-bold text-[var(--text)] mb-2">
+                    المتطلبات السابقة ({prerequisiteCourses.length})
+                  </h4>
+                  {prerequisiteCourses.length > 0 ? (
+                    <div className="flex flex-wrap gap-2">
+                      {prerequisiteCourses.map(({ id, course }) => {
+                        const isCompleted = completedCourses.has(id);
+                        return (
+                          <div
+                            key={id}
+                            className={cn(
+                              "px-2.5 py-1.5 rounded-lg border text-xs flex items-center gap-2",
+                              isCompleted
+                                ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-700 dark:text-emerald-300"
+                                : "bg-amber-500/10 border-amber-500/30 text-amber-700 dark:text-amber-300",
+                            )}
+                          >
+                            <span className="font-semibold">
+                              {course?.name || "متطلب سابق"}
+                            </span>
+                            <span className="font-mono text-[10px]" dir="ltr">
+                              {id}
+                            </span>
+                            <span className="text-[10px] font-bold">
+                              {isCompleted ? "منجزة" : "غير منجزة"}
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <p className="text-xs text-[var(--text-3)]">
+                      لا يوجد متطلب سابق لهذا المساق.
+                    </p>
+                  )}
+                </section>
 
                 {/* Section 1: Active Sections List */}
                 <div>
@@ -1617,18 +1594,17 @@ export const CoursesPage: React.FC<CoursesPageProps> = ({
                 </div>
 
                 {/* Section 2: Future Unlocked Courses */}
-                {unlockedCourses.length > 0 && (
-                  <div className="pt-2 border-t border-[var(--line-control)]">
-                    <h4 className="text-xs font-bold text-[var(--text)] mb-2 flex items-center gap-1.5">
-                      <Layers
-                        size={14}
-                        className="text-purple-600 dark:text-purple-400"
-                      />
-                      <span>
-                        المساقات اللاحقة التي تعتمد على هذا المساق (
-                        {unlockedCourses.length}):
-                      </span>
-                    </h4>
+                <section className="pt-2 border-t border-[var(--line-control)]">
+                  <h4 className="text-xs font-bold text-[var(--text)] mb-2 flex items-center gap-1.5">
+                    <Layers
+                      size={14}
+                      className="text-purple-600 dark:text-purple-400"
+                    />
+                    <span>
+                      المواد التي يفتحها هذا المساق ({unlockedCourses.length}):
+                    </span>
+                  </h4>
+                  {unlockedCourses.length > 0 ? (
                     <div className="flex flex-wrap gap-2">
                       {unlockedCourses.map((u) => {
                         const uCompleted = completedCourses.has(u.id);
@@ -1667,8 +1643,12 @@ export const CoursesPage: React.FC<CoursesPageProps> = ({
                         );
                       })}
                     </div>
-                  </div>
-                )}
+                  ) : (
+                    <p className="text-xs text-[var(--text-3)]">
+                      لا توجد مواد لاحقة يفتحها هذا المساق.
+                    </p>
+                  )}
+                </section>
               </div>
             </td>
           </tr>
@@ -1713,7 +1693,10 @@ export const CoursesPage: React.FC<CoursesPageProps> = ({
 
           <div className="flex flex-wrap items-center gap-2 sm:gap-3">
             {/* Feature 4: View Mode Switcher */}
-            <div className="flex items-center p-0.5 rounded-xl border border-[var(--line-control)] bg-[var(--surface)] text-xs">
+            <div
+              data-feature-tour="courses-view"
+              className="flex items-center p-0.5 rounded-xl border border-[var(--line-control)] bg-[var(--surface)] text-xs"
+            >
               <button
                 type="button"
                 onClick={() => setViewMode("flat")}
@@ -1757,7 +1740,7 @@ export const CoursesPage: React.FC<CoursesPageProps> = ({
             )}
 
             {/* Feature 10: Export Menu Button */}
-            <div className="relative">
+            <div data-feature-tour="courses-export" className="relative">
               <button
                 type="button"
                 onClick={() => setShowExportMenu((prev) => !prev)}
@@ -1791,7 +1774,7 @@ export const CoursesPage: React.FC<CoursesPageProps> = ({
             </div>
 
             {/* Search */}
-            <div className="relative">
+            <div data-feature-tour="courses-search" className="relative">
               <Search
                 size={16}
                 className="absolute right-3 top-1/2 -translate-y-1/2 text-[var(--text-3)] pointer-events-none"
@@ -1810,7 +1793,10 @@ export const CoursesPage: React.FC<CoursesPageProps> = ({
         {/* Filter Controls Row */}
         <div className="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-[var(--line)] mt-3">
           {/* Status Tabs */}
-          <div className="flex items-center gap-4 text-[13px] font-medium overflow-x-auto pb-1 sm:pb-0">
+          <div
+            data-feature-tour="courses-status"
+            className="flex items-center gap-4 text-[13px] font-medium overflow-x-auto pb-1 sm:pb-0"
+          >
             <button
               type="button"
               onClick={() => setStatusFilter("all")}
@@ -1887,6 +1873,7 @@ export const CoursesPage: React.FC<CoursesPageProps> = ({
               <div className="relative" ref={doctorDropdownRef}>
                 <button
                   type="button"
+                  data-feature-tour="courses-instructors"
                   onClick={() => setIsDoctorDropdownOpen((prev) => !prev)}
                   className={cn(
                     "h-[var(--control-h)] px-2.5 text-xs font-semibold rounded-[var(--r-control)] border transition-colors flex items-center gap-1.5 cursor-pointer max-w-[190px]",
@@ -1993,8 +1980,8 @@ export const CoursesPage: React.FC<CoursesPageProps> = ({
                           لا يوجد دكتور بهذا الاسم.
                           <br />
                           <span className="text-[10px] opacity-80">
-                            نصيحة: جرب كتابة الاسم الأول واسم العائلة فقط
-                            (مثلاً: سامر سعيد).
+                            نصيحة: جرب كتابة الاسم الأول واسم العائلة فقط (مثلاً:
+                            سامر سعيد).
                           </span>
                         </div>
                       ) : (
@@ -2066,6 +2053,7 @@ export const CoursesPage: React.FC<CoursesPageProps> = ({
 
             {/* Category Dropdown */}
             <select
+              data-feature-tour="courses-categories"
               value={categoryFilter}
               onChange={(e) => setCategoryFilter(e.target.value)}
               className="h-[var(--control-h)] px-3 text-[13px] bg-[var(--surface)] border border-[var(--line-control)] rounded-[var(--r-control)] text-[var(--text)] focus:outline-none focus:ring-2 focus:ring-[var(--accent)] cursor-pointer"
@@ -2193,7 +2181,13 @@ export const CoursesPage: React.FC<CoursesPageProps> = ({
                         <h3 className="font-bold text-[15px] text-[var(--text)] flex items-center gap-2">
                           <span>{group.title}</span>
                           <span className="text-xs text-[var(--text-3)] font-normal">
-                            ({group.courses.length} مساقات)
+                            ({group.courses.length}{" "}
+                            {group.id === "electives"
+                              ? "خيارات"
+                              : group.id === "remedial"
+                                ? "متطلبات"
+                                : "مساقات"}
+                            )
                           </span>
                         </h3>
                         <div className="text-xs text-[var(--text-3)] flex items-center gap-2 mt-0.5">
@@ -2238,45 +2232,86 @@ export const CoursesPage: React.FC<CoursesPageProps> = ({
 
                   {/* Group Table */}
                   {!isCollapsed && (
-                    <table className="w-full text-right border-collapse">
-                      <thead>
-                        <tr className="border-b border-[var(--line-control)] bg-[var(--surface)] text-[12px] font-semibold text-[var(--text-3)]">
-                          <th
-                            scope="col"
-                            className="py-2 px-3 w-12 text-center"
-                          >
-                            #
-                          </th>
-                          <th scope="col" className="py-2 px-4 w-28">
-                            الرمز
-                          </th>
-                          <th scope="col" className="py-2 px-4 min-w-[240px]">
-                            اسم المقرر
-                          </th>
-                          <th
-                            scope="col"
-                            className="py-2 px-4 w-20 text-center"
-                          >
-                            الساعات
-                          </th>
-                          <th scope="col" className="py-2 px-4 w-44">
-                            التصنيف
-                          </th>
-                          <th scope="col" className="py-2 px-4 min-w-[160px]">
-                            المتطلب السابق
-                          </th>
-                          <th scope="col" className="py-2 px-4 w-32">
-                            الحالة
-                          </th>
-                          <th scope="col" className="py-2 px-4 w-28 text-left">
-                            إجراء
-                          </th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-[var(--line)]">
-                        {group.courses.map((c, idx) => renderCourseRow(c, idx))}
-                      </tbody>
-                    </table>
+                    <>
+                      {group.id === "electives" && (
+                        <p className="px-4 py-3 text-xs text-[var(--text-2)] border-b border-[var(--line)]">
+                          تُعرض الخيارات المتاحة، ويُحتسب فقط المطلوب من كل تصنيف:{" "}
+                          {group.totalCredits} ساعة إجمالاً.
+                        </p>
+                      )}
+                      {group.id === "remedial" && (
+                        <p className="px-4 py-3 text-xs text-[var(--text-2)] border-b border-[var(--line)]">
+                          تظهر هذه المتطلبات خارج توزيع الفصول في الخطة
+                          الاسترشادية، ويُحتسب فقط المطلوب من تصنيفها:{" "}
+                          {group.totalCredits} ساعة.
+                        </p>
+                      )}
+                      <table className="w-full text-right border-collapse">
+                        <thead>
+                          <tr className="border-b border-[var(--line-control)] bg-[var(--surface)] text-[12px] font-semibold text-[var(--text-3)]">
+                            <th
+                              scope="col"
+                              className="py-2 px-3 w-12 text-center"
+                            >
+                              #
+                            </th>
+                            <th scope="col" className="py-2 px-4 w-28">
+                              الرمز
+                            </th>
+                            <th scope="col" className="py-2 px-4 min-w-[240px]">
+                              اسم المقرر
+                            </th>
+                            <th
+                              scope="col"
+                              className="py-2 px-4 w-20 text-center"
+                            >
+                              الساعات
+                            </th>
+                            <th scope="col" className="py-2 px-4 w-44">
+                              التصنيف
+                            </th>
+                            <th scope="col" className="py-2 px-4 min-w-[160px]">
+                              المتطلب السابق
+                            </th>
+                            <th scope="col" className="py-2 px-4 w-32">
+                              الحالة
+                            </th>
+                            <th
+                              scope="col"
+                              className="py-2 px-4 w-28 text-left"
+                            >
+                              إجراء
+                            </th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-[var(--line)]">
+                          {group.id === "electives" || group.id === "remedial"
+                            ? group.courses.map((course, index) =>
+                                renderCourseRow(course, index),
+                              )
+                            : group.semesterGroups.map((semesterGroup) => (
+                                <React.Fragment key={semesterGroup.id}>
+                                  <tr className="bg-[var(--sunken)]/60 border-y border-[var(--line-control)]">
+                                    <th
+                                      colSpan={8}
+                                      className="px-4 py-2 text-right text-xs font-bold text-[var(--text-2)]"
+                                    >
+                                      {semesterGroup.title} —{" "}
+                                      {semesterGroup.totalCredits} ساعة
+                                      <span className="font-normal text-[var(--text-3)]">
+                                        {" "}
+                                        ({semesterGroup.completedCredits} منجزة)
+                                      </span>
+                                    </th>
+                                  </tr>
+                                  {semesterGroup.courses.map((course, index) =>
+                                    renderCourseRow(course, index),
+                                  )}
+                                </React.Fragment>
+                              ))}
+                        </tbody>
+                      </table>
+                    </>
                   )}
                 </div>
               );

@@ -91,10 +91,7 @@ test("academicCalendar: categorizes official PTUK activities accurately", async 
     categorizeActivity("الامتحانات النصفيّة النظريّة"),
     "exam_midterm",
   );
-  assert.equal(
-    categorizeActivity("الامتحانات النهائيّة العمليّة"),
-    "exam_final",
-  );
+  assert.equal(categorizeActivity("الامتحانات النهائيّة العمليّة"), "exam_final");
   assert.equal(categorizeActivity("عيد الاستقلال (عطلة)"), "holiday");
   assert.equal(
     categorizeActivity("إعلان النتائج وانتهاء الفصل الأوّل"),

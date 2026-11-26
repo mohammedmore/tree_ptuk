@@ -6,6 +6,7 @@ import App from "./App";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { initSessionGuard } from "./utils/sessionGuard";
 import "./styles/index.css";
+import "./styles/feature-tour.css";
 
 initSessionGuard();
 

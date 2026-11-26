@@ -227,6 +227,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({
           />
         ) : !showRetrieveInline ? (
           <form
+            data-feature-tour="login-form"
             onSubmit={handleLogin}
             noValidate
             className="space-y-[var(--s-4)]"
@@ -383,7 +384,10 @@ export const LoginPage: React.FC<LoginPageProps> = ({
 
         {/* Secondary Navigation Links */}
         {!showRetrieveInline && !isLoading && (
-          <div className="mt-[var(--s-5)] flex items-center justify-start gap-[var(--s-5)] text-[15px]">
+          <div
+            data-feature-tour="login-options"
+            className="mt-[var(--s-5)] flex items-center justify-start gap-[var(--s-5)] text-[15px]"
+          >
             <button
               type="button"
               onClick={onContinueAsGuest}

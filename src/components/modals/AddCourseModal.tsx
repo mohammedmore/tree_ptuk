@@ -52,9 +52,7 @@ export const AddCourseModal: React.FC<AddCourseModalProps> = ({
       return;
     }
     if (id.length > 32 || name.length > 120) {
-      setValidationError(
-        "رقم المادة يجب ألا يتجاوز 32 حرفاً واسمها 120 حرفاً.",
-      );
+      setValidationError("رقم المادة يجب ألا يتجاوز 32 حرفاً واسمها 120 حرفاً.");
       return;
     }
     if (!Number.isInteger(credits) || credits < 0 || credits > 10) {

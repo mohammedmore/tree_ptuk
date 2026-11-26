@@ -65,6 +65,8 @@ import {
   SyncStatus,
 } from "./services/syncService";
 import {
+  EDUGATE_PLAN_SOURCE,
+  hasVerifiedEdugatePlan,
   StudentSyncProfile,
   getCachedStudentProfile,
   clearStudentProfile,
@@ -148,6 +150,7 @@ import {
 import { AcademicAuditPrint } from "./components/planner/AcademicAuditPrint";
 import { SyncStatusPill } from "./components/common/SyncStatusPill";
 import { ErrorBoundary } from "./components/common/ErrorBoundary";
+import FeatureTourGuide from "./components/FeatureTourGuide";
 import { usePrivacyMask } from "./hooks/usePrivacyMask";
 import { cn } from "./utils";
 
@@ -209,40 +212,21 @@ const PageLoadingFallback = () => (
 
 function sanitizeCategoryRequirements(
   reqs?: Record<string, number> | null,
-  majorName = "",
 ): Record<string, number> {
-  const isFiveYear =
-    !majorName.includes("الذكاء") && !majorName.includes("علم الحاسوب");
-  if (!reqs || Object.keys(reqs).length === 0)
-    return defaultCategoryRequirements;
-
-  const clean: Record<string, number> = { ...reqs };
-  // Clamp elective requirements so they never hold the entire course pool sum
-  if (clean["متطلب تخصص اختياري"] && clean["متطلب تخصص اختياري"] > 21) {
-    clean["متطلب تخصص اختياري"] = isFiveYear ? 15 : 9;
-  }
-  if (clean["متطلب جامعة اختياري"] && clean["متطلب جامعة اختياري"] > 12) {
-    clean["متطلب جامعة اختياري"] = isFiveYear ? 6 : 9;
-  }
-  if (clean["متطلب كلية اختياري"] && clean["متطلب كلية اختياري"] > 9) {
-    clean["متطلب كلية اختياري"] = 3;
-  }
-
-  // Verify total degree credits does not exceed 175
-  const sum = Object.entries(clean).reduce((acc, [cat, cr]) => {
-    if (cat.includes("استدراكي")) return acc;
-    return acc + (typeof cr === "number" ? cr : 0);
-  }, 0);
-
-  if (sum < 120 || sum > 175) {
-    return defaultCategoryRequirements;
-  }
-
-  return clean;
+  return Object.fromEntries(
+    Object.entries(reqs || {}).filter(
+      ([category, credits]) =>
+        category.trim() &&
+        Number.isFinite(credits) &&
+        credits >= 0 &&
+        credits <= 180,
+    ),
+  );
 }
 
 export function App() {
   const [currentRoute, navigateTo] = useAppRoute();
+  const [featureGuideRequest, setFeatureGuideRequest] = useState(0);
 
   // Storage issue logger
   const reportStorageIssue = useCallback((msg: string) => {
@@ -294,12 +278,10 @@ export function App() {
   });
   const [courses, setCourses] = useState<Course[]>(() => {
     const student = getCachedStudentProfile();
-    if (
-      student &&
-      Array.isArray(student.planCourses) &&
-      student.planCourses.length > 0
-    ) {
-      return student.planCourses;
+    if (student) {
+      return student.isDemo || hasVerifiedEdugatePlan(student)
+        ? student.planCourses || []
+        : [];
     }
     const savedId = getActiveMajorId();
     if (savedId && typeof window !== "undefined" && window.localStorage) {
@@ -331,10 +313,12 @@ export function App() {
       student?.categoryRequirements &&
       Object.keys(student.categoryRequirements).length > 0
     ) {
-      return sanitizeCategoryRequirements(
-        student.categoryRequirements,
-        student.majorName || "",
-      );
+      return student.isDemo || hasVerifiedEdugatePlan(student)
+        ? sanitizeCategoryRequirements(student.categoryRequirements)
+        : {};
+    }
+    if (student && !student.isDemo && !hasVerifiedEdugatePlan(student)) {
+      return {};
     }
     const savedId = getActiveMajorId();
     if (savedId && typeof window !== "undefined" && window.localStorage) {
@@ -361,11 +345,12 @@ export function App() {
   const degreeTotalCredits = useMemo(() => {
     if (
       currentStudent?.totalCredits &&
-      currentStudent.totalCredits >= 60 &&
+      currentStudent.totalCredits > 0 &&
       currentStudent.totalCredits <= 260
     ) {
       return currentStudent.totalCredits;
     }
+    if (currentStudent) return 0;
     if (categoryRequirements && Object.keys(categoryRequirements).length > 0) {
       const sum = Object.entries(categoryRequirements).reduce(
         (acc, [cat, val]) => {
@@ -626,6 +611,7 @@ export function App() {
 
     // 1.1 Synchronize active major and plan courses from synced student profile
     if (
+      (currentStudent.isDemo || hasVerifiedEdugatePlan(currentStudent)) &&
       Array.isArray(currentStudent.planCourses) &&
       currentStudent.planCourses.length > 0
     ) {
@@ -638,15 +624,16 @@ export function App() {
       setActiveMajorName(currentStudent.majorName);
     }
     if (
+      (currentStudent.isDemo || hasVerifiedEdugatePlan(currentStudent)) &&
       currentStudent.categoryRequirements &&
       Object.keys(currentStudent.categoryRequirements).length > 0
     ) {
       setCategoryRequirements(
-        sanitizeCategoryRequirements(
-          currentStudent.categoryRequirements,
-          currentStudent.majorName || "",
-        ),
+        sanitizeCategoryRequirements(currentStudent.categoryRequirements),
       );
+    } else if (!currentStudent.isDemo) {
+      setCourses([]);
+      setCategoryRequirements({});
     }
 
     // 2. Synchronize failed courses
@@ -675,7 +662,7 @@ export function App() {
     ) {
       for (const c of currentStudent.planCourses) {
         if (typeof c.grade === "number" && !isNaN(c.grade)) {
-          grades[c.id || c.code] = c.grade;
+          grades[c.id] = c.grade;
         }
       }
     }
@@ -817,6 +804,7 @@ export function App() {
       student &&
       (activeMajorId === student.majorId ||
         activeMajorId === student.majorName) &&
+      (student.isDemo || hasVerifiedEdugatePlan(student)) &&
       student.planCourses?.length
     ) {
       return;
@@ -825,6 +813,15 @@ export function App() {
     fetchMajorPlan(activeMajorId)
       .then((detail) => {
         if (!cancelled && detail) {
+          if (
+            currentStudent &&
+            !currentStudent.isDemo &&
+            detail.planSource !== EDUGATE_PLAN_SOURCE
+          ) {
+            setCourses([]);
+            setCategoryRequirements({});
+            return;
+          }
           if (Array.isArray(detail.courses) && detail.courses.length > 0) {
             setCourses(detail.courses);
           }
@@ -835,40 +832,61 @@ export function App() {
             detail.categoryRequirements &&
             Object.keys(detail.categoryRequirements).length > 0
           ) {
-            setCategoryRequirements(detail.categoryRequirements);
+            setCategoryRequirements(
+              sanitizeCategoryRequirements(detail.categoryRequirements),
+            );
+          } else if (currentStudent && !currentStudent.isDemo) {
+            setCategoryRequirements({});
           }
         }
       })
-      .catch((e) => console.error("Initial major plan fetch failed:", e));
+      .catch((e) => {
+        console.error("Initial major plan fetch failed:", e);
+        if (currentStudent && !currentStudent.isDemo) {
+          setCourses([]);
+          setCategoryRequirements({});
+          showAppToast("تعذر تحميل خطة موثقة من بوابة الجامعة.");
+        }
+      });
 
     return () => {
       cancelled = true;
     };
-  }, [activeMajorId]);
+  }, [activeMajorId, currentStudent, showAppToast]);
 
   // Load major plan when major changes
-  const handleSelectMajor = useCallback(async (majorId: string) => {
-    setActiveMajorIdState(majorId);
-    try {
-      const detail = await fetchMajorPlan(majorId);
-      setCourses(detail.courses);
-      setActiveMajorName(detail.name);
-      setActiveMajorId(majorId, detail.name);
-      if (detail.categoryRequirements) {
-        setCategoryRequirements(detail.categoryRequirements);
+  const handleSelectMajor = useCallback(
+    async (majorId: string) => {
+      setActiveMajorIdState(majorId);
+      try {
+        const detail = await fetchMajorPlan(majorId);
+        setCourses(detail.courses);
+        setActiveMajorName(detail.name);
+        setActiveMajorId(majorId, detail.name);
+        if (detail.categoryRequirements) {
+          setCategoryRequirements(detail.categoryRequirements);
+        }
+      } catch (e) {
+        console.error("Error loading major plan", e);
+        if (currentStudent && !currentStudent.isDemo) {
+          setActiveMajorIdState(currentStudent.majorId);
+          setCourses([]);
+          setCategoryRequirements({});
+          showAppToast("تعذر تحميل خطة موثقة من بوابة الجامعة.");
+          return;
+        }
+        const fallback = FALLBACK_MAJORS.find((m) => m.id === majorId);
+        if (fallback) {
+          setActiveMajorName(fallback.name);
+          setActiveMajorId(majorId, fallback.name);
+          setCategoryRequirements(fallback.categoryRequirements);
+        } else {
+          setActiveMajorId(majorId);
+        }
       }
-    } catch (e) {
-      console.error("Error loading major plan", e);
-      const fallback = FALLBACK_MAJORS.find((m) => m.id === majorId);
-      if (fallback) {
-        setActiveMajorName(fallback.name);
-        setActiveMajorId(majorId, fallback.name);
-        setCategoryRequirements(fallback.categoryRequirements);
-      } else {
-        setActiveMajorId(majorId);
-      }
-    }
-  }, []);
+    },
+    [currentStudent, showAppToast],
+  );
 
   // Course actions
   const handleToggleComplete = useCallback((courseId: string) => {
@@ -1741,6 +1759,18 @@ export function App() {
                     <MessageCircle size={14} className="text-[var(--text-3)]" />
                   </button>
 
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsToolsMenuOpen(false);
+                      setFeatureGuideRequest((request) => request + 1);
+                    }}
+                    className="w-full h-8 px-3.5 text-right text-[13px] text-[var(--text)] hover:bg-[var(--sunken)] transition-colors flex items-center justify-between cursor-pointer"
+                  >
+                    <span>دليل ميزات الصفحة</span>
+                    <BookOpen size={14} className="text-[var(--text-3)]" />
+                  </button>
+
                   {/* Item 91: High-Contrast Accessibility Theme Toggle */}
                   <button
                     type="button"
@@ -1856,7 +1886,7 @@ export function App() {
                 completedCourses={completedCourses}
                 plannedCourses={plannedCourses}
                 courseGrades={courseGrades}
-                currentGpa={currentStudent?.gpa}
+                currentGpa={currentStudent?.gpa ?? undefined}
                 currentPlanningSemester={currentPlanningSemester}
                 categoryRequirements={categoryRequirements}
                 onNavigate={navigateTo}
@@ -1902,6 +1932,7 @@ export function App() {
 
             {currentRoute === "registration" && (
               <section
+                data-feature-tour="registration-status"
                 aria-labelledby="registration-coming-soon-title"
                 className="flex-1 w-full max-w-2xl mx-auto px-4 sm:px-6 py-10 sm:py-16 flex items-center justify-center"
               >
@@ -1953,6 +1984,7 @@ export function App() {
                   setActiveMajorId(studentMajorId, studentMajorName);
 
                   if (
+                    (profile.isDemo || hasVerifiedEdugatePlan(profile)) &&
                     Array.isArray(profile.planCourses) &&
                     profile.planCourses.length > 0
                   ) {
@@ -1965,6 +1997,7 @@ export function App() {
                           name: studentMajorName,
                           courses: profile.planCourses,
                           categoryRequirements: profile.categoryRequirements,
+                          planSource: profile.planSource,
                         }),
                       );
                     } catch (err) {
@@ -1972,10 +2005,23 @@ export function App() {
                     }
                   }
                   if (
+                    (profile.isDemo || hasVerifiedEdugatePlan(profile)) &&
                     profile.categoryRequirements &&
                     Object.keys(profile.categoryRequirements).length > 0
                   ) {
-                    setCategoryRequirements(profile.categoryRequirements);
+                    setCategoryRequirements(
+                      sanitizeCategoryRequirements(
+                        profile.categoryRequirements,
+                      ),
+                    );
+                  } else if (
+                    !profile.isDemo &&
+                    !hasVerifiedEdugatePlan(profile)
+                  ) {
+                    setCourses([]);
+                    setCategoryRequirements({});
+                  } else {
+                    setCategoryRequirements({});
                   }
 
                   const syncedPassed = new Set(profile.passedCourseIds || []);
@@ -2018,7 +2064,7 @@ export function App() {
                   ) {
                     for (const c of profile.planCourses) {
                       if (typeof c.grade === "number" && !isNaN(c.grade)) {
-                        grades[c.id || c.code] = c.grade;
+                        grades[c.id] = c.grade;
                       }
                     }
                   }
@@ -2067,6 +2113,11 @@ export function App() {
           </React.Suspense>
         </ErrorBoundary>
       </main>
+
+      <FeatureTourGuide
+        route={currentRoute}
+        openRequest={featureGuideRequest}
+      />
 
       {/* Mobile Fixed Bottom Navigation Bar (< 768px) with Active Route Indicators (Item 11) */}
       <nav className="md:hidden fixed bottom-0 inset-x-0 h-[58px] bg-[var(--surface)]/95 backdrop-blur-md border-t border-[var(--line)] flex items-center justify-around px-1 z-[var(--z-sticky)] shadow-lg">
@@ -2264,9 +2315,6 @@ export function App() {
                 const next = new Set(prev);
                 if (shouldExempt) {
                   next.add(courseCode);
-                  if (courseCode === "15200106") {
-                    next.add("15200099");
-                  }
                 } else {
                   next.delete(courseCode);
                 }
@@ -2380,7 +2428,7 @@ export function App() {
             plannedCourses={plannedCourses}
             courseGrades={courseGrades}
             activeMajorName={activeMajorName}
-            studentName={currentStudent?.studentName || "طالب جامعي"}
+            studentName={currentStudent?.studentName || "غير متاح"}
             studentId={currentStudent?.studentId || "—"}
             college={currentStudent?.college}
             totalCredits={degreeTotalCredits}

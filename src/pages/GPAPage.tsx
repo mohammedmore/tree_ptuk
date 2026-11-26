@@ -435,6 +435,7 @@ export const GPAPage: React.FC<GPAPageProps> = ({
 
         <button
           type="button"
+          data-feature-tour="gpa-privacy"
           onClick={togglePrivacyMask}
           className={cn(
             "px-3 py-1.5 rounded-[var(--r-control)] border text-xs font-semibold flex items-center gap-1.5 cursor-pointer transition-all self-start sm:self-auto",
@@ -453,6 +454,7 @@ export const GPAPage: React.FC<GPAPageProps> = ({
 
       {/* Academic Standing & Senior Readiness Banner */}
       <div
+        data-feature-tour="gpa-standing"
         className={`p-4 rounded-[var(--r-control)] border flex flex-wrap items-center justify-between gap-3 shadow-sm ${
           standingInfo.isWarning
             ? "bg-rose-500/10 border-rose-500/30 text-rose-600 dark:text-rose-400"
@@ -540,7 +542,10 @@ export const GPAPage: React.FC<GPAPageProps> = ({
       {/* ────────────────────────────────────────────────────────────────────────── */}
       <div className="grid grid-cols-1 md:grid-cols-2 items-start gap-4">
         {/* 1. محاكي المعدل المستهدف */}
-        <div className="self-start h-fit p-3 rounded-[var(--r-control)] bg-[var(--surface)] border border-[var(--line)] shadow-sm space-y-2">
+        <div
+          data-feature-tour="gpa-target"
+          className="self-start h-fit p-3 rounded-[var(--r-control)] bg-[var(--surface)] border border-[var(--line)] shadow-sm space-y-2"
+        >
           <div className="space-y-1">
             <div className="flex items-center gap-2">
               <div className="p-1.5 rounded-md bg-[var(--accent)]/10 text-[var(--accent)]">
@@ -622,7 +627,10 @@ export const GPAPage: React.FC<GPAPageProps> = ({
         </div>
 
         {/* 2. محلل أفضل المواد للإعادة */}
-        <div className="p-4 rounded-[var(--r-control)] bg-[var(--surface)] border border-[var(--line)] shadow-sm space-y-2.5 flex flex-col justify-between">
+        <div
+          data-feature-tour="gpa-retakes"
+          className="p-4 rounded-[var(--r-control)] bg-[var(--surface)] border border-[var(--line)] shadow-sm space-y-2.5 flex flex-col justify-between"
+        >
           <div className="space-y-1.5">
             <div className="flex items-center justify-between gap-2 flex-wrap">
               <div className="flex items-center gap-2">
@@ -701,6 +709,7 @@ export const GPAPage: React.FC<GPAPageProps> = ({
 
       {/* المعدل المتوقع يظهر قبل قائمة المواد التي تُستخدم لحسابه */}
       <div
+        data-feature-tour="gpa-summary"
         aria-label="ملخص المعدلات"
         className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4"
       >
@@ -797,7 +806,11 @@ export const GPAPage: React.FC<GPAPageProps> = ({
       {/* ────────────────────────────────────────────────────────────────────────── */}
       {/* 1. قائمة المواد المتوقعة (أعلى قائمة المواد) */}
       {/* ────────────────────────────────────────────────────────────────────────── */}
-      <section className="space-y-3" aria-labelledby="projected-gpa-title">
+      <section
+        data-feature-tour="gpa-simulator"
+        className="space-y-3"
+        aria-labelledby="projected-gpa-title"
+      >
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--line-control)] pb-2.5">
           <div className="flex items-center gap-2">
             <div className="w-8 h-8 rounded-lg bg-[var(--accent)]/10 text-[var(--accent)] flex items-center justify-center">
@@ -1118,7 +1131,7 @@ export const GPAPage: React.FC<GPAPageProps> = ({
       {/* ────────────────────────────────────────────────────────────────────────── */}
       {/* 2. قائمة المواد الموجودة بالمعدل والدرجات (السجل الأكاديمي) */}
       {/* ────────────────────────────────────────────────────────────────────────── */}
-      <section className="space-y-3 pt-2">
+      <section data-feature-tour="gpa-record" className="space-y-3 pt-2">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--line-control)] pb-2.5">
           <div className="flex items-center gap-2">
             <div className="w-8 h-8 rounded-lg bg-[var(--sunken)] text-[var(--text-2)] flex items-center justify-center">
