@@ -48,6 +48,17 @@
 
 :root[data-theme="deep-navy"] {
   color-scheme: dark;
+  --bg: #101722;
+  --surface: #192330;
+  --sunken: #0d141d;
+  --text: #eef2f5;
+  --text-2: #c1cbd3;
+  --text-3: #949fab;
+  --line: #2b3947;
+  --line-control: #617184;
+  --accent: #839cb0;
+  --accent-hover: #98aec0;
+  --accent-soft: #263442;
   --bg-canvas: #07111f;
   --bg-pattern: rgba(125, 178, 226, 0.075);
   --ambient-one: rgba(14, 116, 190, 0.25);
@@ -62,7 +73,7 @@
   --text-primary: #e6f0fb;
   --text-muted: #a6bad0;
   --text-subtle: #7790aa;
-  --color-primary: #38bdf8;
+  --color-primary: #839cb0;
   --color-secondary: #a78bfa;
   --color-accent: var(--color-primary);
   --color-accent-border: rgba(56, 189, 248, 0.4);
@@ -86,6 +97,17 @@
 
 :root[data-theme="slate-indigo"] {
   color-scheme: light;
+  --bg: #f2f3f6;
+  --surface: #fcfcfd;
+  --sunken: #e9eaef;
+  --text: #343740;
+  --text-2: #63666f;
+  --text-3: #858891;
+  --line: #dfe1e7;
+  --line-control: #b7bac5;
+  --accent: #7a7e9a;
+  --accent-hover: #686b86;
+  --accent-soft: #e7e7ed;
   --bg-canvas: #f4f5fb;
   --bg-pattern: rgba(67, 56, 202, 0.055);
   --ambient-one: rgba(99, 102, 241, 0.15);
@@ -100,7 +122,7 @@
   --text-primary: #1e1b4b;
   --text-muted: #4b556b;
   --text-subtle: #69738a;
-  --color-primary: #4338ca;
+  --color-primary: #7a7e9a;
   --color-secondary: #7e22ce;
   --color-accent: var(--color-primary);
   --color-accent-border: rgba(67, 56, 202, 0.35);
@@ -255,6 +277,17 @@
 
 :root[data-theme="liquid-amber"] {
   color-scheme: dark;
+  --bg: #17150f;
+  --surface: #211f18;
+  --sunken: #111009;
+  --text: #f6f3e8;
+  --text-2: #d1cbba;
+  --text-3: #aaa58f;
+  --line: #3d3a2e;
+  --line-control: #706d58;
+  --accent: #b39d6a;
+  --accent-hover: #c4b27f;
+  --accent-soft: #403924;
   --bg-canvas: #0a0908;
   --bg-canvas-pattern:
     radial-gradient(
@@ -274,8 +307,8 @@
   --border-card: 1px solid rgba(217, 119, 6, 0.22);
   --border-card-hover: 1px solid #f59e0b;
   --text-main: #fffbeb;
-  --accent-primary: #f59e0b;
-  --accent-secondary: #d97706;
+  --accent-primary: #b39d6a;
+  --accent-secondary: #c4b27f;
   --bg-pattern: rgba(255, 208, 112, 0.075);
   --ambient-one: rgba(245, 158, 11, 0.21);
   --ambient-two: rgba(217, 119, 6, 0.16);
